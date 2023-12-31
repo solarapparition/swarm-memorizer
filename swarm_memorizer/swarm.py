@@ -2630,10 +2630,6 @@ class Delegator:
         if not delegation_successful:
             task.executor = self.make_executor(task, recent_events_size, auto_await)
 
-    # TODO: basic coding task case: 20 lines or less of base python > coding bot will be equipped with function it wrote
-    # TODO: basic search task case: search for basic info about a concept
-    # TODO: basic file reading/writing task case
-    # TODO: basic browser task case
 
 
 @dataclass
@@ -2811,24 +2807,27 @@ async def test_orchestrator() -> None:
     await run_test_task(task)
 
 
-async def test_bot() -> None:
-    """Run an example task that tests base capabilities."""
-    task = "Create a mock timestamp generator that advances by 1 second each time it is called."
+curriculum_test_tasks = [
+    "Write 'Hello, World!' to a file.",
+    "Create a mock timestamp generator that advances by 1 second each time it is called.",
+    "Create a mock timestamp generator that advances by 1 second each time it is called, and run it 5 times.",
+    # TODO: basic coding task case: 20 lines or less of base python > coding bot will be equipped with function it wrote
+    # TODO: basic search task case: search for basic info about a concept
+    # TODO: basic file reading/writing task case
+    # TODO: basic browser task case
+]
+
+async def test_curriculum_task_1() -> None:
+    """Curriculum task 1."""
+    task = curriculum_test_tasks[0]
     await run_test_task(task)
 
 
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    # test_serialize()
-    # test_deserialize()
-    # test_id_generation()
-    # test_generate_reasoning()
-    # test_default_action_reasoning()
-    # test_generate_extraction_reasoning()
-    # test_human_cache_response()
     # asyncio.run(test_orchestrator())
-    asyncio.run(test_bot())
+    asyncio.run(test_curriculum_task_1())
 
 
 if __name__ == "__main__":
