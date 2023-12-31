@@ -2544,11 +2544,6 @@ class Delegator:
         self, task: Task, recent_events_size: int, auto_await: bool
     ) -> Executor:
         """Factory for creating a new executor for a task."""
-        # if base_capability := self.map_base_capability(task):
-        # if self.map_base_capability(task):
-        #     raise NotImplementedError
-        # return create_base_capability(base_capability)
-
         if task.rank_limit and task.rank_limit > 0:
             raise NotImplementedError(
                 "Unable to automatically create 0-ranked executor."
@@ -2612,7 +2607,6 @@ class Delegator:
                 
                 # create basic code writer bot
                 # ....
-                # > extract code into another repo
                 breakpoint()
                 task.executor = candidate
                 task.rank_limit = candidate.rank
@@ -2696,8 +2690,6 @@ class Swarm:
             executors_dir=self.executors_dir,
             task_records_dir=self.task_records_dir,
             task_search_rerank_threshold=self.task_search_rerank_threshold,
-            # self.base_capabilities,
-            # advisor=self.base_capability_advisor,
             id_generator=self.id_generator,
         )
 
@@ -2819,7 +2811,7 @@ async def test_orchestrator() -> None:
     await run_test_task(task)
 
 
-async def test_base_capability() -> None:
+async def test_bot() -> None:
     """Run an example task that tests base capabilities."""
     task = "Create a mock timestamp generator that advances by 1 second each time it is called."
     await run_test_task(task)
@@ -2836,7 +2828,7 @@ def test() -> None:
     # test_generate_extraction_reasoning()
     # test_human_cache_response()
     # asyncio.run(test_orchestrator())
-    asyncio.run(test_base_capability())
+    asyncio.run(test_bot())
 
 
 if __name__ == "__main__":
