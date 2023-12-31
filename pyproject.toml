@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "swarm-memorizer"
+version = "0.1.0"
+description = ""
+authors = ["Mengyang (John) Cha <15233508+solarapparition@users.noreply.github.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "swarm_memorizer"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+langchain = "^0.0.353"
+"ruamel.yaml" = "^0.18.5"
+colorama = "^0.4.6"
+openai = "^1.6.1"
+
+[tool.poetry.group.dev.dependencies]
+pylint = "^3.0.3"
+black = "^23.12.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

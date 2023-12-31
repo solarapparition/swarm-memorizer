@@ -6,7 +6,7 @@ import shelve
 import asyncio
 from itertools import chain
 from enum import Enum
-from dataclasses import dataclass, asdict, field
+from dataclasses import InitVar, dataclass, asdict, field
 from functools import cached_property
 from pathlib import Path
 from uuid import UUID
@@ -28,17 +28,15 @@ from typing import (
     Coroutine,
 )
 
-breakpoint()
 from langchain.schema import SystemMessage, BaseMessage
 from ruamel.yaml import YAML, YAMLError
 from colorama import Fore
 
-from hivemind.config import configure_langchain_cache
-from hivemind.toolkit.models import super_creative_model, precise_model, query_model
-from hivemind.toolkit.text_extraction import ExtractionError, extract_blocks
-from hivemind.toolkit.text_formatting import dedent_and_strip
-from hivemind.toolkit.yaml_tools import as_yaml_str, default_yaml
-from hivemind.toolkit.id_generation import (
+from .config import configure_langchain_cache
+from .toolkit.models import super_creative_model, precise_model, query_model
+from .toolkit.text import ExtractionError, extract_blocks, dedent_and_strip
+from .toolkit.yaml_tools import as_yaml_str, default_yaml
+from .toolkit.id_generation import (
     utc_timestamp,
     IdGenerator as DefaultIdGenerator,
 )
@@ -2638,68 +2636,6 @@ class Delegator:
         if not delegation_successful:
             task.executor = self.make_executor(task, recent_events_size, auto_await)
 
-    # def map_base_capability(self, task: Task) -> BaseCapability | None:
-    #     """Map a task to a base capability if possible."""
-    #     base_capability_question = dedent_and_strip(
-    #         """
-    #         Evaluate this task:
-    #         ```
-    #         {task}
-    #         ```
-
-    #         Is this task a base capability, i.e. something that one of our bots can handle, OR a human can do in a few minutes? (y/n)
-    #         """
-    #     ).format(task=task.description)
-    #     is_base_capability = (
-    #         get_choice(
-    #             base_capability_question,
-    #             allowed_choices={"y", "n"},
-    #             advisor=self.advisor,
-    #         )
-    #         == "y"
-    #     )
-
-    #     if not is_base_capability:
-    #         return
-
-    #     # now we know it's a base capability
-    #     automapped_capability = automap_base_capability(task, self.base_capabilities)
-    #     capability_validation_question = dedent_and_strip(
-    #         """
-    #         I have identified the following base capability for this task:
-    #         "{automapped_capability}"
-
-    #         Please confirm whether this is correct (y/n):
-    #         """
-    #     ).format(automapped_capability=automapped_capability)
-    #     if not automapped_capability:
-    #         capability_validation_question = dedent_and_strip(
-    #             """
-    #             I have not identified any base capabilities for this task.
-
-    #             Please confirm whether this is correct (y/n):
-    #             """
-    #         )
-    #     is_correct = (
-    #         get_choice(
-    #             capability_validation_question,
-    #             allowed_choices={"y", "n"},
-    #             advisor=self.advisor,
-    #         )
-    #         == "y"
-    #     )
-    #     if is_correct:
-    #         return automapped_capability
-
-    #     # now we know automapped capability didn't work
-    #     raise NotImplementedError
-    #     # manual_capability_prompt = "Automated capability mapping failed. Please choose a base capability for this task:"
-    #     # manual_capability_choice = get_choice(
-    #     #     manual_capability_prompt,
-    #     #     allowed_choices=set(range(len(self.all_base_capabilities))),
-    #     #     advisor=human,
-    #     # )
-
     # TODO: basic coding task case: 20 lines or less of base python > coding bot will be equipped with function it wrote
     # TODO: basic search task case: search for basic info about a concept
     # TODO: basic file reading/writing task case
@@ -2724,10 +2660,13 @@ class Swarm:
     """When searching for similar past tasks, run a reranker if there are more than this many tasks."""
     id_generator: IdGenerator = field(default_factory=DefaultIdGenerator)
     """Generator for ids of entities in the system."""
+    llm_cache_enabled: InitVar[bool] = field(default=True)
+    """Whether to enable the LLM cache for identical calls to models."""
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, llm_cache_enabled: bool) -> None:
         """Post-initialization hook."""
-        configure_langchain_cache(self.cache_dir)
+        if llm_cache_enabled:
+            configure_langchain_cache()
 
     @property
     def cache_dir(self) -> Path:
@@ -2860,16 +2799,16 @@ def test_human_cache_response():
 
 async def run_test_task(task: str) -> None:
     """Run a test task."""
-    with shelve.open(".data/test/aranea_human_reply_cache", writeback=True) as cache:
+    with shelve.open(".data/cache/human_reply", writeback=True) as cache:
         human_tester = Human(reply_cache=cache)
-        aranea = Swarm(
-            files_dir=Path(".data/test/aranea"),
+        swarm = Swarm(
+            files_dir=Path(".data/test"),
             work_validator=human_tester,
             id_generator=DefaultIdGenerator(
                 namespace=UUID("6bcf7dd4-8e29-58f6-bf5f-7566d4108df4"), seed="test"
             ),
         )
-        reply = (result := await aranea.run(task)).content
+        reply = (result := await swarm.run(task)).content
         while human_reply := human_tester.advise(reply):
             reply = await result.continue_conversation(human_reply)
 
@@ -2888,7 +2827,7 @@ async def test_base_capability() -> None:
 
 def test() -> None:
     """Run tests."""
-    configure_langchain_cache(Path(".cache"))
+    configure_langchain_cache()
     # test_serialize()
     # test_deserialize()
     # test_id_generation()
