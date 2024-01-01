@@ -2609,8 +2609,8 @@ class Delegator:
                 task.executor = candidate
                 task.rank_limit = candidate.rank
                 return DelegationSuccessful(True)
-            # TODO: refusal of agent counts as failure in task history
             raise NotImplementedError
+            # TODO: refusal of agent counts as failure in task history
         return DelegationSuccessful(False)
 
     def assign_executor(

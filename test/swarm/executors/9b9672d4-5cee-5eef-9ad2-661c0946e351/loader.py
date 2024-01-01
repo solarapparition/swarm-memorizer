@@ -1,11 +1,12 @@
 """Loader for human fallback executor."""
 
-from dataclasses import InitVar, dataclass, field
-from functools import cached_property
+from dataclasses import dataclass, field
 from pathlib import Path
-from colorama import Fore
 
-from langchain.schema import SystemMessage, AIMessage, HumanMessage
+from colorama import Fore
+from langchain.schema import SystemMessage, AIMessage
+from langchain.tools import tool
+from langchain.prompts import ChatPromptTemplate
 
 from swarm_memorizer.swarm import (
     Blueprint,
@@ -15,7 +16,6 @@ from swarm_memorizer.swarm import (
     get_choice,
     dedent_and_strip,
     ExecutorReport,
-    Advisor,
     as_printable,
 )
 from swarm_memorizer.toolkit.models import query_model, precise_model
@@ -81,13 +81,38 @@ class TextWriter:
             == "y"
         )
 
+    @property
+    def output_dir(self) -> Path:
+        """Output directory."""
+        return self.files_dir / "output"
+
     async def execute(self, message: str | None = None) -> ExecutorReport:
         """Execute the subtask. Adds a message to the task's event log if provided, and adds own message to the event log at the end of execution."""
         assert not message, "No message should be provided to the TextWriter."
 
+        @tool
+        def write_text(text: str, file_name: str) -> None:
+            """Write text to a file."""
+            (self.output_dir / file_name).write_text(text)
+
+        template = """
+        
 
         # ....
-        # > write using lcel > define custom tools
+        # > determine if params are there
+        # > determine if params are valid
+        # > if params are there and valid, write text to file
+        # > if params are not there or not valid, return error message
+        # ....
+
+        {input}"""
+
+        # https://python.langchain.com/docs/expression_language/cookbook/tools
+        # ....
+        prompt = ChatPromptTemplate.from_template(template)
+
+        # write using lcel > define custom tools
+        # ....
         breakpoint()
         raise NotImplementedError
 
