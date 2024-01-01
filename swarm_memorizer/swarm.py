@@ -535,6 +535,8 @@ class Executor(Protocol):
 
     def accepts(self, task: "Task") -> bool:
         """Decides whether the executor accepts a task."""
+
+        breakpoint()
         raise NotImplementedError
 
     async def execute(self, message: str | None = None) -> ExecutorReport:
@@ -2604,22 +2606,12 @@ class Delegator:
                 candidate.blueprint, task, self.executors_dir / candidate.blueprint.id
             )
             if candidate.accepts(task):
-                
-                # create basic code writer bot
-                # ....
-                breakpoint()
                 task.executor = candidate
                 task.rank_limit = candidate.rank
                 return DelegationSuccessful(True)
             # TODO: refusal of agent counts as failure in task history
-            breakpoint()
-
-        breakpoint()
+            raise NotImplementedError
         return DelegationSuccessful(False)
-        # > when initally agent is saved, keep track of pass/fail details of subtasks
-        # > bot: amazon mturk
-        # > agent tweaking update: if agent fails task, first time is just a message; new version of agent probably should only have its knowledge updated on second fail; on third fail, whole agent is regenerated; on next fail, the next best agent is chosen, and the process repeats again; if the next best agent still can't solve the task, the task is auto-cancelled since it's likely too difficult (manual cancellation by orchestrator is still possible) > when regenerating agent components, include specific information from old agent
-        # > estimate rank of task based on previous successful tasks
 
     def assign_executor(
         self, task: Task, recent_events_size: int, auto_await: bool
@@ -2629,7 +2621,6 @@ class Delegator:
         # blueprints represent known capabilities; so, failure means we must create a new executor
         if not delegation_successful:
             task.executor = self.make_executor(task, recent_events_size, auto_await)
-
 
 
 @dataclass
@@ -2711,6 +2702,7 @@ class Swarm:
         self.delegator.assign_executor(task, self.recent_events_size, self.auto_wait)
         assert task.executor is not None, "Task executor assignment failed."
         reply_text = await task.executor.execute()
+        breakpoint()
 
         async def continue_conversation(message: str) -> str:
             """Continue the conversation with a message."""
@@ -2725,46 +2717,33 @@ class Swarm:
         )
 
 
+# > execution needs to not have a parameter
+# > when initally agent is saved, keep track of pass/fail details of subtasks
+# > bot: amazon mturk
+# > agent tweaking update: if agent fails task, first time is just a message; new version of agent probably should only have its knowledge updated on second fail; on third fail, whole agent is regenerated; on next fail, the next best agent is chosen, and the process repeats again; if the next best agent still can't solve the task, the task is auto-cancelled since it's likely too difficult (manual cancellation by orchestrator is still possible) > when regenerating agent components, include specific information from old agent
+# > estimate rank of task based on previous successful tasks
 # ....
 # > serialization > only populate knowledge on save if it’s empty
 # mutation > update: unify mutation with generation: mutation is same as re-generating each component of agent, including knowledge > blueprint: model parameter # explain that cheaper model costs less but may reduce accuracy > blueprint: novelty parameter: likelihood of choosing unproven subagent > blueprint: temperature parameter > when mutating agent, either update knowledge, or tweak a single parameter > when mutating agent, use component optimization of other best agents (that have actual trajectories) > new mutation has a provisional rating based on the rating of the agent it was mutated from; but doesn't appear in optimization list until it has a trajectory > only mutate when agent fails at some task > add success record to reasoning processes > retrieve previous reasoning for tasks similar to current task
 # MVP
 # turn printout into configurable parameter for swarm
+# > thoughtstream: thoughtstream: build context by chaining associations of current signal to previously generated thoughts
+# > thoughtstream: new thoughts recall previous thoughts; recency resets whenever recall is done; thoughts recalled together build strength if senses something good happen
+# > thoughtstream: new sensory info don’t immediately override all thoughts, just introduces new associations
+# > thoughtstream: associations decay naturally
+# > thoughtstream: has senses
+# > thoughtstream: has clock speed; can wait
+# > thoughtstream: can delete thoughts memories
+# > thoughtstream: generates the next thought, action
+# > thoughtstream: can have human provide description initially
+# > thoughtstream: has both remote, indirect senses, and direct senses
+# > thoughtstream: has “body” that translates commands
+# > thoughtstream: also has “knowledge” or “procedure”
+# > thoughtstream: curious and want to create things
+# > thoughtstream: help
+# > thoughtstream: thoughtstream # like a reverse swarm, bottom up
 
 
-class NullTestTaskOwner:
-    """Test task owner."""
-
-    id = RuntimeId("test_task_owner")
-
-    def answer_question(self, question: str) -> str:
-        """Answer a question regarding the task."""
-        return f"Answer to '{question}'"
-
-
-# null_test_task = Task(
-#     name="Some task",
-#     description=TaskDescription(
-#         information="Some information.", definition_of_done="Some definition of done."
-#     ),
-#     rank_limit=None,
-#     owner_id=NullTestTaskOwner().id,
-# )
-
-# example_test_task = Task(
-#     name="Reorganize files on a flash drive",
-#     description=TaskDescription(
-#         information="The files on the flash drive are currently unorganized.",
-#         definition_of_done="N/A",
-#     ),
-#     rank_limit=None,
-#     owner_id=Human().id,
-# )
-
-# task: learn how to create langchain agent
-# task: full flow of learning how to perform some skill from a tutorial
-# task: create an oai assistant agent using only documentation # need to set up virtual environment for it
-# task: buy herbal tea from amazon
 
 TEST_DIR = Path(".data/test/agents")
 
@@ -2790,7 +2769,7 @@ async def run_test_task(task: str) -> None:
     with shelve.open(".data/cache/human_reply", writeback=True) as cache:
         human_tester = Human(reply_cache=cache)
         swarm = Swarm(
-            files_dir=Path(".data/test"),
+            files_dir=Path("test/swarm"),
             work_validator=human_tester,
             id_generator=DefaultIdGenerator(
                 namespace=UUID("6bcf7dd4-8e29-58f6-bf5f-7566d4108df4"), seed="test"
@@ -2811,11 +2790,16 @@ curriculum_test_tasks = [
     "Write 'Hello, World!' to a file.",
     "Create a mock timestamp generator that advances by 1 second each time it is called.",
     "Create a mock timestamp generator that advances by 1 second each time it is called, and run it 5 times.",
-    # TODO: basic coding task case: 20 lines or less of base python > coding bot will be equipped with function it wrote
-    # TODO: basic search task case: search for basic info about a concept
-    # TODO: basic file reading/writing task case
-    # TODO: basic browser task case
+    # > basic coding task case: 20 lines or less of base python > coding bot will be equipped with function it wrote
+    # > basic search task case: search for basic info about a concept
+    # > basic file reading/writing task case
+    # > basic browser task case
+    # > learn how to create langchain agent
+    # > full flow of learning how to perform some skill from a tutorial
+    # > create an oai assistant agent using only documentation # need to set up virtual environment for it
+    # > buy something from amazon
 ]
+
 
 async def test_curriculum_task_1() -> None:
     """Curriculum task 1."""
