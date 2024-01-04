@@ -1,26 +1,36 @@
 """Loader for human fallback executor."""
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Annotated, Any
 
 from colorama import Fore
 from langchain.schema import SystemMessage, AIMessage
-from langchain.tools import tool
-from langchain.prompts import ChatPromptTemplate
+from autogen import AssistantAgent, UserProxyAgent  # type: ignore
 
 from swarm_memorizer.swarm import (
     Blueprint,
+    Event,
+    EventId,
+    Message,
+    EventLog,
     Task,
     Executor,
     RuntimeId,
+    generate_swarm_id,
     get_choice,
     dedent_and_strip,
     ExecutorReport,
     as_printable,
 )
 from swarm_memorizer.toolkit.models import query_model, precise_model
+from swarm_memorizer.config import autogen_config_list
 
 AGENT_COLOR = Fore.GREEN
+
+
+OaiMessage = Annotated[dict[str, str], "OpenAI message"]
 
 
 @dataclass(frozen=True)
@@ -45,7 +55,7 @@ class AcceptAdvisor:
 
 @dataclass(frozen=True)
 class TextWriter:
-    """Writes code and saves it."""
+    """Write text to a file."""
 
     blueprint: Blueprint
     task: Task
@@ -86,35 +96,129 @@ class TextWriter:
         """Output directory."""
         return self.files_dir / "output"
 
+    @property
+    def role_prompt(self) -> str:
+        """Return role prompt."""
+        role = """
+        # MISSION
+        You are a bot responsible for helping a user write text to a file. You will be given the conversation with the user so far below to determine what file to write, and what text to write to it.
+        """
+        return dedent_and_strip(role)
+
+    @property
+    def task_prompt(self) -> str:
+        """Return task prompt."""
+        task = """
+        # TASK
+        Use the following reasoning process to determine what action to take:
+        
+        ## CASE 1: the user has provided a file name and text to write to the file
+        - ACTION: call a function to write the text to the file with that name
+
+        ## CASE 2: the user has provided the text to write to the file, but not the file name
+        - ACTION: call a function to write the text to reasonable file name given the text
+
+        ## CASE 3: the user has not provided text to write to the file
+        - ACTION: call a function to create an error message to the user
+        """
+        return dedent_and_strip(task)
+
+    @property
+    def discussion_messages(self) -> EventLog:
+        """Return messages from the discussion."""
+        return self.task.event_log.messages
+
     async def execute(self, message: str | None = None) -> ExecutorReport:
         """Execute the subtask. Adds a message to the task's event log if provided, and adds own message to the event log at the end of execution."""
         assert not message, "No message should be provided to the TextWriter."
 
-        @tool
-        def write_text(text: str, file_name: str) -> None:
-            """Write text to a file."""
-            (self.output_dir / file_name).write_text(text)
+        def assistant_termination(message: OaiMessage) -> bool:
+            """Condition for assistant to terminate the conversation."""
+            try:
+                json.loads(message["content"].strip())
+            except json.JSONDecodeError:
+                return False
+            return message["role"] == "function"
 
-        template = """
-        
+        assistant = AssistantAgent(
+            "assistant",
+            llm_config={"config_list": autogen_config_list},
+            system_message=self.role_prompt,
+            is_termination_msg=assistant_termination,
+        )
+        user_proxy = UserProxyAgent(
+            "user_proxy",
+            code_execution_config={"work_dir": "coding"},
+            llm_config={"config_list": autogen_config_list},
+            human_input_mode="NEVER",
+        )
 
-        # ....
-        # > determine if params are there
-        # > determine if params are valid
-        # > if params are there and valid, write text to file
-        # > if params are not there or not valid, return error message
-        # ....
+        @user_proxy.register_for_execution()  # type: ignore
+        @assistant.register_for_llm(description="Write text to a file.")  # type: ignore
+        def write_text(  # type: ignore
+            text: Annotated[str, "The text to write to the file."],
+            file_name: Annotated[str, "The name of the file to write to."],
+        ) -> Annotated[dict[str, Any], "The result of writing the text to the file."]:
+            try:
+                self.output_dir.mkdir(parents=True, exist_ok=True)
+                (full_file_path := (self.output_dir / file_name)).write_text(
+                    text, encoding="utf-8"
+                )
+                return {
+                    "full_file_path": str(full_file_path),
+                    "successful": True,
+                    "error": None,
+                }
+            except Exception as error:  # pylint:disable=broad-except
+                return {
+                    "full_file_path": None,
+                    "successful": False,
+                    "error": str(error),
+                }
 
-        {input}"""
+        @user_proxy.register_for_execution()  # type: ignore
+        @assistant.register_for_llm(description="Create an error message.")  # type: ignore
+        def error_message(  # type: ignore
+            message: Annotated[str, "The error message to return back to the user."]
+        ) -> str:
+            return message
 
-        # https://python.langchain.com/docs/expression_language/cookbook/tools
-        # ....
-        prompt = ChatPromptTemplate.from_template(template)
+        user_proxy.send(  # type: ignore
+            self.task.information, assistant, request_reply=False, silent=True
+        )
+        for _ in self.discussion_messages:
+            raise NotImplementedError
+            # TODO: depending on originating party of message, send to assistant or user_proxy
+        assistant.chat_messages[user_proxy].append(  # type: ignore
+            {"role": "system", "content": self.task_prompt}
+        )
 
-        # write using lcel > define custom tools
-        # ....
-        breakpoint()
-        raise NotImplementedError
+        # autogen needs a message to be sent to run, so we remove the last message and send it
+        assert (
+            last_conversation_message := assistant.chat_messages[user_proxy].pop(-2)  # type: ignore
+        )["role"] == "user"
+        last_conversation_message_2 = user_proxy.chat_messages[assistant].pop(-1)  # type: ignore
+        assert (
+            last_conversation_message_2["content"]
+            == last_conversation_message["content"]
+        )
+        user_proxy.initiate_chat(  # type: ignore
+            assistant, clear_history=False, message=last_conversation_message["content"]  # type: ignore
+        )
+        return ExecutorReport(
+            reply=(reply := str(user_proxy.last_message())),  # type: ignore
+            events=[
+                Event(
+                    data=Message(
+                        sender=self.id,
+                        recipient=self.task.owner_id,
+                        content=reply,
+                    ),
+                    generating_task_id=self.task.id,
+                    id=generate_swarm_id(EventId, self.task.id_generator),
+                ),
+            ],
+        )
 
 
 def load_bot(blueprint: Blueprint, task: Task, files_dir: Path) -> Executor:
