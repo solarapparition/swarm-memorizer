@@ -7,7 +7,7 @@ from langchain.cache import SQLiteCache
 
 DATA_DIR = Path(".data")
 CACHE_DIR = DATA_DIR / "cache"
-
+autogen_config_list = [{'model': 'gpt-4-1106-preview'}]
 
 def configure_langchain_cache() -> None:
     """Configure the LLM cache."""
