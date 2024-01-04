@@ -80,7 +80,7 @@ class Concept(Enum):
 def as_printable(messages: Sequence[BaseMessage]) -> str:
     """Print LangChain messages."""
     return "\n\n---\n\n".join(
-        [f"[{message.type.upper()}]:\n\n{message.content}" for message in messages]
+        [f"[{message.type.upper()}]:\n\n{message.content}" for message in messages]  # type: ignore
     )
 
 
@@ -299,13 +299,13 @@ class Event:
     data: EventData
     generating_task_id: TaskId
     """Id of the task that generated the event."""
-    id_generator: IdGenerator
+    id: EventId
     timestamp: str = field(default_factory=utc_timestamp)
 
-    @cached_property
-    def id(self) -> EventId:
-        """Id of the event."""
-        return generate_swarm_id(EventId, self.id_generator)
+    # @cached_property
+    # def id(self) -> EventId:
+    #     """Id of the event."""
+    #     return generate_swarm_id(EventId, self.id_generator)
 
     def __str__(self) -> str:
         # return f"[{self.timestamp}] {self.data}"
@@ -471,10 +471,6 @@ class EventLog:
             else NONE
         )
 
-    def __str__(self) -> str:
-        """String representation of the event log."""
-        return "\n".join([str(event) for event in self.events]) if self.events else NONE
-
     def recent(self, num_recent: int) -> "EventLog":
         """Recent events."""
         return EventLog(events=self.events[-num_recent:])
@@ -482,6 +478,18 @@ class EventLog:
     def add(self, *events: Event) -> None:
         """Add events to the event log."""
         self.events.extend(events)
+
+    def __str__(self) -> str:
+        """String representation of the event log."""
+        return "\n".join([str(event) for event in self.events]) if self.events else NONE
+
+    def __bool__(self) -> bool:
+        """Whether the event log is empty."""
+        return bool(self.events)
+
+    def __iter__(self) -> Iterator[Event]:
+        """Iterate over the event log."""
+        return iter(self.events)
 
 
 @dataclass
@@ -1668,7 +1676,7 @@ class Orchestrator:
                         sender=self.id, recipient=self.task.owner_id, content=message
                     ),
                     generating_task_id=self.task.id,
-                    id_generator=self.id_generator,
+                    id=generate_swarm_id(EventId, self.id_generator),
                 ),
             ],
             pause_execution=PauseExecution(True),
@@ -1822,7 +1830,7 @@ class Orchestrator:
                 content=message,
             ),
             generating_task_id=subtask.id,
-            id_generator=self.id_generator,
+            id=generate_swarm_id(EventId, self.id_generator),
         )
 
     def send_subtask_message(
@@ -1845,7 +1853,7 @@ class Orchestrator:
                 reason=f"Sent message to {Concept.EXECUTOR.value} regarding subtask.",
             ),
             generating_task_id=self.task.id,
-            id_generator=self.id_generator,
+            id=generate_swarm_id(EventId, self.id_generator),
         )
         return [status_change_event] if report_status_change else []
 
@@ -1858,7 +1866,7 @@ class Orchestrator:
                 subtask_id=subtask.id,
             ),
             generating_task_id=self.task.id,
-            id_generator=self.id_generator,
+            id=generate_swarm_id(EventId, self.id_generator),
         )
 
     def identify_new_subtask(self) -> ActionResult:
@@ -1901,7 +1909,7 @@ class Orchestrator:
                 validation_result=subtask_validation,
             ),
             generating_task_id=self.task.id,
-            id_generator=self.id_generator,
+            id=generate_swarm_id(EventId, self.id_generator),
         )
         additional_thoughts_event = (
             Event(
@@ -1910,7 +1918,7 @@ class Orchestrator:
                     content=extracted_results.additional_thoughts,
                 ),
                 generating_task_id=self.task.id,
-                id_generator=self.id_generator,
+                id=generate_swarm_id(EventId, self.id_generator),
             )
             if extracted_results.additional_thoughts
             else None
@@ -2013,7 +2021,7 @@ class Orchestrator:
                 content=message,
             ),
             generating_task_id=self.task.id,
-            id_generator=self.id_generator,
+            id=generate_swarm_id(EventId, self.id_generator),
         )
 
     def message_to_owner(self, message: str) -> Event:
@@ -2025,7 +2033,7 @@ class Orchestrator:
                 content=message,
             ),
             generating_task_id=self.task.id,
-            id_generator=self.id_generator,
+            id=generate_swarm_id(EventId, self.id_generator),
         )
 
     @property
@@ -2175,7 +2183,7 @@ class Orchestrator:
                 reason=f"new information from latest events in {Concept.RECENT_EVENTS_LOG.value}",
             ),
             generating_task_id=self.task.id,
-            id_generator=self.id_generator,
+            id=generate_swarm_id(EventId, self.id_generator),
         )
         followup_event = (
             None
@@ -2186,7 +2194,7 @@ class Orchestrator:
                     content=followup_needed,
                 ),
                 generating_task_id=self.task.id,
-                id_generator=self.id_generator,
+                id=generate_swarm_id(EventId, self.id_generator),
             )
         )
         self.task.description = updated_task_description
@@ -2212,7 +2220,7 @@ class Orchestrator:
                         content=thought,
                     ),
                     generating_task_id=self.task.id,
-                    id_generator=self.id_generator,
+                    id=generate_swarm_id(EventId, self.id_generator),
                 )
             ]
         )
@@ -2276,7 +2284,7 @@ class Orchestrator:
                         reason=status_change_reason,
                     ),
                     generating_task_id=self.task.id,
-                    id_generator=self.id_generator,
+                    id=generate_swarm_id(EventId, self.id_generator),
                 )
             ]
             if self.task.work_status != old_work_status
@@ -2510,8 +2518,9 @@ class Delegator:
             if is_new(blueprint):
                 return True
 
-            # > TODO: filter by minimum success rate, given large enough task history > task success is restricted to similar tasks that executor dealt with before
             raise NotImplementedError
+            # > TODO: filter by minimum success rate, given large enough task history > task success is restricted to similar tasks that executor dealt with before
+            # > need to be able to exclude bots as normal based on success rate—they might not be suitable for the task
 
         candidate_blueprints = [
             blueprint
@@ -2550,7 +2559,6 @@ class Delegator:
             raise NotImplementedError(
                 "Unable to automatically create 0-ranked executor."
             )
-
         blueprint = OrchestratorBlueprint(
             name=f"orchestrator_{task.id}",
             rank=None,
@@ -2568,6 +2576,43 @@ class Delegator:
             delegator=self,
         )
 
+    def find_top_candidates(
+        self,
+        candidates: Sequence[BlueprintSearchResult],
+        max_candidates: int,
+    ) -> list[BlueprintSearchResult]:
+        """Find the top candidates."""
+        candidates = sorted(
+            candidates,
+            key=lambda result: float("inf")
+            if (rating := result.rating is None)
+            else rating,
+            reverse=True,
+        )
+        if len(candidates) <= max_candidates:
+            return candidates
+        raise NotImplementedError
+        # TODO: separate list for new vs old executors; take max 1/3 from new, max 2/3 from old, fill rest with remaining list
+
+    def reorder_candidate_list(
+        self,
+        candidates: list[BlueprintSearchResult],
+        task: Task,
+    ) -> Generator[BlueprintSearchResult, None, None]:
+        """Reorder the candidate list."""
+        chosen: set[BlueprintId] = set()
+        while len(chosen) < len(candidates):
+            available_candidates = [
+                candidate
+                for candidate in candidates
+                if candidate.blueprint.id not in chosen
+            ]
+            if len(available_candidates) == 1:
+                yield available_candidates[0]
+            next_candidate = self.choose_next_executor(available_candidates, task)
+            chosen.add(next_candidate.blueprint.id)
+            yield next_candidate
+
     def delegate(
         self,
         task: Task,
@@ -2577,31 +2622,8 @@ class Delegator:
         candidates = self.search_blueprints(task, task.rank_limit)
         if not candidates:
             return DelegationSuccessful(False)
-        candidates = sorted(
-            candidates,
-            key=lambda result: float("inf")
-            if (rating := result.rating is None)
-            else rating,
-            reverse=True,
-        )[:max_candidates]
-
-        def generate_next_choice(
-            candidates: list[BlueprintSearchResult],
-        ) -> Generator[BlueprintSearchResult, None, None]:
-            chosen: set[BlueprintId] = set()
-            while len(chosen) < len(candidates):
-                available_candidates = [
-                    candidate
-                    for candidate in candidates
-                    if candidate.blueprint.id not in chosen
-                ]
-                if len(available_candidates) == 1:
-                    yield available_candidates[0]
-                next_candidate = self.choose_next_executor(available_candidates, task)
-                chosen.add(next_candidate.blueprint.id)
-                yield next_candidate
-
-        for candidate in generate_next_choice(candidates):
+        candidates = self.find_top_candidates(candidates, max_candidates)
+        for candidate in self.reorder_candidate_list(candidates, task):
             candidate = load_executor(
                 candidate.blueprint, task, self.executors_dir / candidate.blueprint.id
             )
@@ -2701,7 +2723,7 @@ class Swarm:
         )
         self.delegator.assign_executor(task, self.recent_events_size, self.auto_wait)
         assert task.executor is not None, "Task executor assignment failed."
-        reply_text = await task.executor.execute()
+        executor_report = await task.executor.execute()
         breakpoint()
 
         async def continue_conversation(message: str) -> str:
@@ -2712,7 +2734,7 @@ class Swarm:
             return (await task.executor.execute(message)).reply
 
         return Reply(
-            content=reply_text.reply,
+            content=executor_report.reply,
             continue_func=continue_conversation,
         )
 
@@ -2742,7 +2764,6 @@ class Swarm:
 # > thoughtstream: curious and want to create things
 # > thoughtstream: help
 # > thoughtstream: thoughtstream # like a reverse swarm, bottom up
-
 
 
 TEST_DIR = Path(".data/test/agents")
