@@ -543,8 +543,6 @@ class Executor(Protocol):
 
     def accepts(self, task: "Task") -> bool:
         """Decides whether the executor accepts a task."""
-
-        breakpoint()
         raise NotImplementedError
 
     async def execute(self, message: str | None = None) -> ExecutorReport:
@@ -682,6 +680,35 @@ class Task:
     ) -> str:
         """Discussion of a task in the event log."""
         return self.reformat_event_log(self.event_log.messages, pov)
+
+    def create_execution_update_events(
+        self, new_status: TaskWorkStatus, status_change_reason: str, reply: str
+    ) -> list[Event]:
+        """Create events for updating the status of the task upon execution."""
+        assert self.executor_id
+        assert self.work_status != new_status
+        return [
+            Event(
+                data=TaskStatusChange(
+                    changing_agent=self.executor_id,
+                    task_id=self.id,
+                    old_status=self.work_status,
+                    new_status=new_status,
+                    reason=status_change_reason,
+                ),
+                generating_task_id=self.id,
+                id=generate_swarm_id(EventId, self.id_generator),
+            ),
+            Event(
+                data=Message(
+                    sender=self.executor_id,
+                    recipient=self.owner_id,
+                    content=reply,
+                ),
+                generating_task_id=self.id,
+                id=generate_swarm_id(EventId, self.id_generator),
+            ),
+        ]
 
 
 @dataclass
@@ -2651,7 +2678,7 @@ class Swarm:
 
     files_dir: Path = Path(".data")
     """Directory for files related to the agent and any subagents."""
-    work_validator: WorkValidator = field(
+    validator: WorkValidator = field(
         default_factory=lambda: Human(name="Human Validator")
     )
     """Agent that approves or rejects work."""
@@ -2718,12 +2745,15 @@ class Swarm:
             description=TaskDescription(information=message),
             owner_id=self.id,
             rank_limit=None,
-            validator=self.work_validator,
+            validator=self.validator,
             id_generator=self.id_generator,
         )
         self.delegator.assign_executor(task, self.recent_events_size, self.auto_wait)
         assert task.executor is not None, "Task executor assignment failed."
         executor_report = await task.executor.execute()
+
+        # > commit
+        # > add validation at the end of execute() here and elsewhere > validation must be non-empty if task was marked as complete > executor is passed through proxy class, and execute() validation attached to it
         breakpoint()
 
         async def continue_conversation(message: str) -> str:
@@ -2742,7 +2772,7 @@ class Swarm:
 # > execution needs to not have a parameter
 # > when initally agent is saved, keep track of pass/fail details of subtasks
 # > bot: amazon mturk
-# > agent tweaking update: if agent fails task, first time is just a message; new version of agent probably should only have its knowledge updated on second fail; on third fail, whole agent is regenerated; on next fail, the next best agent is chosen, and the process repeats again; if the next best agent still can't solve the task, the task is auto-cancelled since it's likely too difficult (manual cancellation by orchestrator is still possible) > when regenerating agent components, include specific information from old agent
+# > agent tweaking update: if agent fails task, first time is just a message; new version of agent probably should only have its knowledge updated on second fail; on third fail, whole agent is regenerated; on next fail, the next best agent is chosen, and the process repeats again; if the next best agent still can't solve the task, the task is auto-cancelled since it's likely too difficult (manual cancellation by orchestrator is still possible) > when regenerating agent components, include specific information from old agent > if agent is bot, skip update and regeneration and just message/choose next best agent
 # > estimate rank of task based on previous successful tasks
 # ....
 # > serialization > only populate knowledge on save if it’s empty
@@ -2791,7 +2821,7 @@ async def run_test_task(task: str) -> None:
         human_tester = Human(reply_cache=cache)
         swarm = Swarm(
             files_dir=Path("test/swarm"),
-            work_validator=human_tester,
+            validator=human_tester,
             id_generator=DefaultIdGenerator(
                 namespace=UUID("6bcf7dd4-8e29-58f6-bf5f-7566d4108df4"), seed="test"
             ),
