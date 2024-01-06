@@ -289,6 +289,7 @@ EventData = (
     | SubtaskFocus
     | TaskDescriptionUpdate
     | Thought
+    | ValidationResult
 )
 
 
@@ -322,7 +323,7 @@ class Event:
         """String representation of the event with a point of view from a certain executor."""
         event_printout = replace_agent_id(str(self), "You", pov_id)
         event_printout = replace_agent_id(event_printout, other_name, other_id)
-        if not task_id_replacement:  # or not isinstance(self.data, TaskStatusChange):
+        if not task_id_replacement:
             return event_printout
         for task_id, replacement in task_id_replacement.items():
             event_printout = replace_task_id(event_printout, task_id, replacement)
@@ -1152,6 +1153,54 @@ class OrchestratorState:
     new_event_count: int = 0
 
 
+async def execute_and_validate(task: Task) -> ExecutorReport:
+    """Execute and validate a task."""
+    assert task.executor
+    report = await task.executor.execute()
+    if not report.task_completed:
+        return report
+    task.work_status = TaskWorkStatus.IN_VALIDATION
+
+
+    def validate_task_completion(task: Task, report: ExecutorReport) -> ValidationResult:
+        """Validate a task."""
+        assert report.task_completed, "Task must be completed to be validated."
+
+        # > prompt for validation
+        # > copy prompt from subtask id validation
+        breakpoint()
+    
+
+
+    validation = validate_task_completion(task, report)
+    breakpoint()
+    task.work_status = (
+        TaskWorkStatus.COMPLETED if validation.valid else TaskWorkStatus.BLOCKED
+    )
+    validation_event = Event(
+        data=validation,
+        generating_task_id=task.id,
+        id=generate_swarm_id(EventId, task.id_generator),
+    )
+
+    # ....
+    breakpoint()
+    task.work_status = new_work_status
+    # > need to rerun orchestrator test after bot test to make sure everything's still okay
+    # > update execution so that completion puts task into validation status, and status update event is also changed
+    # Event(
+    #     data=TaskStatusChange(
+    #         changing_agent=self.executor_id,
+    #         task_id=self.id,
+    #         old_status=self.work_status,
+    #         new_status=new_status,
+    #         reason=status_change_reason,
+    #     ),
+    #     generating_task_id=self.id,
+    #     id=generate_swarm_id(EventId, self.id_generator),
+    # ),
+
+
 @dataclass(frozen=True)
 class Orchestrator:
     """A recursively auto-specializing swarm agent."""
@@ -1869,7 +1918,6 @@ class Orchestrator:
         report_status_change = (
             not initial and focused_subtask.work_status != TaskWorkStatus.IN_PROGRESS
         )
-        focused_subtask.work_status = TaskWorkStatus.IN_PROGRESS
         status_change_event = Event(
             data=TaskStatusChange(
                 changing_agent=self.id,
@@ -1881,6 +1929,7 @@ class Orchestrator:
             generating_task_id=self.task.id,
             id=generate_swarm_id(EventId, self.id_generator),
         )
+        focused_subtask.work_status = TaskWorkStatus.IN_PROGRESS
         return [status_change_event] if report_status_change else []
 
     def focus_subtask(self, subtask: Task) -> Event:
@@ -2258,25 +2307,21 @@ class Orchestrator:
         """Execute the task. Adds a message (if provided) to the task's event log, and adds own message to the event log at the end of execution."""
         if message is not None:
             self.add_to_event_log([self.message_from_owner(message)])
-        old_work_status = self.task.work_status
+        # old_work_status = self.task.work_status
         while True:
             if self.auto_wait and self.awaitable_subtasks:
                 executor_reports = [
-                    asyncio.create_task(subtask.executor.execute())
+                    # asyncio.create_task(subtask.executor.execute())
+                    asyncio.create_task(execute_and_validate(subtask))
                     for subtask in self.awaitable_subtasks
                     if subtask.executor is not None
                 ]
                 done_reports, _ = await asyncio.wait(
                     executor_reports, return_when=asyncio.FIRST_COMPLETED
                 )
+                done_reports = [report.result() for report in done_reports]
                 executor_events = list(
-                    chain(
-                        *[
-                            report.result().events
-                            for report in done_reports
-                            if report.result().events
-                        ]
-                    )
+                    chain(*[report.events for report in done_reports if report.events])
                 )
                 executor_events.sort(key=lambda event: event.timestamp)
                 self.add_to_event_log(executor_events)
@@ -2753,10 +2798,12 @@ class Swarm:
         )
         self.delegator.assign_executor(task, self.recent_events_size, self.auto_wait)
         assert task.executor is not None, "Task executor assignment failed."
-        executor_report = await task.executor.execute()
+        # executor_report = await task.executor.execute()
+        executor_report = await execute_and_validate(task)
 
-        # > commit
-        # > add validation at the end of execute() here and elsewhere > validation must be non-empty if task was marked as complete > executor is passed through proxy class, and execute() validation attached to it
+        # add proxy class
+        # ....
+        # add validation at the end of execute() here and elsewhere > validation must be non-empty if task was marked as complete > executor is passed through proxy class, and execute() validation attached to it
         breakpoint()
 
         async def continue_conversation(message: str) -> str:
@@ -2764,7 +2811,8 @@ class Swarm:
             assert (
                 task.executor is not None
             ), "Task executor must exist in order to be executed."
-            return (await task.executor.execute(message)).reply
+            raise NotImplementedError
+            # return (await task.executor.execute(message)).reply # > need to replace with execute_and_validate
 
         return Reply(
             content=executor_report.reply,
