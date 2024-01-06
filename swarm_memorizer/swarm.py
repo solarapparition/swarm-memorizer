@@ -518,6 +518,8 @@ class ExecutorReport:
     """Report from an executor."""
 
     reply: str
+    task_completed: bool
+    validation: ValidationResult | None = None
     events: list[Event] = field(default_factory=list)
 
 
@@ -681,34 +683,29 @@ class Task:
         """Discussion of a task in the event log."""
         return self.reformat_event_log(self.event_log.messages, pov)
 
-    def create_execution_update_events(
-        self, new_status: TaskWorkStatus, status_change_reason: str, reply: str
-    ) -> list[Event]:
+    def execution_update_event(self, reply: str) -> Event:
         """Create events for updating the status of the task upon execution."""
         assert self.executor_id
-        assert self.work_status != new_status
-        return [
-            Event(
-                data=TaskStatusChange(
-                    changing_agent=self.executor_id,
-                    task_id=self.id,
-                    old_status=self.work_status,
-                    new_status=new_status,
-                    reason=status_change_reason,
-                ),
-                generating_task_id=self.id,
-                id=generate_swarm_id(EventId, self.id_generator),
+        return Event(
+            data=Message(
+                sender=self.executor_id,
+                recipient=self.owner_id,
+                content=reply,
             ),
-            Event(
-                data=Message(
-                    sender=self.executor_id,
-                    recipient=self.owner_id,
-                    content=reply,
-                ),
-                generating_task_id=self.id,
-                id=generate_swarm_id(EventId, self.id_generator),
-            ),
-        ]
+            generating_task_id=self.id,
+            id=generate_swarm_id(EventId, self.id_generator),
+        )
+            # Event(
+            #     data=TaskStatusChange(
+            #         changing_agent=self.executor_id,
+            #         task_id=self.id,
+            #         old_status=self.work_status,
+            #         new_status=new_status,
+            #         reason=status_change_reason,
+            #     ),
+            #     generating_task_id=self.id,
+            #     id=generate_swarm_id(EventId, self.id_generator),
+            # ),
 
 
 @dataclass
@@ -880,7 +877,8 @@ class ActionResult:
 
     pause_execution: PauseExecution
     new_events: list[Event]
-    new_work_status: TaskWorkStatus | None = None
+    task_completed: bool
+    # new_work_status: TaskWorkStatus | None = None
     # new_event_status: TaskEventStatus | None = None
 
 
@@ -1695,7 +1693,7 @@ class Orchestrator:
         return self.task.id_generator
 
     def message_task_owner(self, message: str) -> ActionResult:
-        """Send message to main task owner. Main task is blocked until there is a reply."""
+        """Send message to main task owner."""
         return ActionResult(
             new_events=[
                 Event(
@@ -1707,7 +1705,8 @@ class Orchestrator:
                 ),
             ],
             pause_execution=PauseExecution(True),
-            new_work_status=TaskWorkStatus.BLOCKED,
+            task_completed=False,
+            # new_work_status=TaskWorkStatus.BLOCKED,
         )
 
     @property
@@ -1954,6 +1953,7 @@ class Orchestrator:
             return ActionResult(
                 pause_execution=PauseExecution(False),
                 new_events=[subtask_identification_event],
+                task_completed=False,
             )
         self.delegator.assign_executor(subtask, self.recent_events_size, self.auto_wait)
         assert subtask.executor is not None, "Task executor assignment failed."
@@ -1973,6 +1973,7 @@ class Orchestrator:
         return ActionResult(
             pause_execution=PauseExecution(False),
             new_events=new_events,
+            task_completed=False,
         )
 
     @property
@@ -2011,7 +2012,8 @@ class Orchestrator:
         return ActionResult(
             new_events=self.send_subtask_message(message),
             pause_execution=PauseExecution(False),
-            new_work_status=TaskWorkStatus.IN_PROGRESS,
+            task_completed=False,
+            # new_work_status=TaskWorkStatus.IN_PROGRESS,
         )
 
     def act(self, decision: ActionDecision) -> ActionResult:
@@ -2284,10 +2286,11 @@ class Orchestrator:
             action_result = self.act(action_decision)
             if action_result.new_events:
                 self.add_to_event_log(action_result.new_events)
-            if action_result.new_work_status:
-                self.task.work_status = action_result.new_work_status
+            # if action_result.new_work_status:
+            #     self.task.work_status = action_result.new_work_status
             if action_result.pause_execution:
                 break
+        task_completed = action_result.task_completed
         if not (last_event := self.task.event_log.last_event):
             raise NotImplementedError
         if not isinstance(last_event.data, Message):  # type: ignore
@@ -2299,27 +2302,27 @@ class Orchestrator:
             raise NotImplementedError
         if self.task.work_status != TaskWorkStatus.BLOCKED:
             raise NotImplementedError
-        status_change_reason = "Task is blocked until reply to message."
-        events = (
-            [
-                Event(
-                    data=TaskStatusChange(
-                        changing_agent=self.id,
-                        task_id=self.task.id,
-                        old_status=old_work_status,
-                        new_status=self.task.work_status,
-                        reason=status_change_reason,
-                    ),
-                    generating_task_id=self.task.id,
-                    id=generate_swarm_id(EventId, self.id_generator),
-                )
-            ]
-            if self.task.work_status != old_work_status
-            else []
-        )
+        # status_change_reason = "Task is blocked until reply to message."
+        # events = (
+        #     [
+        #         Event(
+        #             data=TaskStatusChange(
+        #                 changing_agent=self.id,
+        #                 task_id=self.task.id,
+        #                 old_status=old_work_status,
+        #                 new_status=self.task.work_status,
+        #                 reason=status_change_reason,
+        #             ),
+        #             generating_task_id=self.task.id,
+        #             id=generate_swarm_id(EventId, self.id_generator),
+        #         )
+        #     ]
+        #     if self.task.work_status != old_work_status
+        #     else []
+        # )
         return ExecutorReport(
             reply=last_event.data.content,
-            events=events,
+            task_completed=task_completed,
         )
 
     @classmethod
