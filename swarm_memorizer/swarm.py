@@ -75,6 +75,7 @@ class Concept(Enum):
     MAIN_TASK_DEFINITION_OF_DONE = f"{MAIN_TASK} DEFINITION OF DONE"
     TASK_MESSAGES = "TASK MESSAGES"
     LAST_READ_MAIN_TASK_OWNER_MESSAGE = f"LAST READ {MAIN_TASK_OWNER} MESSAGE"
+    OBJECTIVE_POV = "OBJECTIVE POV"
 
 
 def as_printable(messages: Sequence[BaseMessage]) -> str:
@@ -333,6 +334,18 @@ class Event:
             event_printout = replace_agent_id(event_printout, replacement, executor_id)
         return event_printout
 
+    def to_str_with_objective_pov(
+        self, task_owner_id: RuntimeId, executor_id: RuntimeId
+    ) -> str:
+        """String representation of the event with an objective point of view."""
+        event_printout = replace_agent_id(
+            str(self), Concept.MAIN_TASK_OWNER.value, task_owner_id
+        )
+        event_printout = replace_agent_id(
+            event_printout, Concept.EXECUTOR.value, executor_id
+        )
+        return event_printout
+
     def serialize(self) -> dict[str, Any]:
         """Serialize the event."""
         return asdict(self)
@@ -345,7 +358,7 @@ class Event:
 class WorkValidator(Protocol):
     """A validator of a task."""
 
-    def validate(self, prompt: str) -> ValidationResult:
+    def validate(self, context: str) -> ValidationResult:
         """Validate the work done by an executor for a task."""
         raise NotImplementedError
 
@@ -389,17 +402,17 @@ class Human:
         )
         return reply
 
-    def validate(self, prompt: str) -> ValidationResult:
-        """Validate the work done by an executor."""
-        prompt += "\n\nPlease validate the work as described above (y/n): "
+    def validate(self, context: str) -> ValidationResult:
+        """Validate some work done."""
+        prompt = f"{context}\n\nPlease validate the work as described above (y/n): "
         while True:
             validation_input: str = self.advise(prompt).strip().lower()
             if validation_input in {"y", "n"}:
-                validated: bool = validation_input == "y"
+                valid: bool = validation_input == "y"
                 break
             print("Invalid input. Please enter 'y' or 'n'.")
-        feedback: str = "" if validated else self.advise("Provide feedback: ")
-        return ValidationResult(validated, feedback)
+        feedback: str = "" if valid else self.advise("Provide feedback: ")
+        return ValidationResult(valid, feedback)
 
 
 @dataclass
@@ -472,6 +485,21 @@ class EventLog:
             else NONE
         )
 
+    def to_str_with_objective_pov(
+        self, task_owner_id: RuntimeId, executor_id: RuntimeId
+    ) -> str:
+        """String representation of the event log with an objective point of view."""
+        return (
+            "\n".join(
+                [
+                    event.to_str_with_objective_pov(task_owner_id, executor_id)
+                    for event in self.events
+                ]
+            )
+            if self.events
+            else NONE
+        )
+
     def recent(self, num_recent: int) -> "EventLog":
         """Recent events."""
         return EventLog(events=self.events[-num_recent:])
@@ -521,7 +549,7 @@ class ExecutorReport:
     reply: str
     task_completed: bool
     validation: ValidationResult | None = None
-    events: list[Event] = field(default_factory=list)
+    new_parent_events: list[Event] = field(default_factory=list)
 
 
 class Executor(Protocol):
@@ -644,7 +672,7 @@ class Task:
     def reformat_event_log(
         self,
         event_log: EventLog,
-        pov: Literal[Concept.EXECUTOR, Concept.MAIN_TASK_OWNER],
+        pov: Literal[Concept.EXECUTOR, Concept.MAIN_TASK_OWNER, Concept.OBJECTIVE_POV],
     ) -> str:
         """Format an event log."""
         assert self.executor_id is not None
@@ -668,23 +696,32 @@ class Task:
             )
 
         # use case for main task owner pov is for printing subtask discussion log when focused on a subtask
-        assert (
-            self.name is not None
-        ), "If POV in a task discussion is from the main task owner, the task must have a name."
-        task_id_replacement = None
-        return event_log.to_str_with_pov(
-            pov_id=self.owner_id,
-            other_id=self.executor_id,
-            other_name=Concept.EXECUTOR.value,
+        if pov == Concept.MAIN_TASK_OWNER:
+            assert (
+                self.name is not None
+            ), "If POV in a task discussion is from the main task owner, the task must have a name."
+            task_id_replacement = None
+            return event_log.to_str_with_pov(
+                pov_id=self.owner_id,
+                other_id=self.executor_id,
+                other_name=Concept.EXECUTOR.value,
+            )
+
+        # use case for objective pov is for printing out to a 3rd party, such as a validator
+        return event_log.to_str_with_objective_pov(
+            task_owner_id=self.owner_id, executor_id=self.executor_id
         )
 
     def discussion(
-        self, pov: Literal[Concept.EXECUTOR, Concept.MAIN_TASK_OWNER]
+        self,
+        pov: Literal[
+            Concept.EXECUTOR, Concept.MAIN_TASK_OWNER, Concept.OBJECTIVE_POV
+        ] = Concept.OBJECTIVE_POV,
     ) -> str:
         """Discussion of a task in the event log."""
         return self.reformat_event_log(self.event_log.messages, pov)
 
-    def execution_update_event(self, reply: str) -> Event:
+    def execution_reply_message(self, reply: str) -> Event:
         """Create events for updating the status of the task upon execution."""
         assert self.executor_id
         return Event(
@@ -696,17 +733,17 @@ class Task:
             generating_task_id=self.id,
             id=generate_swarm_id(EventId, self.id_generator),
         )
-            # Event(
-            #     data=TaskStatusChange(
-            #         changing_agent=self.executor_id,
-            #         task_id=self.id,
-            #         old_status=self.work_status,
-            #         new_status=new_status,
-            #         reason=status_change_reason,
-            #     ),
-            #     generating_task_id=self.id,
-            #     id=generate_swarm_id(EventId, self.id_generator),
-            # ),
+        # Event(
+        #     data=TaskStatusChange(
+        #         changing_agent=self.executor_id,
+        #         task_id=self.id,
+        #         old_status=self.work_status,
+        #         new_status=new_status,
+        #         reason=status_change_reason,
+        #     ),
+        #     generating_task_id=self.id,
+        #     id=generate_swarm_id(EventId, self.id_generator),
+        # ),
 
 
 @dataclass
@@ -1153,27 +1190,40 @@ class OrchestratorState:
     new_event_count: int = 0
 
 
+def validate_task_completion(
+    task: Task, report: ExecutorReport
+) -> ValidationResult:
+    """Validate a task."""
+    assert report.task_completed, "Task must be completed to be validated."
+    context = """
+    The following task is being executed by a task executor:
+    ```start_of_task_specification
+    {task_specification}
+    ```end_of_task_specification
+
+    The executor has reported that the task is complete. Here is the conversation for the task:
+    ```start_of_task_conversation
+    {task_conversation}
+    ```end_of_task_conversation
+    """
+    context = dedent_and_strip(context).format(
+        task_specification=task.as_main_task_printout,
+        task_conversation=task.discussion(),
+    )
+    return task.validator.validate(context)
+
+
 async def execute_and_validate(task: Task) -> ExecutorReport:
     """Execute and validate a task."""
     assert task.executor
     report = await task.executor.execute()
     if not report.task_completed:
+        raise NotImplementedError
+        # TODO: add event for blocking status change
         return report
-    task.work_status = TaskWorkStatus.IN_VALIDATION
-
-
-    def validate_task_completion(task: Task, report: ExecutorReport) -> ValidationResult:
-        """Validate a task."""
-        assert report.task_completed, "Task must be completed to be validated."
-
-        # > prompt for validation
-        # > copy prompt from subtask id validation
-        breakpoint()
-    
-
+    # task.work_status = TaskWorkStatus.IN_VALIDATION
 
     validation = validate_task_completion(task, report)
-    breakpoint()
     task.work_status = (
         TaskWorkStatus.COMPLETED if validation.valid else TaskWorkStatus.BLOCKED
     )
@@ -1186,6 +1236,7 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
     # ....
     breakpoint()
     task.work_status = new_work_status
+    # > remove in_validation
     # > need to rerun orchestrator test after bot test to make sure everything's still okay
     # > update execution so that completion puts task into validation status, and status update event is also changed
     # Event(
@@ -2057,7 +2108,7 @@ class Orchestrator:
         return self.default_action_names
 
     def message_subtask_executor(self, message: str) -> ActionResult:
-        """Send message to subtask executor."""
+        """Send message to executor for the focused subtask."""
         return ActionResult(
             new_events=self.send_subtask_message(message),
             pause_execution=PauseExecution(False),
@@ -2321,7 +2372,13 @@ class Orchestrator:
                 )
                 done_reports = [report.result() for report in done_reports]
                 executor_events = list(
-                    chain(*[report.events for report in done_reports if report.events])
+                    chain(
+                        *[
+                            report.new_parent_events
+                            for report in done_reports
+                            if report.new_parent_events
+                        ]
+                    )
                 )
                 executor_events.sort(key=lambda event: event.timestamp)
                 self.add_to_event_log(executor_events)
@@ -2805,6 +2862,7 @@ class Swarm:
         # ....
         # add validation at the end of execute() here and elsewhere > validation must be non-empty if task was marked as complete > executor is passed through proxy class, and execute() validation attached to it
         breakpoint()
+        # > add task status and status event # > factor out generic logic in send_subtask_message
 
         async def continue_conversation(message: str) -> str:
             """Continue the conversation with a message."""

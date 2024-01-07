@@ -211,17 +211,8 @@ class TextWriter:
         )
         reply = str(user_proxy.last_message()["content"])
         successful = json.loads(reply)["successful"]
-        # status_change_reason = (
-        #     "File writing completed successfully."
-        #     if successful
-        #     else (
-        #         "Need additional information"
-        #         if reply_dict.get("need_additional_information")
-        #         else "File writing failed."
-        #     )
-        # )
-        events = [self.task.execution_update_event(reply=reply)]
-        return ExecutorReport(reply=reply, task_completed=successful, events=events)
+        self.task.event_log.add(self.task.execution_reply_message(reply=reply))
+        return ExecutorReport(reply=reply, task_completed=successful)
 
 
 def load_bot(blueprint: Blueprint, task: Task, files_dir: Path) -> Executor:
