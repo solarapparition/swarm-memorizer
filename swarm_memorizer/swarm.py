@@ -374,7 +374,10 @@ class Event:
 class WorkValidator(Protocol):
     """A validator of a task."""
 
-    id: RuntimeId
+    @property
+    def id(self) -> RuntimeId:
+        """Runtime id of the validator."""
+        raise NotImplementedError
 
     def validate(self, context: str) -> ValidationResult:
         """Validate the work done by an executor for a task."""
@@ -2898,26 +2901,32 @@ class Swarm:
         assert task.executor is not None, "Task executor assignment failed."
         executor_report = await execute_and_validate(task)
 
-        breakpoint()
-        # add validation at the end of execute() here and elsewhere > validation must be non-empty if task was marked as complete > executor is passed through proxy class, and execute() validation attached to it
-        breakpoint()
-        # > add task status and status event # > factor out generic logic in send_subtask_message
-
         async def continue_conversation(message: str) -> str:
             """Continue the conversation with a message."""
             assert (
                 task.executor is not None
             ), "Task executor must exist in order to be executed."
-            raise NotImplementedError
-            # return (await task.executor.execute(message)).reply # > need to replace with execute_and_validate
+            message_event = Event(
+                data=Message(
+                    sender=self.id,
+                    recipient=task.executor.id,
+                    content=message,
+                ),
+                generating_task_id=task.id,
+                id=generate_swarm_id(EventId, self.id_generator),
+            )
+            task.event_log.add(message_event)
+            return (await execute_and_validate(task)).reply
 
         return Reply(
             content=executor_report.reply,
             continue_func=continue_conversation,
         )
-        # > need to rerun orchestrator test after bot test to make sure everything's still okay
 
 
+# ....
+# > factor out generic logic in send_subtask_message
+# > need to rerun orchestrator test after bot test to make sure everything's still okay
 # > execution needs to not have a parameter
 # > when initally agent is saved, keep track of pass/fail details of subtasks
 # > bot: amazon mturk
