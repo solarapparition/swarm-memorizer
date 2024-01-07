@@ -230,7 +230,7 @@ class SubtaskIdentification:
     def __str__(self) -> str:
         if self.validation_result.valid:
             return f"{self.owner_id}: Successfully identified subtask: `{self.subtask}`; assigned subtask id: `{self.subtask_id}`."
-        return f'{self.owner_id}: Attempted to identify subtask `{self.subtask}`, but the validator did not approve the subtask, with the following feedback: "{self.validation_result.feedback}"'
+        return f'{self.owner_id}: Attempted to identify subtask `{self.subtask}`, but validation of the subtask failed, with the following feedback: "{self.validation_result.feedback}"'
 
 
 @dataclass(frozen=True)
@@ -244,7 +244,7 @@ class TaskStatusChange:
     reason: str
 
     def __str__(self) -> str:
-        return f"{self.changing_agent}: I've updated the status of task {self.task_id} from {self.old_status.value} to {self.new_status.value}. Reason: {self.reason.rstrip('.')}."
+        return f"System: Status of task {self.task_id} has been updated from {self.old_status.value} to {self.new_status.value}. Reason: {self.reason.rstrip('.')}."
 
 
 @dataclass(frozen=True)
@@ -283,6 +283,22 @@ class Thought:
         return f"{self.agent_id} (Thought): {self.content}"
 
 
+@dataclass(frozen=True)
+class TaskValidation:
+    """Data for validating a task."""
+
+    validator_id: RuntimeId
+    task_id: TaskId
+    validation_result: ValidationResult
+
+    def __str__(self) -> str:
+        if self.validation_result.valid:
+            return (
+                f"System: Task {self.task_id} was completed and has passed validation."
+            )
+        return f"System: Task {self.task_id} was reported as complete by executor, but failed validation, with the following feedback: {self.validation_result.feedback}."
+
+
 EventData = (
     Message
     | SubtaskIdentification
@@ -290,7 +306,7 @@ EventData = (
     | SubtaskFocus
     | TaskDescriptionUpdate
     | Thought
-    | ValidationResult
+    | TaskValidation
 )
 
 
@@ -357,6 +373,8 @@ class Event:
 
 class WorkValidator(Protocol):
     """A validator of a task."""
+
+    id: RuntimeId
 
     def validate(self, context: str) -> ValidationResult:
         """Validate the work done by an executor for a task."""
@@ -1190,9 +1208,7 @@ class OrchestratorState:
     new_event_count: int = 0
 
 
-def validate_task_completion(
-    task: Task, report: ExecutorReport
-) -> ValidationResult:
+def validate_task_completion(task: Task, report: ExecutorReport) -> ValidationResult:
     """Validate a task."""
     assert report.task_completed, "Task must be completed to be validated."
     context = """
@@ -1214,42 +1230,67 @@ def validate_task_completion(
 
 
 async def execute_and_validate(task: Task) -> ExecutorReport:
-    """Execute and validate a task."""
+    """Execute and validate a task until a stopping point, and update the task's status. This bridges the gap between an executor's `execute` and the usage of the method in an orchestrator."""
     assert task.executor
     report = await task.executor.execute()
     if not report.task_completed:
         raise NotImplementedError
         # TODO: add event for blocking status change
         return report
-    # task.work_status = TaskWorkStatus.IN_VALIDATION
 
-    validation = validate_task_completion(task, report)
-    task.work_status = (
-        TaskWorkStatus.COMPLETED if validation.valid else TaskWorkStatus.BLOCKED
-    )
-    validation_event = Event(
-        data=validation,
+    validation_status_event = Event(
+        data=TaskStatusChange(
+            changing_agent=task.validator.id,
+            task_id=task.id,
+            old_status=task.work_status,
+            new_status=TaskWorkStatus.IN_VALIDATION,
+            reason="Validation has begun for task.",
+        ),
         generating_task_id=task.id,
         id=generate_swarm_id(EventId, task.id_generator),
     )
-
-    # ....
-    breakpoint()
-    task.work_status = new_work_status
-    # > remove in_validation
-    # > need to rerun orchestrator test after bot test to make sure everything's still okay
-    # > update execution so that completion puts task into validation status, and status update event is also changed
-    # Event(
-    #     data=TaskStatusChange(
-    #         changing_agent=self.executor_id,
-    #         task_id=self.id,
-    #         old_status=self.work_status,
-    #         new_status=new_status,
-    #         reason=status_change_reason,
-    #     ),
-    #     generating_task_id=self.id,
-    #     id=generate_swarm_id(EventId, self.id_generator),
-    # ),
+    task.work_status = TaskWorkStatus.IN_VALIDATION  # MUTATION
+    validation = validate_task_completion(task, report)
+    task_validation = TaskValidation(
+        validator_id=task.validator.id,
+        task_id=task.id,
+        validation_result=validation,
+    )
+    validation_result_event = Event(
+        data=task_validation,
+        generating_task_id=task.id,
+        id=generate_swarm_id(EventId, task.id_generator),
+    )
+    if validation.valid:
+        status_update_event = Event(
+            data=TaskStatusChange(
+                changing_agent=task.validator.id,
+                task_id=task.id,
+                old_status=task.work_status,
+                new_status=(new_status := TaskWorkStatus.COMPLETED),
+                reason="Task has been validated as complete.",
+            ),
+            generating_task_id=task.id,
+            id=generate_swarm_id(EventId, task.id_generator),
+        )
+    else:
+        status_update_event = Event(
+            data=TaskStatusChange(
+                changing_agent=task.validator.id,
+                task_id=task.id,
+                old_status=task.work_status,
+                new_status=(new_status := TaskWorkStatus.BLOCKED),
+                reason="Task has failed validation and has been blocked.",
+            ),
+            generating_task_id=task.id,
+            id=generate_swarm_id(EventId, task.id_generator),
+        )
+    task.work_status = new_status  # MUTATION
+    report.validation = validation  # MUTATION
+    report.new_parent_events.extend(  # MUTATION
+        [validation_status_event, validation_result_event, status_update_event]
+    )
+    return report
 
 
 @dataclass(frozen=True)
@@ -2855,11 +2896,9 @@ class Swarm:
         )
         self.delegator.assign_executor(task, self.recent_events_size, self.auto_wait)
         assert task.executor is not None, "Task executor assignment failed."
-        # executor_report = await task.executor.execute()
         executor_report = await execute_and_validate(task)
 
-        # add proxy class
-        # ....
+        breakpoint()
         # add validation at the end of execute() here and elsewhere > validation must be non-empty if task was marked as complete > executor is passed through proxy class, and execute() validation attached to it
         breakpoint()
         # > add task status and status event # > factor out generic logic in send_subtask_message
@@ -2876,6 +2915,7 @@ class Swarm:
             content=executor_report.reply,
             continue_func=continue_conversation,
         )
+        # > need to rerun orchestrator test after bot test to make sure everything's still okay
 
 
 # > execution needs to not have a parameter
