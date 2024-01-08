@@ -1247,7 +1247,7 @@ def regenerate_task_executor(executor: Executor) -> Executor:
     raise NotImplementedError
 
 
-def close_task_executor(executor: Executor) -> None:
+def save_task_executor(executor: Executor) -> None:
     """Close a task's executor."""
     if is_bot(executor.blueprint):
         return
@@ -1257,6 +1257,23 @@ def close_task_executor(executor: Executor) -> None:
         # > TODO: serialization: populate knowledge on save if knowledge is empty
 
     raise NotImplementedError
+
+
+def change_status(task: Task, new_status: TaskWorkStatus, reason: str) -> Event:
+    """Change the status of a task."""
+    status_update_event = Event(
+        data=TaskStatusChange(
+            changing_agent=task.validator.id,
+            task_id=task.id,
+            old_status=task.work_status,
+            new_status=new_status,
+            reason=reason,
+        ),
+        generating_task_id=task.id,
+        id=generate_swarm_id(EventId, task.id_generator),
+    )
+    task.work_status = new_status  # MUTATION
+    return status_update_event
 
 
 async def execute_and_validate(task: Task) -> ExecutorReport:
@@ -1294,23 +1311,13 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
     if validation.valid:
         new_status = TaskWorkStatus.COMPLETED
         reason = "Validated as complete."
-        close_task_executor(task)  # MUTATION
+        save_task_executor(task.executor)  # MUTATION
+        task.executor = None  # MUTATION
     else:
         new_status = TaskWorkStatus.BLOCKED
         reason = "Failed completion validation."
-        task.executor = regenerate_task_executor(task)  # MUTATION
-    status_update_event = Event(
-        data=TaskStatusChange(
-            changing_agent=task.validator.id,
-            task_id=task.id,
-            old_status=task.work_status,
-            new_status=new_status,
-            reason=reason,
-        ),
-        generating_task_id=task.id,
-        id=generate_swarm_id(EventId, task.id_generator),
-    )
-    task.work_status = new_status  # MUTATION
+        task.executor = regenerate_task_executor(task.executor)  # MUTATION
+    status_update_event = change_status(task, new_status, reason)  # MUTATION
     report.validation = validation  # MUTATION
     report.new_parent_events.extend(  # MUTATION
         [validation_status_event, validation_result_event, status_update_event]
@@ -2948,11 +2955,11 @@ class Swarm:
         )
 
 
+# create implementation scaffolding for artifact display > completed subtasks need to display artifacts > validation part 2 is automated, and must ask for artifact if no expected ones are found > when identifying new subtask, task info must contain artifacts to the new subtask
 # ....
-# execute_and_validate: factor out status change + status change event combo functionality
-# > create implementation scaffolding for artifact display > completed subtasks need to display artifacts > artifacts must be reported by subtask executor upon completion > validation part 2 is automated, and must ask for artifact if none is found > when identifying new subtask, task info must contain artifacts to the new subtask
-# > need to rerun orchestrator test after bot test to make sure everything's still okay
 # execution needs to not have a parameter
+# > need to rerun orchestrator test after bot test to make sure everything's still okay
+# (next_curriculum_task)
 # ---MVP---
 # > estimate rank of task based on previous successful tasks
 # > incorporate bot generation via autogen's builder
