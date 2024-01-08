@@ -27,6 +27,7 @@ from typing import (
     Callable,
     Coroutine,
 )
+from annotated_types import IsInfinite
 
 from langchain.schema import SystemMessage, BaseMessage
 from ruamel.yaml import YAML, YAMLError
@@ -1232,17 +1233,30 @@ def validate_task_completion(task: Task, report: ExecutorReport) -> ValidationRe
     return task.validator.validate(context)
 
 
-def regenerate_task_executor(task: Task) -> Executor:
+def regenerate_task_executor(executor: Executor) -> Executor:
     """Regenerate a task's executor."""
+    # bots are atomic and cannot be regenerated
+    if is_bot(executor.blueprint):
+        return executor
+
+    if isinstance(executor, Orchestrator):
+        raise NotImplementedError
+        # > TODO: agent regeneration: if agent fails task, first time is just a message; new version of agent probably should only have its knowledge updated on second fail; on third fail, whole agent is regenerated; on next fail, the next best agent is chosen, and the process repeats again; if the next best agent still can't solve the task, the task is auto-cancelled since it's likely too difficult (manual cancellation by orchestrator is still possible) > when regenerating agent components, include specific information from old agent > if agent is bot, skip update and regeneration and just message/choose next best agent
+        # > mutation > update: unify mutation with generation: mutation is same as re-generating each component of agent, including knowledge > blueprint: model parameter # explain that cheaper model costs less but may reduce accuracy > blueprint: novelty parameter: likelihood of choosing unproven subagent > blueprint: temperature parameter > when mutating agent, either update knowledge, or tweak a single parameter > when mutating agent, use component optimization of other best agents (that have actual trajectories) > new mutation has a provisional rating based on the rating of the agent it was mutated from; but doesn't appear in optimization list until it has a trajectory > only mutate when agent fails at some task > add success record to reasoning processes > retrieve previous reasoning for tasks similar to current task
+
     raise NotImplementedError
-    # > TODO: agent regeneration: if agent fails task, first time is just a message; new version of agent probably should only have its knowledge updated on second fail; on third fail, whole agent is regenerated; on next fail, the next best agent is chosen, and the process repeats again; if the next best agent still can't solve the task, the task is auto-cancelled since it's likely too difficult (manual cancellation by orchestrator is still possible) > when regenerating agent components, include specific information from old agent > if agent is bot, skip update and regeneration and just message/choose next best agent
-    # > mutation > update: unify mutation with generation: mutation is same as re-generating each component of agent, including knowledge > blueprint: model parameter # explain that cheaper model costs less but may reduce accuracy > blueprint: novelty parameter: likelihood of choosing unproven subagent > blueprint: temperature parameter > when mutating agent, either update knowledge, or tweak a single parameter > when mutating agent, use component optimization of other best agents (that have actual trajectories) > new mutation has a provisional rating based on the rating of the agent it was mutated from; but doesn't appear in optimization list until it has a trajectory > only mutate when agent fails at some task > add success record to reasoning processes > retrieve previous reasoning for tasks similar to current task
 
 
-def close_task_executor(task: Task) -> None:
+def close_task_executor(executor: Executor) -> None:
     """Close a task's executor."""
+    if is_bot(executor.blueprint):
+        return
+
+    if isinstance(executor, Orchestrator):
+        raise NotImplementedError
+        # > TODO: serialization: populate knowledge on save if knowledge is empty
+
     raise NotImplementedError
-    # > TODO: serialization: populate knowledge on save if knowledge is empty
 
 
 async def execute_and_validate(task: Task) -> ExecutorReport:
