@@ -27,7 +27,6 @@ from typing import (
     Callable,
     Coroutine,
 )
-from annotated_types import IsInfinite
 
 from langchain.schema import SystemMessage, BaseMessage
 from ruamel.yaml import YAML, YAMLError
@@ -1285,44 +1284,46 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
         # TODO: add event for blocking status change
         return report
 
-    validation_status_event = Event(
-        data=TaskStatusChange(
-            changing_agent=task.validator.id,
+    validation_status_event = change_status(  # MUTATION
+        task, TaskWorkStatus.IN_VALIDATION, "Validation has begun for task."
+    )
+    validations = [validate_task_completion]
+    validation_results = (validation(task, report) for validation in validations)
+    failed_validation = next(
+        (result for result in validation_results if not result.valid), None
+    )
+    if failed_validation:
+        new_status = TaskWorkStatus.BLOCKED
+        reason = "Failed completion validation."
+        task.executor = regenerate_task_executor(task.executor)  # MUTATION
+        validation_result = failed_validation  # MUTATION
+    else:
+        new_status = TaskWorkStatus.COMPLETED
+        reason = "Validated as complete."
+        save_task_executor(task.executor)
+        task.executor = None  # MUTATION
+        validation_result = ValidationResult(valid=True, feedback="")
+    validation_result_event = Event(
+        data=TaskValidation(
+            validator_id=task.validator.id,
             task_id=task.id,
-            old_status=task.work_status,
-            new_status=TaskWorkStatus.IN_VALIDATION,
-            reason="Validation has begun for task.",
+            validation_result=validation_result,
         ),
         generating_task_id=task.id,
         id=generate_swarm_id(EventId, task.id_generator),
     )
-    task.work_status = TaskWorkStatus.IN_VALIDATION  # MUTATION
-    validation = validate_task_completion(task, report)
-    task_validation = TaskValidation(
-        validator_id=task.validator.id,
-        task_id=task.id,
-        validation_result=validation,
-    )
-    validation_result_event = Event(
-        data=task_validation,
-        generating_task_id=task.id,
-        id=generate_swarm_id(EventId, task.id_generator),
-    )
-    if validation.valid:
-        new_status = TaskWorkStatus.COMPLETED
-        reason = "Validated as complete."
-        save_task_executor(task.executor)  # MUTATION
-        task.executor = None  # MUTATION
-    else:
-        new_status = TaskWorkStatus.BLOCKED
-        reason = "Failed completion validation."
-        task.executor = regenerate_task_executor(task.executor)  # MUTATION
     status_update_event = change_status(task, new_status, reason)  # MUTATION
-    report.validation = validation  # MUTATION
+    report.validation = validation_result  # MUTATION
     report.new_parent_events.extend(  # MUTATION
         [validation_status_event, validation_result_event, status_update_event]
     )
+
+    # artifact validation > context: conversation, task info
+    breakpoint()
+    # completed subtasks need to display artifacts > validation part 2 is automated, and must ask for artifact if no expected ones are found > when identifying new subtask, task info must contain artifacts to the new subtask
+    # > unify validator functionality; validator protocol should hold specific functions to validate specific aspects of a task
     return report
+    # > factor out validations into separate variable
 
 
 @dataclass(frozen=True)
