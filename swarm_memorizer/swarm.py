@@ -76,6 +76,7 @@ class Concept(Enum):
     TASK_MESSAGES = "TASK MESSAGES"
     LAST_READ_MAIN_TASK_OWNER_MESSAGE = f"LAST READ {MAIN_TASK_OWNER} MESSAGE"
     OBJECTIVE_POV = "OBJECTIVE POV"
+    ARTIFACT = "ARTIFACT"
 
 
 def as_printable(messages: Sequence[BaseMessage]) -> str:
@@ -597,9 +598,32 @@ class Executor(Protocol):
         """Decides whether the executor accepts a task."""
         raise NotImplementedError
 
-    async def execute(self, message: str | None = None) -> ExecutorReport:
+    # async def execute(self, message: str | None = None) -> ExecutorReport:
+    async def execute(self) -> ExecutorReport:
         """Execute the task. Adds a message to the task's event log if provided, and adds own message to the event log at the end of execution."""
         raise NotImplementedError
+
+
+@dataclass
+class ExecutionOutcome:
+    """Outcome of an execution attempt."""
+
+    executor_id: RuntimeId
+    blueprint_id: BlueprintId
+    success: bool
+
+
+@dataclass
+class ExecutionHistory:
+    """History of execution attempts for a task."""
+
+    history: list[ExecutionOutcome] = field(default_factory=list)
+
+    def add(
+        self, executor_id: RuntimeId, blueprint_id: BlueprintId, success: bool
+    ) -> None:
+        """Add an execution attempt to the history."""
+        self.history.append(ExecutionOutcome(executor_id, blueprint_id, success))
 
 
 @dataclass
@@ -615,7 +639,7 @@ class Task:
     executor: Executor | None = None
     notes: dict[str, str] = field(default_factory=dict)
     work_status: TaskWorkStatus = TaskWorkStatus.IDENTIFIED
-    # event_status: TaskEventStatus = TaskEventStatus.NONE
+    execution_history: ExecutionHistory = field(default_factory=ExecutionHistory)
 
     @cached_property
     def id(self) -> TaskId:
@@ -669,6 +693,10 @@ class Task:
     @property
     def as_subtask_printout(self) -> str:
         """String representation of task as it would appear as a subtask."""
+        if self.work_status == TaskWorkStatus.COMPLETED:
+            raise NotImplementedError
+            # > TODO: completed subtasks need to display artifacts # needs to be done in execute_and_validate
+
         if self.work_status in {TaskWorkStatus.COMPLETED, TaskWorkStatus.CANCELLED}:
             template = """
             - Id: {id}
@@ -1275,6 +1303,81 @@ def change_status(task: Task, new_status: TaskWorkStatus, reason: str) -> Event:
     return status_update_event
 
 
+def validate_artifact_mentions(task: Task, report: ExecutorReport) -> ValidationResult:
+    """Validate that artifacts were reported by the executor."""
+    context = f"""
+    ## MISSION:
+    You are a validator for an AI task executor agent. Your purpose is to validate certain aspects of the task that the executor has reported as complete.
+
+    ## CONCEPTS:
+    These are the concepts you should be familiar with:
+    - {Concept.EXECUTOR.value}: the agent that is responsible for executing a task.
+    - {Concept.MAIN_TASK_OWNER.value}: the agent that owns the task and is responsible for providing information to the executor to help it execute the task.
+    - {Concept.ARTIFACT.value}: the output of a task, in the form of a file, message, or some other identifying information like a URI. The executor must provide the artifacts for the task to be considered complete.
+
+    ## TASK SPECIFICATION:
+    Here is the task specification:
+    ```start_of_task_specification
+    {{task_description}}
+    ```end_of_task_specification
+
+    ## TASK CONVERSATION:
+    Here is the conversation for the task:
+    ```start_of_task_conversation
+    {{task_discussion}}
+    ```end_of_task_conversation
+    """
+    context = dedent_and_strip(context).format(
+        task_description=task.description,
+        task_discussion=task.discussion(),
+    )
+    request = """
+    ## REQUEST FOR YOU:
+    Use the following reasoning process to validate that the executor has given sufficient information to locate the artifacts for the task:
+    ```start_of_reasoning_steps
+    1. Review the TASK SPECIFICATION to fully understand the expectations for the task's completion, including the details of what the final ARTIFACT should be, and where and how it should be delivered or made accessible.
+    2. Examine the TASK CONVERSATION for any communications that reference the delivery or completion of the ARTIFACT. Look for specific details such as file names, URIs, timestamps, or any other identifiers that would allow someone to attempt to locate and access the ARTIFACT.
+    3. Cross-reference the information from the TASK CONVERSATION with the criteria outlined in the TASK SPECIFICATION to confirm that the EXECUTOR provided the necessary and correct details about the ARTIFACT. It is not necessary for you to actually locate the ARTIFACT yourself.
+    4. If anything is unclear or incomplete, prepare to request clarification or additional information from the EXECUTOR.
+    ```end_of_reasoning_steps
+
+    In your reply, you must include output from all steps of the reasoning process, in this block format:
+    ```start_of_reasoning_output
+    1. {step_1_output}
+    2. {step_2_output}
+    3. [... etc.]
+    ```end_of_reasoning_output
+    After this block, you must output the validation result in this format:
+    ```start_of_validation_output
+    comment: |-
+        {validation_comment}
+    valid: !!bool |-
+        {validation_result}   # note: must be either `true` or `false`
+    ```end_of_action_choice_output
+    Any additional comments or thoughts can be added before or after the output blocks.
+    """
+    request = dedent_and_strip(request)
+    messages = [
+        SystemMessage(content=context),
+        SystemMessage(content=request),
+    ]
+    result = query_model(
+        model=precise_model,
+        messages=messages,
+        preamble=f"Validating artifacts for task {task.id}...\n{as_printable(messages)}",
+        printout=VERBOSE,
+        color=AGENT_COLOR,
+    )
+    if not (extracted_result := extract_blocks(result, "start_of_validation_output")):
+        raise ExtractionError("Could not extract validation output from the result.")
+    validation_output = extracted_result[0]
+    validation_result = default_yaml.load(validation_output)
+    return ValidationResult(
+        valid=validation_result["valid"],
+        feedback=validation_result["comment"],
+    )
+
+
 async def execute_and_validate(task: Task) -> ExecutorReport:
     """Execute and validate a task until a stopping point, and update the task's status. This bridges the gap between an executor's `execute` and the usage of the method in an orchestrator."""
     assert task.executor
@@ -1287,7 +1390,7 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
     validation_status_event = change_status(  # MUTATION
         task, TaskWorkStatus.IN_VALIDATION, "Validation has begun for task."
     )
-    validations = [validate_task_completion]
+    validations = [validate_artifact_mentions, validate_task_completion]
     validation_results = (validation(task, report) for validation in validations)
     failed_validation = next(
         (result for result in validation_results if not result.valid), None
@@ -1317,13 +1420,7 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
     report.new_parent_events.extend(  # MUTATION
         [validation_status_event, validation_result_event, status_update_event]
     )
-
-    # artifact validation > context: conversation, task info
-    breakpoint()
-    # completed subtasks need to display artifacts > validation part 2 is automated, and must ask for artifact if no expected ones are found > when identifying new subtask, task info must contain artifacts to the new subtask
-    # > unify validator functionality; validator protocol should hold specific functions to validate specific aspects of a task
     return report
-    # > factor out validations into separate variable
 
 
 @dataclass(frozen=True)
@@ -1884,7 +1981,7 @@ class Orchestrator:
         )
 
     @property
-    def subtask_extraction_context(self) -> str:
+    def subtask_identification_context(self) -> str:
         """Context for extracting a subtask."""
         template = """
         {default_status}
@@ -1902,7 +1999,7 @@ class Orchestrator:
         return self.reasoning_generator.generate_subtask_identification_reasoning()
 
     @property
-    def subtask_extraction_reasoning(self) -> str:
+    def subtask_identification_reasoning(self) -> str:
         """Prompt for extracting a subtask."""
         if not self.blueprint.reasoning.subtask_extraction:
             self.blueprint.reasoning.subtask_extraction = (
@@ -2074,8 +2171,8 @@ class Orchestrator:
     def identify_new_subtask(self) -> ActionResult:
         """Identify a new subtask."""
         messages = [
-            SystemMessage(content=self.subtask_extraction_context),
-            SystemMessage(content=self.subtask_extraction_reasoning),
+            SystemMessage(content=self.subtask_identification_context),
+            SystemMessage(content=self.subtask_identification_reasoning),
         ]
         new_subtask = query_model(
             model=precise_model,
@@ -2135,6 +2232,14 @@ class Orchestrator:
         assert subtask.executor is not None, "Task executor assignment failed."
         self.add_subtask(subtask)
         subtask_focus_event = self.focus_subtask(subtask)
+
+        if [
+            subtask
+            for subtask in self.subtasks
+            if subtask.work_status == TaskWorkStatus.COMPLETED
+        ]:
+            raise NotImplementedError
+            # > when identifying new subtask, must send message containing relevant artifacts
         subtask_initiation_events = self.send_subtask_message(
             message_text="Hi, please feel free to ask me any questions about the context of this task—I've only given you a brief description to start with, but I can provide more information if you need it.",
             initial=True,
@@ -2430,11 +2535,8 @@ class Orchestrator:
             ]
         )
 
-    async def execute(self, message: str | None = None) -> ExecutorReport:
+    async def execute(self) -> ExecutorReport:
         """Execute the task. Adds a message (if provided) to the task's event log, and adds own message to the event log at the end of execution."""
-        if message is not None:
-            self.add_to_event_log([self.message_from_owner(message)])
-        # old_work_status = self.task.work_status
         while True:
             if self.auto_wait and self.awaitable_subtasks:
                 executor_reports = [
@@ -2594,7 +2696,7 @@ class BlueprintSearchResult:
             return None
         raise NotImplementedError
         # success_rate = (
-        #     num_success := sum(task.success for task in self.task_pool)
+        #     num_success := sum(task.success(blueprint_id=blueprint.id) for task in self.task_pool)
         # ) / (num_similar_tasks := len(self.task_pool))
 
     @property
@@ -2756,6 +2858,8 @@ class Delegator:
         task: Task,
     ) -> BlueprintSearchResult:
         """Evaluate candidates for a task."""
+        if len(candidates) == 1:
+            return candidates[0]
         raise NotImplementedError
         # TODO: use executor selection reasoning to choose next agent to ask
 
@@ -2815,8 +2919,6 @@ class Delegator:
                 for candidate in candidates
                 if candidate.blueprint.id not in chosen
             ]
-            if len(available_candidates) == 1:
-                yield available_candidates[0]
             next_candidate = self.choose_next_executor(available_candidates, task)
             chosen.add(next_candidate.blueprint.id)
             yield next_candidate
@@ -2839,8 +2941,12 @@ class Delegator:
                 task.executor = candidate
                 task.rank_limit = candidate.rank
                 return DelegationSuccessful(True)
-            raise NotImplementedError
-            # TODO: refusal of agent counts as failure in task history
+
+            task.execution_history.add(
+                executor_id=candidate.id,
+                blueprint_id=candidate.blueprint.id,
+                success=False,
+            )
         return DelegationSuccessful(False)
 
     def assign_executor(
@@ -2956,17 +3062,19 @@ class Swarm:
         )
 
 
-# create implementation scaffolding for artifact display > completed subtasks need to display artifacts > validation part 2 is automated, and must ask for artifact if no expected ones are found > when identifying new subtask, task info must contain artifacts to the new subtask
+# rerun orchestrator test
 # ....
-# execution needs to not have a parameter
-# > need to rerun orchestrator test after bot test to make sure everything's still okay
 # (next_curriculum_task)
+# mvp task: buy something from amazon
 # ---MVP---
+# > factor out validations into separate variable
+# > unify validator functionality; validator protocol should hold specific functions to validate specific aspects of a task
 # > estimate rank of task based on previous successful tasks
 # > incorporate bot generation via autogen's builder
 # > bot: amazon mturk
 # turn printout into configurable parameter for swarm
-# > thoughtstream: thoughtstream: build context by chaining associations of current signal to previously generated thoughts
+# > thoughtstream: valence: determines how strongly a node persists; decays slowly until reset; determined by multiplication of connection strength along chain
+# > thoughtstream: low valence thoughts get replaced first# > thoughtstream: thoughtstream: build context by chaining associations of current signal to previously generated thoughts
 # > thoughtstream: new thoughts recall previous thoughts; recency resets whenever recall is done; thoughts recalled together build strength if senses something good happen
 # > thoughtstream: new sensory info don’t immediately override all thoughts, just introduces new associations
 # > thoughtstream: associations decay naturally
@@ -3018,12 +3126,6 @@ async def run_test_task(task: str) -> None:
             reply = await result.continue_conversation(human_reply)
 
 
-async def test_orchestrator() -> None:
-    """Run an example task that's likely to make use of all orchestrator actions."""
-    task = "Create an OpenAI assistant agent."
-    await run_test_task(task)
-
-
 curriculum_test_tasks = [
     "Write 'Hello, World!' to a file.",
     "Create a mock timestamp generator that advances by 1 second each time it is called.",
@@ -3039,6 +3141,12 @@ curriculum_test_tasks = [
 ]
 
 
+async def test_orchestrator() -> None:
+    """Run an example task that's likely to make use of all orchestrator actions."""
+    task = "Create an OpenAI assistant agent."
+    await run_test_task(task)
+
+
 async def test_curriculum_task_1() -> None:
     """Curriculum task 1."""
     task = curriculum_test_tasks[0]
@@ -3048,8 +3156,8 @@ async def test_curriculum_task_1() -> None:
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    # asyncio.run(test_orchestrator())
-    asyncio.run(test_curriculum_task_1())
+    asyncio.run(test_orchestrator())
+    # asyncio.run(test_curriculum_task_1())
 
 
 if __name__ == "__main__":
