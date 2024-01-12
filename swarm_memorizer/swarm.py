@@ -122,7 +122,7 @@ class OrchestratorBlueprint:
 
     name: str
     rank: int | None
-    task_history: TaskHistory
+    # task_history: TaskHistory
     reasoning: Reasoning
     knowledge: str
     recent_events_size: int
@@ -139,7 +139,7 @@ class BotBlueprint:
     """A blueprint for a bot."""
 
     name: str
-    task_history: TaskHistory
+    # task_history: TaskHistory
     id: BlueprintId
     kwargs: dict[str, Any] = field(default_factory=dict)
 
@@ -160,10 +160,10 @@ class BotBlueprint:
     @classmethod
     def deserialize(cls, data: dict[Any, Any]) -> Self:
         """Deserialize the blueprint from a JSON-compatible dictionary."""
-        task_history = [TaskId(task_id) for task_id in data["task_history"]]
+        # task_history = [TaskId(task_id) for task_id in data["task_history"]]
         return cls(
             name=data["name"],
-            task_history=task_history,
+            # task_history=task_history,
             id=BlueprintId(data["id"]),
             kwargs=data.get("kwargs", {}),
         )
@@ -598,7 +598,10 @@ class Executor(Protocol):
         """Decides whether the executor accepts a task."""
         raise NotImplementedError
 
-    # async def execute(self, message: str | None = None) -> ExecutorReport:
+    def save(self) -> None:
+        """Save the executor."""
+        raise NotImplementedError
+
     async def execute(self) -> ExecutorReport:
         """Execute the task. Adds a message to the task's event log if provided, and adds own message to the event log at the end of execution."""
         raise NotImplementedError
@@ -624,6 +627,15 @@ class ExecutionHistory:
     ) -> None:
         """Add an execution attempt to the history."""
         self.history.append(ExecutionOutcome(executor_id, blueprint_id, success))
+
+    @property
+    def last_entry(self) -> ExecutionOutcome:
+        """Current entry in the history."""
+        return self.history[-1]
+
+    def __bool__(self) -> bool:
+        """Whether the execution history is empty."""
+        return bool(self.history)
 
 
 @dataclass
@@ -686,9 +698,11 @@ class Task:
         return self.executor.id if self.executor else None
 
     @property
-    def executor_blueprint_id(self) -> BlueprintId | None:
+    def last_executor_blueprint_id(self) -> BlueprintId | None:
         """Id of the task's executor."""
-        return self.executor.blueprint.id if self.executor else None
+        assert self.execution_history
+        return self.execution_history.last_entry.blueprint_id
+        # return self.executor.blueprint.id if self.executor else None
 
     @property
     def as_subtask_printout(self) -> str:
@@ -793,6 +807,22 @@ class Task:
         #     generating_task_id=self.id,
         #     id=generate_swarm_id(EventId, self.id_generator),
         # ),
+
+    def update_executor(self, executor: Executor) -> None:
+        """Update the executor of the task."""
+        if self.executor:
+            self.executor.save()
+        self.executor = executor
+        self.execution_history.add(
+            executor_id=executor.id, blueprint_id=executor.blueprint.id, success=False
+        )
+
+    def wrap_execution(self, success: bool) -> None:
+        """Wrap up execution of the task."""
+        assert self.execution_history and self.executor
+        self.executor.save()
+        self.executor = None
+        self.execution_history.last_entry.success = success
 
 
 @dataclass
@@ -1266,28 +1296,16 @@ def regenerate_task_executor(executor: Executor) -> Executor:
     if is_bot(executor.blueprint):
         return executor
 
-    if isinstance(executor, Orchestrator):
-        raise NotImplementedError
-        # > TODO: agent regeneration: if agent fails task, first time is just a message; new version of agent probably should only have its knowledge updated on second fail; on third fail, whole agent is regenerated; on next fail, the next best agent is chosen, and the process repeats again; if the next best agent still can't solve the task, the task is auto-cancelled since it's likely too difficult (manual cancellation by orchestrator is still possible) > when regenerating agent components, include specific information from old agent > if agent is bot, skip update and regeneration and just message/choose next best agent
-        # > mutation > update: unify mutation with generation: mutation is same as re-generating each component of agent, including knowledge > blueprint: model parameter # explain that cheaper model costs less but may reduce accuracy > blueprint: novelty parameter: likelihood of choosing unproven subagent > blueprint: temperature parameter > when mutating agent, either update knowledge, or tweak a single parameter > when mutating agent, use component optimization of other best agents (that have actual trajectories) > new mutation has a provisional rating based on the rating of the agent it was mutated from; but doesn't appear in optimization list until it has a trajectory > only mutate when agent fails at some task > add success record to reasoning processes > retrieve previous reasoning for tasks similar to current task
-
     raise NotImplementedError
-
-
-def save_task_executor(executor: Executor) -> None:
-    """Close a task's executor."""
-    if is_bot(executor.blueprint):
-        return
-
-    if isinstance(executor, Orchestrator):
-        raise NotImplementedError
-        # > TODO: serialization: populate knowledge on save if knowledge is empty
-
-    raise NotImplementedError
+    # > TODO: agent regeneration: if agent fails task, first time is just a message; new version of agent probably should only have its knowledge updated on second fail; on third fail, whole agent is regenerated; on next fail, the next best agent is chosen, and the process repeats again; if the next best agent still can't solve the task, the task is auto-cancelled since it's likely too difficult (manual cancellation by orchestrator is still possible) > when regenerating agent components, include specific information from old agent > if agent is bot, skip update and regeneration and just message/choose next best agent
+    # > mutation > update: unify mutation with generation: mutation is same as re-generating each component of agent, including knowledge > blueprint: model parameter # explain that cheaper model costs less but may reduce accuracy > blueprint: novelty parameter: likelihood of choosing unproven subagent > blueprint: temperature parameter > when mutating agent, either update knowledge, or tweak a single parameter > when mutating agent, use component optimization of other best agents (that have actual trajectories) > new mutation has a provisional rating based on the rating of the agent it was mutated from; but doesn't appear in optimization list until it has a trajectory > only mutate when agent fails at some task > add success record to reasoning processes > retrieve previous reasoning for tasks similar to current task
 
 
 def change_status(task: Task, new_status: TaskWorkStatus, reason: str) -> Event:
     """Change the status of a task."""
+    assert (
+        task.work_status != new_status
+    ), "New status must be different from old status."
     status_update_event = Event(
         data=TaskStatusChange(
             changing_agent=task.validator.id,
@@ -1303,7 +1321,9 @@ def change_status(task: Task, new_status: TaskWorkStatus, reason: str) -> Event:
     return status_update_event
 
 
-def validate_artifact_mentions(task: Task, report: ExecutorReport) -> ValidationResult:
+def validate_artifact_mentions(
+    task: Task, report: ExecutorReport  # pylint: disable=unused-argument
+) -> ValidationResult:
     """Validate that artifacts were reported by the executor."""
     context = f"""
     ## MISSION:
@@ -1350,9 +1370,9 @@ def validate_artifact_mentions(task: Task, report: ExecutorReport) -> Validation
     After this block, you must output the validation result in this format:
     ```start_of_validation_output
     comment: |-
-        {validation_comment}
-    valid: !!bool |-
-        {validation_result}   # note: must be either `true` or `false`
+      {validation_comment}
+    valid: !!bool |- # note: must be either `true` or `false`
+      {validation_result}
     ```end_of_action_choice_output
     Any additional comments or thoughts can be added before or after the output blocks.
     """
@@ -1383,8 +1403,10 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
     assert task.executor
     report = await task.executor.execute()
     if not report.task_completed:
-        raise NotImplementedError
-        # TODO: add event for blocking status change
+        status_update_event = change_status(
+            task, TaskWorkStatus.BLOCKED, "Task is blocked until reply to message."
+        )
+        report.new_parent_events.append(status_update_event)
         return report
 
     validation_status_event = change_status(  # MUTATION
@@ -1392,19 +1414,18 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
     )
     validations = [validate_artifact_mentions, validate_task_completion]
     validation_results = (validation(task, report) for validation in validations)
-    failed_validation = next(
+    if failed_validation := next(
         (result for result in validation_results if not result.valid), None
-    )
-    if failed_validation:
+    ):
         new_status = TaskWorkStatus.BLOCKED
         reason = "Failed completion validation."
-        task.executor = regenerate_task_executor(task.executor)  # MUTATION
+        new_executor = regenerate_task_executor(task.executor)  # MUTATION
+        task.update_executor(new_executor)  # MUTATION
         validation_result = failed_validation  # MUTATION
     else:
         new_status = TaskWorkStatus.COMPLETED
         reason = "Validated as complete."
-        save_task_executor(task.executor)
-        task.executor = None  # MUTATION
+        task.wrap_execution(success=True)  # MUTATION
         validation_result = ValidationResult(valid=True, feedback="")
     validation_result_event = Event(
         data=TaskValidation(
@@ -1489,10 +1510,10 @@ class Orchestrator:
                 rank = min(rank, self.rank_limit)
         return rank
 
-    @property
-    def task_history(self) -> TaskHistory:
-        """History of tasks completed by the orchestrator."""
-        return self.blueprint.task_history
+    # @property
+    # def task_history(self) -> TaskHistory:
+    #     """History of tasks completed by the orchestrator."""
+    #     return self.blueprint.task_history
 
     @property
     def reasoning(self) -> Reasoning:
@@ -1619,7 +1640,7 @@ class Orchestrator:
         raise NotImplementedError(
             "TODO: implement serialization of orchestrator itself"
         )
-        return asdict(self.blueprint)
+        # return asdict(self.blueprint)
 
     def save(self, update_blueprint: bool = True) -> None:
         """Serialize the orchestrator to YAML."""
@@ -1628,6 +1649,8 @@ class Orchestrator:
         # assume that at the point of saving, all executors have been saved and so would have a rank
         assert self.blueprint.rank is not None, "Rank must not be None when saving."
         default_yaml.dump(self.serialize(), self.serialization_location)
+        raise NotImplementedError
+        # > TODO: serialization: populate knowledge on save if knowledge is empty
 
     def accepts(self, task: Task) -> bool:
         """Decides whether the orchestrator accepts a task."""
@@ -1728,8 +1751,9 @@ class Orchestrator:
         justifications: |-
           {{justifications}}
         action_choice: |-
-          {{action_choice}} # must be one of the actions listed above, in the same format
+          {{action_choice}} 
         ```end_of_action_choice_output
+        `action_choice` must be one of the {ORCHESTRATOR_ACTIONS} listed above, in the same format.
         Any additional comments or thoughts can be added before or after the output blocks.
         """
         return dedent_and_strip(template)
@@ -1799,6 +1823,7 @@ class Orchestrator:
             )
         return self.action_reasoning_template.format(
             action_choice_core=self.blueprint.reasoning.default_action_choice,
+            ORCHESTRATOR_ACTIONS=Concept.ORCHESTRATOR_ACTIONS.value,
         )
 
     @property
@@ -1867,7 +1892,7 @@ class Orchestrator:
         """Actions available in subtask discussion mode."""
         actions = """
         - `{MESSAGE_TASK_OWNER}: "{{message}}"`: send a message to the {MAIN_TASK_OWNER} to gather or clarify information about the MAIN TASK. `{{message}}` must be replaced with the message you want to send.
-        - `{MESSAGE_SUBTASK_EXECUTOR}: "{{message}}"`: send a message to the {EXECUTOR} of the {FOCUSED_SUBTASK} to gather or clarify information about the {FOCUSED_SUBTASK}. {{message}} must be replaced with the message you want to send. _Note_: the {EXECUTOR} is only aware of its own {FOCUSED_SUBTASK}, not _your_ {MAIN_TASK}. From its perspective, the {FOCUSED_SUBTASK} is _its_ {MAIN_TASK}.
+        - `{MESSAGE_SUBTASK_EXECUTOR}: "{{message}}"`: send a message to the {EXECUTOR} of the {FOCUSED_SUBTASK} to gather or clarify information about the {FOCUSED_SUBTASK}. {{message}} must be replaced with the message you want to send. **Note**: the {EXECUTOR} is only aware of its own {FOCUSED_SUBTASK}, not _your_ {MAIN_TASK}. From its perspective, the {FOCUSED_SUBTASK} is _its_ {MAIN_TASK}. Never refer your own {MAIN_TASK_OWNER} or {MAIN_TASK} in messages to the {EXECUTOR}.
         - `{PAUSE_SUBTASK_DISCUSSION}: "{{reason}}"`: pause the discussion of the {FOCUSED_SUBTASK} to either communicate with other subtask executors, the {MAIN_TASK_OWNER}, or to create a new subtask. The {FOCUSED_SUBTASK}'s discussion will be frozen, but can be resumed later. {{reason}} must be replaced with the reason for pausing the discussion, so that the orchestrator can remember why it paused the discussion when it resumes it later.
         - `{CANCEL_SUBTASK}: "{{reason}}"`: cancel the {FOCUSED_SUBTASK} for the given reason. {{reason}} must be replaced with the reason for cancelling the subtask.
         - `{WAIT}`: do nothing until the next event from the {FOCUSED_SUBTASK}.
@@ -1922,6 +1947,7 @@ class Orchestrator:
             )
         return self.action_reasoning_template.format(
             action_choice_core=self.blueprint.reasoning.subtask_action_choice,
+            ORCHESTRATOR_ACTIONS=Concept.ORCHESTRATOR_ACTIONS.value,
         )
 
     @property
@@ -2134,27 +2160,35 @@ class Orchestrator:
         self, message_text: str, initial: bool = False
     ) -> list[Event]:
         """Send a message to the executor for the focused subtask."""
-        raise NotImplementedError
-        # > TODO: factor out status change + status change event combo functionality
         assert (focused_subtask := self.focused_subtask) is not None
         message_event = self.subtask_message(focused_subtask, message_text)
         focused_subtask.event_log.add(message_event)
         report_status_change = (
             not initial and focused_subtask.work_status != TaskWorkStatus.IN_PROGRESS
         )
-        status_change_event = Event(
-            data=TaskStatusChange(
-                changing_agent=self.id,
-                task_id=focused_subtask.id,
-                old_status=focused_subtask.work_status,
-                new_status=TaskWorkStatus.IN_PROGRESS,
-                reason=f"Sent message to {Concept.EXECUTOR.value} regarding subtask.",
-            ),
-            generating_task_id=self.task.id,
-            id=generate_swarm_id(EventId, self.id_generator),
+        status_change_event = change_status(
+            focused_subtask,
+            TaskWorkStatus.IN_PROGRESS,
+            f"Sent message to {Concept.EXECUTOR.value} regarding subtask.",
         )
-        focused_subtask.work_status = TaskWorkStatus.IN_PROGRESS
         return [status_change_event] if report_status_change else []
+
+        # report_status_change = (
+        #     not initial and focused_subtask.work_status != TaskWorkStatus.IN_PROGRESS
+        # )
+        # status_change_event = Event(
+        #     data=TaskStatusChange(
+        #         changing_agent=self.id,
+        #         task_id=focused_subtask.id,
+        #         old_status=focused_subtask.work_status,
+        #         new_status=TaskWorkStatus.IN_PROGRESS,
+        #         reason=f"Sent message to {Concept.EXECUTOR.value} regarding subtask.",
+        #     ),
+        #     generating_task_id=self.task.id,
+        #     id=generate_swarm_id(EventId, self.id_generator),
+        # )
+        # focused_subtask.work_status = TaskWorkStatus.IN_PROGRESS
+        # return [status_change_event] if report_status_change else []
 
     def focus_subtask(self, subtask: Task) -> Event:
         """Focus on a subtask."""
@@ -2538,6 +2572,8 @@ class Orchestrator:
     async def execute(self) -> ExecutorReport:
         """Execute the task. Adds a message (if provided) to the task's event log, and adds own message to the event log at the end of execution."""
         while True:
+            # if self.subtasks.items and self.subtasks.items[0].description.information.startswith("Create a basic Python script"):
+            #     breakpoint()
             if self.auto_wait and self.awaitable_subtasks:
                 executor_reports = [
                     # asyncio.create_task(subtask.executor.execute())
@@ -2580,8 +2616,8 @@ class Orchestrator:
             and last_event.data.recipient != self.task.owner_id
         ):
             raise NotImplementedError
-        if self.task.work_status != TaskWorkStatus.BLOCKED:
-            raise NotImplementedError
+        # if self.task.work_status != TaskWorkStatus.BLOCKED:
+        #     raise NotImplementedError
         # status_change_reason = "Task is blocked until reply to message."
         # events = (
         #     [
@@ -2615,7 +2651,7 @@ class Orchestrator:
     ) -> Self:
         """Deserialize an orchestrator from a YAML file."""
         blueprint_data = default_yaml.load(blueprint_location)
-        blueprint_data["task_history"] = tuple(blueprint_data["task_history"])
+        # blueprint_data["task_history"] = tuple(blueprint_data["task_history"])
         return cls(
             blueprint=OrchestratorBlueprint(**blueprint_data),
             task=task,
@@ -2629,10 +2665,11 @@ class Reply:
     """A reply from the main agent."""
 
     content: str
-    continue_func: Callable[[str], Coroutine[Any, Any, str]]
+    continue_func: Callable[[str], Coroutine[Any, Any, str]] | None
 
     async def continue_conversation(self, message: str) -> str:
         """Continue the conversation with a message."""
+        assert self.continue_func is not None
         return await self.continue_func(message)
 
 
@@ -2779,16 +2816,28 @@ def load_blueprints(executors_dir: Path) -> Iterable[Blueprint]:
     return (load_blueprint(executor_dir / "blueprint.yaml") for executor_dir in dirs)
 
 
-def is_new(blueprint: Blueprint, task_history_limit: int = 10) -> bool:
+def is_new(
+    blueprint: Blueprint, similar_tasks: Sequence[Task], task_history_limit: int = 10
+) -> bool:
     """Check if a blueprint is new."""
-    return len(blueprint.task_history) <= task_history_limit
-
-
-def load_tasks(task_ids: Iterable[TaskId], task_records_dir: Path) -> list[Task]:
-    """Load tasks from the task records."""
-    if not task_ids:
-        return []
+    if not similar_tasks:
+        return True
     raise NotImplementedError
+    # > TODO: update so that we don't need task history to be stored in blueprint
+
+    # return len(blueprint.task_history) <= task_history_limit
+
+
+def load_blueprint_tasks(
+    blueprint_id: BlueprintId, task_records_dir: Path
+) -> list[Task]:
+    """Load tasks from the task records."""
+    raise NotImplementedError
+    # > TODO: update so that we don't need task history to be stored in blueprint
+
+    # if not task_ids:
+    #     return []
+    # raise NotImplementedError
 
 
 @dataclass(frozen=True)
@@ -2814,7 +2863,7 @@ class Delegator:
         similar_tasks = search_task_records(task, self.task_records_dir)
         if len(similar_tasks) > self.task_search_rerank_threshold:
             similar_tasks = rerank_tasks(task, similar_tasks)
-        past_blueprint_ids = [task.executor_blueprint_id for task in similar_tasks]
+        past_blueprint_ids = [task.last_executor_blueprint_id for task in similar_tasks]
 
         def is_candidate(blueprint: Blueprint) -> bool:
             """Check if a blueprint is a candidate for the task."""
@@ -2825,7 +2874,8 @@ class Delegator:
                 or (rank_limit is not None and blueprint.rank > rank_limit)
             ):
                 return False
-            if is_new(blueprint):
+
+            if is_new(blueprint, similar_tasks):
                 return True
 
             raise NotImplementedError
@@ -2840,15 +2890,20 @@ class Delegator:
         if not candidate_blueprints:
             return []
         search_results: list[BlueprintSearchResult] = []
-        for blueprint in candidate_blueprints:
-            blueprint_tasks = load_tasks(blueprint.task_history, self.task_records_dir)
-            candidate_similar_tasks = find_similar_tasks(task, blueprint_tasks)
+        for candidate_blueprint in candidate_blueprints:
+            # blueprint_tasks = load_blueprint_tasks(blueprint.id, self.task_records_dir)
+            # candidate_similar_tasks = find_similar_tasks(task, blueprint_tasks)
+            candidate_similar_tasks = [
+                task
+                for task in similar_tasks
+                if task.last_executor_blueprint_id == candidate_blueprint.id
+            ]
             if not candidate_similar_tasks:
                 assert is_bot(
-                    blueprint
-                ), f"Blueprint search: no similar tasks found for non-bot blueprint:\n\nBlueprint:\n{blueprint}\n\nTask:\n{task}"
+                    candidate_blueprint
+                ), f"Blueprint search: no similar tasks found for non-bot blueprint:\n\nBlueprint:\n{candidate_blueprint}\n\nTask:\n{task}"
             search_results.append(
-                BlueprintSearchResult(blueprint, candidate_similar_tasks)
+                BlueprintSearchResult(candidate_blueprint, candidate_similar_tasks)
             )
         return search_results
 
@@ -2874,7 +2929,7 @@ class Delegator:
         blueprint = OrchestratorBlueprint(
             name=f"orchestrator_{task.id}",
             rank=None,
-            task_history=[task.id],
+            # task_history=[task.id],
             reasoning=Reasoning(),
             knowledge="",
             recent_events_size=recent_events_size,
@@ -2938,7 +2993,7 @@ class Delegator:
                 candidate.blueprint, task, self.executors_dir / candidate.blueprint.id
             )
             if candidate.accepts(task):
-                task.executor = candidate
+                task.update_executor(candidate)
                 task.rank_limit = candidate.rank
                 return DelegationSuccessful(True)
 
@@ -2956,7 +3011,9 @@ class Delegator:
         delegation_successful = self.delegate(task)
         # blueprints represent known capabilities; so, failure means we must create a new executor
         if not delegation_successful:
-            task.executor = self.make_executor(task, recent_events_size, auto_await)
+            task.update_executor(
+                self.make_executor(task, recent_events_size, auto_await)
+            )
 
 
 @dataclass
@@ -3027,7 +3084,7 @@ class Swarm:
         return f"swarm_{self.id}"
 
     async def run(self, message: str) -> Reply:
-        """Run the agent with a message, and a way to continue the conversation. Rerunning this method starts a new conversation."""
+        """Run the swarm with a message, and a way to continue the conversation. Rerunning this method starts a new conversation."""
         task = Task(
             description=TaskDescription(information=message),
             owner_id=self.id,
@@ -3037,6 +3094,7 @@ class Swarm:
         )
         self.delegator.assign_executor(task, self.recent_events_size, self.auto_wait)
         assert task.executor is not None, "Task executor assignment failed."
+        task.work_status = TaskWorkStatus.IN_PROGRESS
         executor_report = await execute_and_validate(task)
 
         async def continue_conversation(message: str) -> str:
@@ -3053,20 +3111,25 @@ class Swarm:
                 generating_task_id=task.id,
                 id=generate_swarm_id(EventId, self.id_generator),
             )
+            task.work_status = TaskWorkStatus.IN_PROGRESS
             task.event_log.add(message_event)
             return (await execute_and_validate(task)).reply
 
         return Reply(
             content=executor_report.reply,
-            continue_func=continue_conversation,
+            continue_func=None
+            if executor_report.task_completed
+            else continue_conversation,
         )
 
 
-# rerun orchestrator test
 # ....
+# commit
 # (next_curriculum_task)
+# > generic autogen code executor
 # mvp task: buy something from amazon
 # ---MVP---
+# > bot: function writer (saved as function bots)
 # > factor out validations into separate variable
 # > unify validator functionality; validator protocol should hold specific functions to validate specific aspects of a task
 # > estimate rank of task based on previous successful tasks
@@ -3122,7 +3185,7 @@ async def run_test_task(task: str) -> None:
             ),
         )
         reply = (result := await swarm.run(task)).content
-        while human_reply := human_tester.advise(reply):
+        while (human_reply := human_tester.advise(reply)) and result.continue_func:
             reply = await result.continue_conversation(human_reply)
 
 
@@ -3156,8 +3219,8 @@ async def test_curriculum_task_1() -> None:
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(test_orchestrator())
     # asyncio.run(test_curriculum_task_1())
+    # asyncio.run(test_orchestrator())
 
 
 if __name__ == "__main__":
