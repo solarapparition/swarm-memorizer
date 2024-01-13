@@ -999,10 +999,10 @@ class ActionResult:
     # new_event_status: TaskEventStatus | None = None
 
 
-class OrchestratorReasoningNotes(Enum):
+class ReasoningNotes(Enum):
     """Notes for action reasoning."""
 
-    OVERVIEW = "Provide a step-by-step, robust reasoning process for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:"
+    ORCHESTRATOR_OVERVIEW = "Provide a step-by-step, robust reasoning process for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:"
     ACTION_RESTRICTIONS = f"The final action that the orchestrator decides on MUST be one of the {Concept.ORCHESTRATOR_ACTIONS.value} described above. The orchestrator cannot perform any other actions."
     FOCUSED_SUBTASK_RESTRICTIONS = f"The orchestrator cannot directly change the {Concept.FOCUSED_SUBTASK.value}. To focus on a different subtask, it must first use the {ActionName.PAUSE_SUBTASK_DISCUSSION.value} action first. Overall, the orchestrator should be focused on helping the EXECUTOR of the {Concept.FOCUSED_SUBTASK.value}, and will need strong reason to change its focus."
     INFORMATION_RESTRICTIONS = f"Assume that the orchestrator has access to what's described in {Concept.ORCHESTRATOR_INFORMATION_SECTIONS.value} above, but no other information, except for general world knowledge that is available to a standard LLM like GPT-3."
@@ -1019,7 +1019,7 @@ Provide the reasoning process in the following format:
 2. {reasoning step 2}
 3. [... etc.]
 ```end_of_reasoning_process
-You may add comments or thoughts before or after the reasoning process, but the reasoning process block itself must only contain the reasoning steps, directed at the orchestrator.
+You may add comments or thoughts before or after the reasoning process, but the reasoning process block itself must only contain the reasoning steps.
 """.strip()
 
 
@@ -1055,6 +1055,57 @@ class SubtaskIdentifcationResult:
 @dataclass
 class ReasoningGenerator:
     """Generates reasoning for an orchestrator."""
+
+    @staticmethod
+    def generate_executor_selection_reasoning() -> str:
+        """Generate reasoning for selecting an executor."""
+        context = f"""
+        ## MISSION:
+        You are the instructor for an AI task delegation agent. Your purpose is to provide step-by-step guidance for the delegator to think through how to select an appropriate executor for a subtask.
+
+        ## CONCEPTS:
+        These are the concepts you should be familiar with:
+        - TASK: a task that must be done. Tasks do _not_ have strict deadlines.
+        - {Concept.EXECUTOR.value}: an agent that is responsible for executing a task.
+        - TASK PERFORMANCE: the performance of an executor on tasks similar to the TASK, which is measured by the following metrics:
+          - SUCCESS RATE: the proportion of similar tasks that the executor has successfully completed.
+          - COMPLETION TIME: the average time in seconds it takes for the executor to complete a similar task.
+        - NEW {Concept.EXECUTOR.value}: an executor where there isn't enough history to determine its performance on the TASK. However, _all_ {Concept.EXECUTOR.value} candidates under consideration have done at least one similar task successfully.
+        
+        ## DELEGATOR INFORMATION SECTIONS:
+        The delegator has access to several sections of information that is relevant to its decisionmaking.
+        - TASK INFORMATION contains a brief description of information about the TASK.
+        - {Concept.EXECUTOR.value} CANDIDATES: a list of executors that can be selected for the task. Each entry for an executor candidate has the following information:
+          - DESCRIPTION: a brief description of the executor candidate.
+          - NEW STATUS: whether an executor candidate is a NEW {Concept.EXECUTOR.value} or not.
+          - TASK PERFORMANCE: as defined above, including SUCCESS RATE and COMPLETION TIME. This information is only available for non-NEW {Concept.EXECUTOR.value} candidates.
+        """
+        request = f"""
+        ## REQUEST FOR YOU:
+        Provide a step-by-step, robust reasoning process for the delegator to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
+        - Assume that the delegator has access to what's described in DELEGATOR INFORMATION SECTIONS above, but no other information, except for general world knowledge that is available to a standard LLM like GPT-3."
+        - The delegator requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "TASK INFORMATION" or "SUCCESS RATE"); however, only use capitalization to refer to specific terms—don't use capitalization as emphasis, as that could be confusing to the delegator.
+        - As an initial part of the reasoning, the delegator must figure out whether to lean towards exploration using NEW {Concept.EXECUTOR.value} candidates or exploitation using non-NEW {Concept.EXECUTOR.value} candidates. This of course depends on how good the non-NEW {Concept.EXECUTOR.value} candidates are.
+        - The reasoning process should be written in second person and be around 5-7 steps, though you can add substeps within a step (a, b, c, etc.) if it is complex.
+        - The reasoning steps can refer to the results of previous steps, and it may be effective to build up the orchestrator's mental context step by step, starting from basic information available, similar to writing a procedural script for a program but in natural language instead of code.
+        - The final decision of the {Concept.EXECUTOR.value} to use must be done on the last step only, after considering all the information available from the previous steps.
+
+        {{output_instructions}}
+        """
+        messages = [
+            SystemMessage(content=dedent_and_strip(context)),
+            SystemMessage(
+                content=dedent_and_strip(request).format(
+                    output_instructions=REASONING_OUTPUT_INSTRUCTIONS,
+                )
+            ),
+        ]
+        return query_and_extract_reasoning(
+            messages,
+            preamble="Generating reasoning for executor selection...\n"
+            f"{as_printable(messages)}",
+            printout=VERBOSE,
+        )
 
     _orchestrator: "Orchestrator"
     """Orchestrator for which to generate reasoning. Must not be modified."""
@@ -1093,13 +1144,13 @@ class ReasoningGenerator:
         """
         request = f"""
         ## REQUEST FOR YOU:
-        {OrchestratorReasoningNotes.OVERVIEW.value}
-        - {OrchestratorReasoningNotes.ACTION_RESTRICTIONS.value}
-        - {OrchestratorReasoningNotes.INFORMATION_RESTRICTIONS.value}
-        - {OrchestratorReasoningNotes.TERM_REFERENCES.value}
-        - {OrchestratorReasoningNotes.SUBTASK_STATUS_INFO.value}
-        - {OrchestratorReasoningNotes.STEPS_RESTRICTIONS.value}
-        - {OrchestratorReasoningNotes.PROCEDURAL_SCRIPTING.value}
+        {ReasoningNotes.ORCHESTRATOR_OVERVIEW.value}
+        - {ReasoningNotes.ACTION_RESTRICTIONS.value}
+        - {ReasoningNotes.INFORMATION_RESTRICTIONS.value}
+        - {ReasoningNotes.TERM_REFERENCES.value}
+        - {ReasoningNotes.SUBTASK_STATUS_INFO.value}
+        - {ReasoningNotes.STEPS_RESTRICTIONS.value}
+        - {ReasoningNotes.PROCEDURAL_SCRIPTING.value}
 
         {{output_instructions}}
         """
@@ -1139,14 +1190,14 @@ class ReasoningGenerator:
 
         request = f"""
         ## REQUEST FOR YOU:
-        {OrchestratorReasoningNotes.OVERVIEW.value}
-        - {OrchestratorReasoningNotes.ACTION_RESTRICTIONS.value}
-        - {OrchestratorReasoningNotes.INFORMATION_RESTRICTIONS.value}
-        - {OrchestratorReasoningNotes.TERM_REFERENCES.value}
-        - {OrchestratorReasoningNotes.SUBTASK_STATUS_INFO.value}
-        - {OrchestratorReasoningNotes.FOCUSED_SUBTASK_RESTRICTIONS.value}
-        - {OrchestratorReasoningNotes.STEPS_RESTRICTIONS.value}
-        - {OrchestratorReasoningNotes.PROCEDURAL_SCRIPTING.value}
+        {ReasoningNotes.ORCHESTRATOR_OVERVIEW.value}
+        - {ReasoningNotes.ACTION_RESTRICTIONS.value}
+        - {ReasoningNotes.INFORMATION_RESTRICTIONS.value}
+        - {ReasoningNotes.TERM_REFERENCES.value}
+        - {ReasoningNotes.SUBTASK_STATUS_INFO.value}
+        - {ReasoningNotes.FOCUSED_SUBTASK_RESTRICTIONS.value}
+        - {ReasoningNotes.STEPS_RESTRICTIONS.value}
+        - {ReasoningNotes.PROCEDURAL_SCRIPTING.value}
         
         {{output_instructions}}
         """
@@ -1186,11 +1237,11 @@ class ReasoningGenerator:
         request = f"""
         ## REQUEST FOR YOU:
         Provide a step-by-step, robust reasoning process for the orchestrator to a) understand what MSI is and follow its principles, and b) sequentially process the information in the information sections it has access to so that it can identify a new subtask that is not yet identified. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind before they perform subtask identification. Some things to note:
-        - {OrchestratorReasoningNotes.INFORMATION_RESTRICTIONS.value}
-        - {OrchestratorReasoningNotes.TERM_REFERENCES.value}
+        - {ReasoningNotes.INFORMATION_RESTRICTIONS.value}
+        - {ReasoningNotes.TERM_REFERENCES.value}
         - In its current state, the orchestrator is not able to perform any other actions besides subtask identification and the reasoning preceeding it.
-        - {OrchestratorReasoningNotes.STEPS_RESTRICTIONS.value}
-        - {OrchestratorReasoningNotes.PROCEDURAL_SCRIPTING.value}
+        - {ReasoningNotes.STEPS_RESTRICTIONS.value}
+        - {ReasoningNotes.PROCEDURAL_SCRIPTING.value}
         - The orchestrator should only perform the subtask identification on the _last_ step, after it has considered _all_ the information it needs. No other actions need to be performed after subtask identification.
         {{output_instructions}}
         """
@@ -1239,10 +1290,10 @@ class ReasoningGenerator:
         Provide a step-by-step, robust reasoning process for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for updating the {Concept.MAIN_TASK_INFORMATION.value} and {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} sections to reflect the new information in the {Concept.TASK_MESSAGES.value} that comes after {Concept.LAST_READ_MAIN_TASK_OWNER_MESSAGE.value}. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
         - This reasoning process does not make the actual updates to the {Concept.MAIN_TASK_INFORMATION.value} and {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} sections; it only figures out what updates are needed.
         - Both the {Concept.MAIN_TASK_INFORMATION} and {Concept.MAIN_TASK_DEFINITION_OF_DONE} sections may be outdated, hence the need to update them with the latest messages from the {Concept.MAIN_TASK_OWNER.value}.
-        - {OrchestratorReasoningNotes.INFORMATION_RESTRICTIONS.value}
+        - {ReasoningNotes.INFORMATION_RESTRICTIONS.value}
         - The orchestrator requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "{Concept.MAIN_TASK.value}" or "{Concept.TASK_MESSAGES.value} section"); however, don't use capitalization as emphasis for any other terms.
-        - {OrchestratorReasoningNotes.STEPS_RESTRICTIONS.value}
-        - {OrchestratorReasoningNotes.PROCEDURAL_SCRIPTING.value}
+        - {ReasoningNotes.STEPS_RESTRICTIONS.value}
+        - {ReasoningNotes.PROCEDURAL_SCRIPTING.value}
 
         {{output_instructions}}
         """
@@ -2173,23 +2224,6 @@ class Orchestrator:
         )
         return [status_change_event] if report_status_change else []
 
-        # report_status_change = (
-        #     not initial and focused_subtask.work_status != TaskWorkStatus.IN_PROGRESS
-        # )
-        # status_change_event = Event(
-        #     data=TaskStatusChange(
-        #         changing_agent=self.id,
-        #         task_id=focused_subtask.id,
-        #         old_status=focused_subtask.work_status,
-        #         new_status=TaskWorkStatus.IN_PROGRESS,
-        #         reason=f"Sent message to {Concept.EXECUTOR.value} regarding subtask.",
-        #     ),
-        #     generating_task_id=self.task.id,
-        #     id=generate_swarm_id(EventId, self.id_generator),
-        # )
-        # focused_subtask.work_status = TaskWorkStatus.IN_PROGRESS
-        # return [status_change_event] if report_status_change else []
-
     def focus_subtask(self, subtask: Task) -> Event:
         """Focus on a subtask."""
         self.state.focused_subtask = subtask
@@ -2572,11 +2606,8 @@ class Orchestrator:
     async def execute(self) -> ExecutorReport:
         """Execute the task. Adds a message (if provided) to the task's event log, and adds own message to the event log at the end of execution."""
         while True:
-            # if self.subtasks.items and self.subtasks.items[0].description.information.startswith("Create a basic Python script"):
-            #     breakpoint()
             if self.auto_wait and self.awaitable_subtasks:
                 executor_reports = [
-                    # asyncio.create_task(subtask.executor.execute())
                     asyncio.create_task(execute_and_validate(subtask))
                     for subtask in self.awaitable_subtasks
                     if subtask.executor is not None
@@ -2848,6 +2879,7 @@ class Delegator:
     task_records_dir: Path
     task_search_rerank_threshold: int
     id_generator: IdGenerator
+    executor_selection_reasoning: str
 
     @cached_property
     def id(self) -> DelegatorId:
@@ -2907,6 +2939,15 @@ class Delegator:
             )
         return search_results
 
+        # if not self.blueprint.reasoning.subtask_action_choice:
+        #     self.blueprint.reasoning.subtask_action_choice = (
+        #         self.generate_subtask_action_reasoning()
+        #     )
+        # return self.action_reasoning_template.format(
+        #     action_choice_core=self.blueprint.reasoning.subtask_action_choice,
+        #     ORCHESTRATOR_ACTIONS=Concept.ORCHESTRATOR_ACTIONS.value,
+        # )
+
     def choose_next_executor(
         self,
         candidates: list[BlueprintSearchResult],
@@ -2915,8 +2956,12 @@ class Delegator:
         """Evaluate candidates for a task."""
         if len(candidates) == 1:
             return candidates[0]
-        raise NotImplementedError
+
+        self.executor_selection_reasoning
+
         # TODO: use executor selection reasoning to choose next agent to ask
+        breakpoint()
+        raise NotImplementedError
 
     def make_executor(
         self, task: Task, recent_events_size: int, auto_await: bool
@@ -2929,18 +2974,24 @@ class Delegator:
         blueprint = OrchestratorBlueprint(
             name=f"orchestrator_{task.id}",
             rank=None,
-            # task_history=[task.id],
             reasoning=Reasoning(),
             knowledge="",
             recent_events_size=recent_events_size,
             auto_wait=auto_await,
             id=generate_swarm_id(BlueprintId, self.id_generator),
         )
+        delegator = Delegator(
+            executors_dir=self.executors_dir,
+            task_records_dir=self.task_records_dir,
+            task_search_rerank_threshold=self.task_search_rerank_threshold,
+            id_generator=self.id_generator,
+            executor_selection_reasoning=ReasoningGenerator.generate_executor_selection_reasoning(),
+        )
         return Orchestrator(
             blueprint=blueprint,
             task=task,
             files_parent_dir=self.executors_dir,
-            delegator=self,
+            delegator=delegator,
         )
 
     def find_top_candidates(
@@ -3018,7 +3069,7 @@ class Delegator:
 
 @dataclass
 class Swarm:
-    """Main interfacing class for the agent."""
+    """Main interfacing class for the swarm."""
 
     files_dir: Path = Path(".data")
     """Directory for files related to the agent and any subagents."""
@@ -3063,6 +3114,34 @@ class Swarm:
             task_records_dir.mkdir(parents=True, exist_ok=True)
         return task_records_dir
 
+    @property
+    def executor_selection_reasoning(self) -> str:
+        """Reasoning for selecting an executor."""
+        reasoning = """
+        1. Review the TASK INFORMATION section to fully understand the specifics of the TASK at hand, considering the skills, expertise, and resources that might be required for successful completion. Make note of any unique aspects of the TASK that could influence which EXECUTOR is best suited for it.
+
+        2. Consult the EXECUTOR CANDIDATES list and distinguish between NEW EXECUTOR candidates and those with track records. This will set the stage for a decision between exploring new options and relying on proven performance.
+        a. If all EXECUTOR CANDIDATES are NEW EXECUTORs, then move to step 7 directly.
+        b. If there are both NEW EXECUTORs and experienced ones, continue to the following steps to make an informed decision.
+
+        3. For EXECUTOR CANDIDATES that are not NEW EXECUTORs, examine the TASK PERFORMANCE metrics. Focus on the SUCCESS RATE and COMPLETION TIME for each experienced EXECUTOR candidate, ensuring you understand how these metrics reflect their effectiveness and efficiency.
+        a. Consider the SUCCESS RATE to determine reliability — a higher rate suggests consistent performance.
+        b. Evaluate the COMPLETION TIME to understand how quickly tasks are usually accomplished by each EXECUTOR.
+
+        4. Rank the experienced EXECUTOR CANDIDATES based on their TASK PERFORMANCE metrics to identify which among them stands out as the most effective and efficient one. Use both the SUCCESS RATE and COMPLETION TIME to determine who has the best combination of reliability and speed.
+
+        5. Assess if the top-ranked experienced EXECUTOR CANDIDATE(s) based on TASK PERFORMANCE metrics meet the expectations for the current TASK. Ensure their TASK PERFORMANCE is in alignment with the requirements specified in the TASK INFORMATION.
+        a. If there is a match in skill and performance expectation, consider leaning towards exploitation by selecting a top-ranked non-NEW EXECUTOR.
+        b. If the match is unclear or performance metrics are not satisfactory, consider the benefits of exploration with a NEW EXECUTOR.
+
+        6. If leaning towards exploration with a NEW EXECUTOR, reflect on the potential long-term benefit of diversifying the pool of proven executors and the opportunity to discover an EXECUTOR with possibly better or more suited capabilities for future tasks.
+
+        7. Make the final EXECUTOR selection:
+        a. Choose the top-ranked non-NEW EXECUTOR if their TASK PERFORMANCE aligns well with the TASK INFORMATION and they are considered the most suitable based on the previous steps.
+        b. Opt for a NEW EXECUTOR if there's a necessity or potential benefit in exploring new possibilities, especially if non-NEW EXECUTOR CANDIDATES didn’t match the TASK's requirements or there are no non-NEW EXECUTORS available. This step may require a degree of calculated risk-taking.
+        """
+        return dedent_and_strip(reasoning)
+
     @cached_property
     def delegator(self) -> Delegator:
         """Delegator for assigning tasks to executors."""
@@ -3071,6 +3150,7 @@ class Swarm:
             task_records_dir=self.task_records_dir,
             task_search_rerank_threshold=self.task_search_rerank_threshold,
             id_generator=self.id_generator,
+            executor_selection_reasoning=self.executor_selection_reasoning,
         )
 
     @cached_property
@@ -3124,7 +3204,6 @@ class Swarm:
 
 
 # ....
-# commit
 # (next_curriculum_task)
 # > generic autogen code executor
 # mvp task: buy something from amazon
@@ -3192,7 +3271,7 @@ async def run_test_task(task: str) -> None:
 curriculum_test_tasks = [
     "Write 'Hello, World!' to a file.",
     "Create a mock timestamp generator that advances by 1 second each time it is called.",
-    "Create a mock timestamp generator that advances by 1 second each time it is called, and run it 5 times.",
+    # "Create a mock timestamp generator that advances by 1 second each time it is called, and run it 5 times.",
     # > basic coding task case: 20 lines or less of base python > coding bot will be equipped with function it wrote
     # > basic search task case: search for basic info about a concept
     # > basic file reading/writing task case
@@ -3216,11 +3295,18 @@ async def test_curriculum_task_1() -> None:
     await run_test_task(task)
 
 
+async def test_curriculum_task_2() -> None:
+    """Curriculum task 1."""
+    task = curriculum_test_tasks[1]
+    await run_test_task(task)
+
+
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
     # asyncio.run(test_curriculum_task_1())
     # asyncio.run(test_orchestrator())
+    asyncio.run(test_curriculum_task_2())
 
 
 if __name__ == "__main__":
