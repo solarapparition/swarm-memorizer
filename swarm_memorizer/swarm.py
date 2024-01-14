@@ -120,14 +120,14 @@ class Reasoning:
 class OrchestratorBlueprint:
     """A blueprint for an orchestrator."""
 
+    id: BlueprintId
     name: str
+    description: str | None
     rank: int | None
-    # task_history: TaskHistory
     reasoning: Reasoning
     knowledge: str
     recent_events_size: int
     auto_wait: bool
-    id: BlueprintId
     role: Role = field(init=False)
 
     def __post_init__(self) -> None:
@@ -138,9 +138,9 @@ class OrchestratorBlueprint:
 class BotBlueprint:
     """A blueprint for a bot."""
 
-    name: str
-    # task_history: TaskHistory
     id: BlueprintId
+    name: str
+    description: str | None
     kwargs: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -160,10 +160,9 @@ class BotBlueprint:
     @classmethod
     def deserialize(cls, data: dict[Any, Any]) -> Self:
         """Deserialize the blueprint from a JSON-compatible dictionary."""
-        # task_history = [TaskId(task_id) for task_id in data["task_history"]]
         return cls(
             name=data["name"],
-            # task_history=task_history,
+            description=data["description"],
             id=BlueprintId(data["id"]),
             kwargs=data.get("kwargs", {}),
         )
@@ -2755,6 +2754,7 @@ class BlueprintSearchResult:
     """Result of a blueprint search."""
 
     blueprint: Blueprint
+    is_new: bool
     task_subpool: list[Task] = field(default_factory=list)
 
     @property
@@ -2798,6 +2798,19 @@ class BlueprintSearchResult:
             return None
         raise NotImplementedError
         # rating = success_rate / (1 + scaled_completion_time)
+
+    def __str__(self) -> str:
+        """String representation of the blueprint search result."""
+        printout = f"""
+        NAME: {self.blueprint.name}
+        - ID: {self.blueprint.id}
+        - DESCRIPTION: {self.blueprint.description}
+        - NEW STATUS: {'NEW' if self.is_new else 'NOT NEW'}
+        - TASK PERFORMANCE:
+          - SUCCESS RATE: {self.success_rate if self.success_rate is not None else 'N/A'}
+          - COMPLETION TIME: {self.completion_time if self.completion_time is not None else 'N/A'}
+        """
+        return dedent_and_strip(printout)
 
 
 DelegationSuccessful = NewType("DelegationSuccessful", bool)
@@ -2848,7 +2861,7 @@ def load_blueprints(executors_dir: Path) -> Iterable[Blueprint]:
 
 
 def is_new(
-    blueprint: Blueprint, similar_tasks: Sequence[Task], task_history_limit: int = 10
+    blueprint: Blueprint, similar_tasks: Sequence[Task], task_history_limit: int
 ) -> bool:
     """Check if a blueprint is new."""
     if not similar_tasks:
@@ -2890,6 +2903,7 @@ class Delegator:
         self,
         task: Task,
         rank_limit: int | None = None,
+        task_history_limit: int = 10,
     ) -> list[BlueprintSearchResult]:
         """Search for blueprints of executors that can handle a task."""
         similar_tasks = search_task_records(task, self.task_records_dir)
@@ -2897,56 +2911,51 @@ class Delegator:
             similar_tasks = rerank_tasks(task, similar_tasks)
         past_blueprint_ids = [task.last_executor_blueprint_id for task in similar_tasks]
 
-        def is_candidate(blueprint: Blueprint) -> bool:
+        def check_blueprint(blueprint: Blueprint) -> tuple[bool, bool]:
             """Check if a blueprint is a candidate for the task."""
             assert blueprint.rank is not None
+            new = is_new(
+                blueprint, similar_tasks, task_history_limit=task_history_limit
+            )
             if (
                 blueprint.id not in past_blueprint_ids
                 and not is_bot(blueprint)
                 or (rank_limit is not None and blueprint.rank > rank_limit)
             ):
-                return False
+                return False, new
 
-            if is_new(blueprint, similar_tasks):
-                return True
+            if new:
+                return True, new
 
             raise NotImplementedError
             # > TODO: filter by minimum success rate, given large enough task history > task success is restricted to similar tasks that executor dealt with before
             # > need to be able to exclude bots as normal based on success rate—they might not be suitable for the task
 
-        candidate_blueprints = [
-            blueprint
+        blueprint_candidacy = [
+            (blueprint, *check_blueprint(blueprint))
             for blueprint in load_blueprints(self.executors_dir)
-            if is_candidate(blueprint)
+        ]
+        candidate_blueprints = [
+            (blueprint, new)
+            for blueprint, is_candidate, new in blueprint_candidacy
+            if is_candidate
         ]
         if not candidate_blueprints:
             return []
         search_results: list[BlueprintSearchResult] = []
-        for candidate_blueprint in candidate_blueprints:
-            # blueprint_tasks = load_blueprint_tasks(blueprint.id, self.task_records_dir)
-            # candidate_similar_tasks = find_similar_tasks(task, blueprint_tasks)
+        for blueprint, new in candidate_blueprints:
             candidate_similar_tasks = [
                 task
                 for task in similar_tasks
-                if task.last_executor_blueprint_id == candidate_blueprint.id
+                if task.last_executor_blueprint_id == blueprint.id
             ]
-            if not candidate_similar_tasks:
-                assert is_bot(
-                    candidate_blueprint
-                ), f"Blueprint search: no similar tasks found for non-bot blueprint:\n\nBlueprint:\n{candidate_blueprint}\n\nTask:\n{task}"
+            assert candidate_similar_tasks or is_bot(
+                blueprint
+            ), f"Blueprint search: no similar tasks found for non-bot blueprint:\n\nBlueprint:\n{blueprint}\n\nTask:\n{task}"
             search_results.append(
-                BlueprintSearchResult(candidate_blueprint, candidate_similar_tasks)
+                BlueprintSearchResult(blueprint, new, candidate_similar_tasks)
             )
         return search_results
-
-        # if not self.blueprint.reasoning.subtask_action_choice:
-        #     self.blueprint.reasoning.subtask_action_choice = (
-        #         self.generate_subtask_action_reasoning()
-        #     )
-        # return self.action_reasoning_template.format(
-        #     action_choice_core=self.blueprint.reasoning.subtask_action_choice,
-        #     ORCHESTRATOR_ACTIONS=Concept.ORCHESTRATOR_ACTIONS.value,
-        # )
 
     def choose_next_executor(
         self,
@@ -2957,11 +2966,91 @@ class Delegator:
         if len(candidates) == 1:
             return candidates[0]
 
-        self.executor_selection_reasoning
+        context = """
+        ## MISSION:
+        You are a delegator for a task that must be completed. Your purpose is select an appropriate executor for the task based on a particular reasoning process.
 
-        # TODO: use executor selection reasoning to choose next agent to ask
-        breakpoint()
-        raise NotImplementedError
+        ## CONCEPTS:
+        These are the concepts you should be familiar with:
+        - TASK: a task that must be done. Tasks do _not_ have strict deadlines.
+        - {EXECUTOR}: an agent that is responsible for executing a task.
+        - TASK PERFORMANCE: the performance of an executor on tasks similar to the TASK, which is measured by the following metrics:
+          - SUCCESS RATE: the proportion of similar tasks that the executor has successfully completed.
+          - COMPLETION TIME: the average time in seconds it takes for the executor to complete a similar task.
+        - NEW {EXECUTOR}: an executor where there isn't enough history to determine its performance on the TASK. However, _all_ {EXECUTOR} candidates under consideration have done at least one similar task successfully.
+
+        ## TASK INFORMATION:
+        Here is the information about the task:
+        ```start_of_task_info
+        {task_information}
+        ```end_of_task_info
+
+        ## {EXECUTOR} CANDIDATES:
+        Here are the {EXECUTOR} candidates that can be selected for the task.
+        ```start_of_executor_candidates
+        {executor_candidates}
+        ```end_of_executor_candidates
+        """
+        executor_candidates_printout = "\n".join(
+            str(candidate) for candidate in candidates
+        )
+        context = dedent_and_strip(context).format(
+            EXECUTOR=Concept.EXECUTOR.value,
+            task_information=task.information,
+            executor_candidates=executor_candidates_printout,
+        )
+        request = """
+        ## REQUEST FOR YOU:
+        Use the following reasoning process to select the best {EXECUTOR} for the task:
+        ```start_of_reasoning_steps
+        {reasoning_steps}
+        ```end_of_reasoning_steps
+
+        In your reply, you must include output from all steps of the reasoning process, in this block format:
+        ```start_of_reasoning_output
+        1. {{step_1_output}}
+        2. {{step_2_output}}
+        3. [... etc.]
+        ```end_of_reasoning_output
+
+        After this block, you must output your final choice of {EXECUTOR} in this format:
+        ```start_of_executor_choice
+        comment: |-
+          {{comment}}
+        executor_id: {{executor_id}}
+        ```end_of_executor_choice
+        Any additional comments or thoughts can be added before or after the output blocks.
+        """
+        request = dedent_and_strip(request).format(
+            EXECUTOR=Concept.EXECUTOR.value,
+            reasoning_steps=self.executor_selection_reasoning,
+        )
+        messages = [
+            SystemMessage(content=context),
+            SystemMessage(content=request),
+        ]
+        result = query_model(
+            model=precise_model,
+            messages=messages,
+            preamble=f"Validating artifacts for task {task.id}...\n{as_printable(messages)}",
+            printout=VERBOSE,
+            color=AGENT_COLOR,
+        )
+        if not (extracted_result := extract_blocks(result, "start_of_executor_choice")):
+            raise ExtractionError("Could not extract executor choice from the result.")
+        extracted_result = default_yaml.load(extracted_result[0])
+        blueprint_id = BlueprintId(extracted_result["executor_id"])
+        try:
+            chosen_candidate = next(
+                candidate
+                for candidate in candidates
+                if candidate.blueprint.id == blueprint_id
+            )
+        except StopIteration as error:
+            raise ExtractionError(
+                f"Executor choice: could not find blueprint with id {blueprint_id} in candidates:\n{candidates}"
+            ) from error
+        return chosen_candidate
 
     def make_executor(
         self, task: Task, recent_events_size: int, auto_await: bool
@@ -2973,6 +3062,7 @@ class Delegator:
             )
         blueprint = OrchestratorBlueprint(
             name=f"orchestrator_{task.id}",
+            description=None,
             rank=None,
             reasoning=Reasoning(),
             knowledge="",
@@ -3121,24 +3211,24 @@ class Swarm:
         1. Review the TASK INFORMATION section to fully understand the specifics of the TASK at hand, considering the skills, expertise, and resources that might be required for successful completion. Make note of any unique aspects of the TASK that could influence which EXECUTOR is best suited for it.
 
         2. Consult the EXECUTOR CANDIDATES list and distinguish between NEW EXECUTOR candidates and those with track records. This will set the stage for a decision between exploring new options and relying on proven performance.
-        a. If all EXECUTOR CANDIDATES are NEW EXECUTORs, then move to step 7 directly.
-        b. If there are both NEW EXECUTORs and experienced ones, continue to the following steps to make an informed decision.
+          a. If all EXECUTOR CANDIDATES are NEW EXECUTORs, then move to step 7 directly.
+          b. If there are both NEW EXECUTORs and experienced ones, continue to the following steps to make an informed decision.
 
         3. For EXECUTOR CANDIDATES that are not NEW EXECUTORs, examine the TASK PERFORMANCE metrics. Focus on the SUCCESS RATE and COMPLETION TIME for each experienced EXECUTOR candidate, ensuring you understand how these metrics reflect their effectiveness and efficiency.
-        a. Consider the SUCCESS RATE to determine reliability — a higher rate suggests consistent performance.
-        b. Evaluate the COMPLETION TIME to understand how quickly tasks are usually accomplished by each EXECUTOR.
+          a. Consider the SUCCESS RATE to determine reliability — a higher rate suggests consistent performance.
+          b. Evaluate the COMPLETION TIME to understand how quickly tasks are usually accomplished by each EXECUTOR.
 
         4. Rank the experienced EXECUTOR CANDIDATES based on their TASK PERFORMANCE metrics to identify which among them stands out as the most effective and efficient one. Use both the SUCCESS RATE and COMPLETION TIME to determine who has the best combination of reliability and speed.
 
         5. Assess if the top-ranked experienced EXECUTOR CANDIDATE(s) based on TASK PERFORMANCE metrics meet the expectations for the current TASK. Ensure their TASK PERFORMANCE is in alignment with the requirements specified in the TASK INFORMATION.
-        a. If there is a match in skill and performance expectation, consider leaning towards exploitation by selecting a top-ranked non-NEW EXECUTOR.
-        b. If the match is unclear or performance metrics are not satisfactory, consider the benefits of exploration with a NEW EXECUTOR.
+          a. If there is a match in skill and performance expectation, consider leaning towards exploitation by selecting a top-ranked non-NEW EXECUTOR.
+          b. If the match is unclear or performance metrics are not satisfactory, consider the benefits of exploration with a NEW EXECUTOR.
 
         6. If leaning towards exploration with a NEW EXECUTOR, reflect on the potential long-term benefit of diversifying the pool of proven executors and the opportunity to discover an EXECUTOR with possibly better or more suited capabilities for future tasks.
 
         7. Make the final EXECUTOR selection:
-        a. Choose the top-ranked non-NEW EXECUTOR if their TASK PERFORMANCE aligns well with the TASK INFORMATION and they are considered the most suitable based on the previous steps.
-        b. Opt for a NEW EXECUTOR if there's a necessity or potential benefit in exploring new possibilities, especially if non-NEW EXECUTOR CANDIDATES didn’t match the TASK's requirements or there are no non-NEW EXECUTORS available. This step may require a degree of calculated risk-taking.
+          a. Choose the top-ranked non-NEW EXECUTOR if their TASK PERFORMANCE aligns well with the TASK INFORMATION and they are considered the most suitable based on the previous steps.
+          b. Opt for a NEW EXECUTOR if there's a necessity or potential benefit in exploring new possibilities, especially if non-NEW EXECUTOR CANDIDATES didn’t match the TASK's requirements or there are no non-NEW EXECUTORS available. This step may require a degree of calculated risk-taking.
         """
         return dedent_and_strip(reasoning)
 
@@ -3203,8 +3293,11 @@ class Swarm:
         )
 
 
-# ....
 # (next_curriculum_task)
+# ....
+# > evaluate whether we still need to serialize orchestrator class # blueprint ought to be enough
+# > serialize tasks at the end of execution # maybe task should have swarm so we have record of global setting
+# > when serializing blueprint, must create description of blueprint
 # > generic autogen code executor
 # mvp task: buy something from amazon
 # ---MVP---
