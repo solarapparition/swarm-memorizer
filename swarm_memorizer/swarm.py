@@ -1056,6 +1056,7 @@ class SubtaskIdentifcationResult:
             data["additional_thoughts"] = None
         return cls(**data)
 
+
 EXECUTOR_SELECTION_CONCEPTS = f"""
 These are the concepts you should be familiar with:
 - TASK: a task that must be done. Tasks do _not_ have strict deadlines.
@@ -1065,6 +1066,7 @@ These are the concepts you should be familiar with:
   - COMPLETION TIME: the average time in seconds it takes for the executor to complete a similar task.
 - NEW {Concept.EXECUTOR.value}: an executor where there isn't enough history to determine its performance on the TASK. However, _all_ {Concept.EXECUTOR.value} candidates under consideration have done at least one similar task successfully.
 """.strip()
+
 
 @dataclass
 class ReasoningGenerator:
@@ -2918,7 +2920,7 @@ class Delegator:
     task_records_dir: Path
     task_search_rerank_threshold: int
     id_generator: IdGenerator
-    executor_selection_reasoning: str # > TODO: this needs to be a property
+    executor_selection_reasoning: str  # > TODO: this needs to be a property
 
     @cached_property
     def id(self) -> DelegatorId:
@@ -2989,9 +2991,6 @@ class Delegator:
         task: Task,
     ) -> BlueprintSearchResult:
         """Evaluate candidates for a task."""
-        if len(candidates) == 1:
-            return candidates[0]
-
         context = """
         ## MISSION:
         You are a delegator for a task that must be completed. Your purpose is select an appropriate executor for the task based on a particular reasoning process.
@@ -3039,12 +3038,15 @@ class Delegator:
         ```start_of_executor_choice
         comment: |-
           {{comment}}
-        executor_id: {{executor_id}}
+        executor_id: |-
+          {{executor_id}}
         ```end_of_executor_choice
+        {{executor_id}} can be {NONE} if you decide that no {EXECUTOR} is suitable for the task.
         Any additional comments or thoughts can be added before or after the output blocks.
         """
         request = dedent_and_strip(request).format(
             EXECUTOR=Concept.EXECUTOR.value,
+            NONE=NONE,
             reasoning_steps=self.executor_selection_reasoning,
         )
         messages = [
@@ -3084,7 +3086,6 @@ class Delegator:
             )
         raise NotImplementedError
         # > TODO: make it so that executor selection reasoning is saved in orchestrator blueprint
-
 
         blueprint = OrchestratorBlueprint(
             name=f"orchestrator_{task.id}",
@@ -3134,8 +3135,9 @@ class Delegator:
         task: Task,
     ) -> Generator[BlueprintSearchResult, None, None]:
         """Reorder the candidate list."""
-        raise NotImplementedError
-        # > TODO: add ability to skip delegation if selection reasoning indicates no candidate is suitable
+
+        breakpoint()
+        # TODO: add ability to skip delegation if selection reasoning indicates no candidate is suitable
 
         chosen: set[BlueprintId] = set()
         while len(chosen) < len(candidates):
@@ -3147,6 +3149,7 @@ class Delegator:
             next_candidate = self.choose_next_executor(available_candidates, task)
             chosen.add(next_candidate.blueprint.id)
             yield next_candidate
+        raise NotImplementedError
 
     def delegate(
         self,
