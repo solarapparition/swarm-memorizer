@@ -125,12 +125,11 @@ class TextWriter:
         """Return messages from the discussion."""
         return self.task.event_log.messages
 
-    def save(self) -> None:
+    def save_blueprint(self) -> None:
         """Not implemented."""
 
-    async def execute(self, message: str | None = None) -> ExecutorReport:
+    async def execute(self) -> ExecutorReport:
         """Execute the subtask. Adds a message to the task's event log if provided, and adds own message to the event log at the end of execution."""
-        assert not message, "No message should be provided to the TextWriter."
 
         def assistant_termination(message: OaiMessage) -> bool:
             """Condition for assistant to terminate the conversation."""

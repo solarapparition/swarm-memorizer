@@ -114,6 +114,7 @@ class Reasoning:
     default_action_choice: str | None = None
     subtask_action_choice: str | None = None
     subtask_extraction: str | None = None
+    executor_selection: str | None = None
 
 
 @dataclass
@@ -155,6 +156,9 @@ class BotBlueprint:
 
     def serialize(self) -> dict[Any, Any]:
         """Serialize the blueprint to a JSON-compatible dictionary."""
+        assert self.description
+        # > when serializing blueprint, must create description of blueprint
+
         return asdict(self)
 
     @classmethod
@@ -597,7 +601,7 @@ class Executor(Protocol):
         """Decides whether the executor accepts a task."""
         raise NotImplementedError
 
-    def save(self) -> None:
+    def save_blueprint(self) -> None:
         """Save the executor."""
         raise NotImplementedError
 
@@ -810,7 +814,7 @@ class Task:
     def update_executor(self, executor: Executor) -> None:
         """Update the executor of the task."""
         if self.executor:
-            self.executor.save()
+            self.executor.save_blueprint()
         self.executor = executor
         self.execution_history.add(
             executor_id=executor.id, blueprint_id=executor.blueprint.id, success=False
@@ -818,8 +822,10 @@ class Task:
 
     def wrap_execution(self, success: bool) -> None:
         """Wrap up execution of the task."""
+        raise NotImplementedError
+        # > TODO: serialize tasks at the end of execution # maybe task should have swarm so we have record of global setting
         assert self.execution_history and self.executor
-        self.executor.save()
+        self.executor.save_blueprint()
         self.executor = None
         self.execution_history.last_entry.success = success
 
@@ -1079,6 +1085,9 @@ class ReasoningGenerator:
           - NEW STATUS: whether an executor candidate is a NEW {Concept.EXECUTOR.value} or not.
           - TASK PERFORMANCE: as defined above, including SUCCESS RATE and COMPLETION TIME. This information is only available for non-NEW {Concept.EXECUTOR.value} candidates.
         """
+        raise NotImplementedError
+        # > needs "new" or "null" option, which is a dummy bot that is always included
+
         request = f"""
         ## REQUEST FOR YOU:
         Provide a step-by-step, robust reasoning process for the delegator to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
@@ -1687,17 +1696,18 @@ class Orchestrator:
 
     def serialize(self) -> dict[str, Any]:
         """Serialize the orchestrator to a dict."""
-        raise NotImplementedError(
-            "TODO: implement serialization of orchestrator itself"
-        )
-        # return asdict(self.blueprint)
+        # raise NotImplementedError(
+        #     "TODO: implement serialization of orchestrator itself"
+        # )
+        return asdict(self.blueprint)
 
-    def save(self, update_blueprint: bool = True) -> None:
+    def save_blueprint(self, update_blueprint: bool = True) -> None:
         """Serialize the orchestrator to YAML."""
         if update_blueprint:
             self.blueprint.rank = self.rank
         # assume that at the point of saving, all executors have been saved and so would have a rank
         assert self.blueprint.rank is not None, "Rank must not be None when saving."
+        assert self.blueprint.description is not None
         default_yaml.dump(self.serialize(), self.serialization_location)
         raise NotImplementedError
         # > TODO: serialization: populate knowledge on save if knowledge is empty
@@ -2306,7 +2316,7 @@ class Orchestrator:
             if subtask.work_status == TaskWorkStatus.COMPLETED
         ]:
             raise NotImplementedError
-            # > when identifying new subtask, must send message containing relevant artifacts
+            # > TODO: when identifying new subtask, must send message containing relevant artifacts
         subtask_initiation_events = self.send_subtask_message(
             message_text="Hi, please feel free to ask me any questions about the context of this task—I've only given you a brief description to start with, but I can provide more information if you need it.",
             initial=True,
@@ -2843,9 +2853,15 @@ def is_bot(blueprint: Blueprint) -> bool:
 def load_blueprint(blueprint_path: Path) -> Blueprint:
     """Load a blueprint from a file."""
     blueprint_data = default_yaml.load(blueprint_path)
-    role = Role(blueprint_data["role"])
+    try:
+        role = Role(blueprint_data["role"])
+    except ValueError as error:
+        raise ValueError(
+            f"Invalid role for blueprint: {blueprint_data['role']}"
+        ) from error
     if role == Role.BOT:
-        return BotBlueprint.deserialize(blueprint_data)
+        blueprint = BotBlueprint.deserialize(blueprint_data)
+        assert blueprint.description, "Blueprint description cannot be empty."
     raise NotImplementedError
 
 
@@ -2892,7 +2908,7 @@ class Delegator:
     task_records_dir: Path
     task_search_rerank_threshold: int
     id_generator: IdGenerator
-    executor_selection_reasoning: str
+    executor_selection_reasoning: str # > TODO: this needs to be a property
 
     @cached_property
     def id(self) -> DelegatorId:
@@ -3032,7 +3048,7 @@ class Delegator:
         result = query_model(
             model=precise_model,
             messages=messages,
-            preamble=f"Validating artifacts for task {task.id}...\n{as_printable(messages)}",
+            preamble=f"Selecting executor for task...\n{as_printable(messages)}",
             printout=VERBOSE,
             color=AGENT_COLOR,
         )
@@ -3060,6 +3076,10 @@ class Delegator:
             raise NotImplementedError(
                 "Unable to automatically create 0-ranked executor."
             )
+        raise NotImplementedError
+        # > TODO: make it so that executor selection reasoning is saved in orchestrator blueprint
+
+
         blueprint = OrchestratorBlueprint(
             name=f"orchestrator_{task.id}",
             description=None,
@@ -3075,7 +3095,7 @@ class Delegator:
             task_records_dir=self.task_records_dir,
             task_search_rerank_threshold=self.task_search_rerank_threshold,
             id_generator=self.id_generator,
-            executor_selection_reasoning=ReasoningGenerator.generate_executor_selection_reasoning(),
+            # executor_selection_reasoning=ReasoningGenerator.generate_executor_selection_reasoning(),
         )
         return Orchestrator(
             blueprint=blueprint,
@@ -3108,6 +3128,9 @@ class Delegator:
         task: Task,
     ) -> Generator[BlueprintSearchResult, None, None]:
         """Reorder the candidate list."""
+        raise NotImplementedError
+        # > TODO: add ability to skip delegation if selection reasoning indicates no candidate is suitable
+
         chosen: set[BlueprintId] = set()
         while len(chosen) < len(candidates):
             available_candidates = [
@@ -3207,6 +3230,9 @@ class Swarm:
     @property
     def executor_selection_reasoning(self) -> str:
         """Reasoning for selecting an executor."""
+        raise NotImplementedError
+        # > needs "new" or "null" option, which is a dummy bot that is always included
+
         reasoning = """
         1. Review the TASK INFORMATION section to fully understand the specifics of the TASK at hand, considering the skills, expertise, and resources that might be required for successful completion. Make note of any unique aspects of the TASK that could influence which EXECUTOR is best suited for it.
 
@@ -3293,12 +3319,9 @@ class Swarm:
         )
 
 
-# (next_curriculum_task)
+# (run_next_curriculum_task)
 # ....
-# > evaluate whether we still need to serialize orchestrator class # blueprint ought to be enough
-# > serialize tasks at the end of execution # maybe task should have swarm so we have record of global setting
-# > when serializing blueprint, must create description of blueprint
-# > generic autogen code executor
+# add placeholder bots > brainstorm placeholder bots > bot: chat with github repo > embedchain? > bot: tavily > bot: perplexity > utility function writer > generic autogen code executor (does not save code)
 # mvp task: buy something from amazon
 # ---MVP---
 # > bot: function writer (saved as function bots)
