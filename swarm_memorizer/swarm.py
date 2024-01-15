@@ -553,8 +553,9 @@ class TaskDescription:
     information: str
     definition_of_done: str | None = None
 
-    def __str__(self) -> str:
-        """String representation of the task description."""
+    @property
+    def full(self) -> str:
+        """Full description of the task."""
         template = """
         Information:
         {information}
@@ -565,6 +566,10 @@ class TaskDescription:
         return dedent_and_strip(template).format(
             information=self.information, definition_of_done=self.definition_of_done
         )
+
+    def __str__(self) -> str:
+        """String representation of the task description."""
+        return self.full if self.definition_of_done else self.information
 
 
 @dataclass
@@ -689,7 +694,7 @@ class Task:
     @property
     def as_main_task_printout(self) -> str:
         """String representation of the task as it would appear as a main task."""
-        return str(self.description)
+        return self.description.full
 
     def __str__(self) -> str:
         """String representation of task status."""
@@ -1397,7 +1402,7 @@ def validate_artifact_mentions(
     """Validate that artifacts were reported by the executor."""
     context = f"""
     ## MISSION:
-    You are a validator for an AI task executor agent. Your purpose is to validate certain aspects of the task that the executor has reported as complete.
+    You are a validator for an AI task executor agent. Your purpose is to check that the executor has provided enough information to locate the output of the results, for futher validation.
 
     ## CONCEPTS:
     These are the concepts you should be familiar with:
@@ -1430,6 +1435,8 @@ def validate_artifact_mentions(
     3. Cross-reference the information from the TASK CONVERSATION with the criteria outlined in the TASK SPECIFICATION to confirm that the EXECUTOR provided the necessary and correct details about the ARTIFACT. It is not necessary for you to actually locate the ARTIFACT yourself.
     4. If anything is unclear or incomplete, prepare to request clarification or additional information from the EXECUTOR.
     ```end_of_reasoning_steps
+
+    You do _not_ need to validate whether the ARTIFACT exists or not, just that the EXECUTOR was specific enough in their communications to allow someone to attempt to locate the ARTIFACT.
 
     In your reply, you must include output from all steps of the reasoning process, in this block format:
     ```start_of_reasoning_output
@@ -2576,7 +2583,7 @@ class Orchestrator:
             data=TaskDescriptionUpdate(
                 changing_agent=self.id,
                 task_id=self.task.id,
-                old_description=str(self.task.description),
+                old_description=str(self.task.description.full),
                 new_description=str(updated_task_description),
                 reason=f"new information from latest events in {Concept.RECENT_EVENTS_LOG.value}",
             ),
@@ -2989,7 +2996,7 @@ class Delegator:
         self,
         candidates: list[BlueprintSearchResult],
         task: Task,
-    ) -> BlueprintSearchResult:
+    ) -> BlueprintSearchResult | None:
         """Evaluate candidates for a task."""
         context = """
         ## MISSION:
@@ -3041,7 +3048,7 @@ class Delegator:
         executor_id: |-
           {{executor_id}}
         ```end_of_executor_choice
-        {{executor_id}} can be {NONE} if you decide that no {EXECUTOR} is suitable for the task.
+        {{executor_id}} can be `{NONE}` if you decide that no {EXECUTOR} is suitable for the task.
         Any additional comments or thoughts can be added before or after the output blocks.
         """
         request = dedent_and_strip(request).format(
@@ -3064,6 +3071,8 @@ class Delegator:
             raise ExtractionError("Could not extract executor choice from the result.")
         extracted_result = default_yaml.load(extracted_result[0])
         blueprint_id = BlueprintId(extracted_result["executor_id"])
+        if blueprint_id == NONE:
+            return
         try:
             chosen_candidate = next(
                 candidate
@@ -3135,10 +3144,6 @@ class Delegator:
         task: Task,
     ) -> Generator[BlueprintSearchResult, None, None]:
         """Reorder the candidate list."""
-
-        breakpoint()
-        # TODO: add ability to skip delegation if selection reasoning indicates no candidate is suitable
-
         chosen: set[BlueprintId] = set()
         while len(chosen) < len(candidates):
             available_candidates = [
@@ -3146,10 +3151,12 @@ class Delegator:
                 for candidate in candidates
                 if candidate.blueprint.id not in chosen
             ]
-            next_candidate = self.choose_next_executor(available_candidates, task)
+            if not (
+                next_candidate := self.choose_next_executor(available_candidates, task)
+            ):
+                return
             chosen.add(next_candidate.blueprint.id)
             yield next_candidate
-        raise NotImplementedError
 
     def delegate(
         self,
