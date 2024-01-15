@@ -1056,6 +1056,15 @@ class SubtaskIdentifcationResult:
             data["additional_thoughts"] = None
         return cls(**data)
 
+EXECUTOR_SELECTION_CONCEPTS = f"""
+These are the concepts you should be familiar with:
+- TASK: a task that must be done. Tasks do _not_ have strict deadlines.
+- {Concept.EXECUTOR.value}: an agent that is responsible for executing a task.
+- TASK PERFORMANCE: the performance of an executor on tasks similar to the TASK, which is measured by the following metrics:
+  - SUCCESS RATE: the proportion of similar tasks that the executor has successfully completed.
+  - COMPLETION TIME: the average time in seconds it takes for the executor to complete a similar task.
+- NEW {Concept.EXECUTOR.value}: an executor where there isn't enough history to determine its performance on the TASK. However, _all_ {Concept.EXECUTOR.value} candidates under consideration have done at least one similar task successfully.
+""".strip()
 
 @dataclass
 class ReasoningGenerator:
@@ -1064,46 +1073,44 @@ class ReasoningGenerator:
     @staticmethod
     def generate_executor_selection_reasoning() -> str:
         """Generate reasoning for selecting an executor."""
-        context = f"""
+        context = """
         ## MISSION:
         You are the instructor for an AI task delegation agent. Your purpose is to provide step-by-step guidance for the delegator to think through how to select an appropriate executor for a subtask.
 
         ## CONCEPTS:
-        These are the concepts you should be familiar with:
-        - TASK: a task that must be done. Tasks do _not_ have strict deadlines.
-        - {Concept.EXECUTOR.value}: an agent that is responsible for executing a task.
-        - TASK PERFORMANCE: the performance of an executor on tasks similar to the TASK, which is measured by the following metrics:
-          - SUCCESS RATE: the proportion of similar tasks that the executor has successfully completed.
-          - COMPLETION TIME: the average time in seconds it takes for the executor to complete a similar task.
-        - NEW {Concept.EXECUTOR.value}: an executor where there isn't enough history to determine its performance on the TASK. However, _all_ {Concept.EXECUTOR.value} candidates under consideration have done at least one similar task successfully.
+        {concepts}
         
         ## DELEGATOR INFORMATION SECTIONS:
         The delegator has access to several sections of information that is relevant to its decisionmaking.
         - TASK INFORMATION contains a brief description of information about the TASK.
-        - {Concept.EXECUTOR.value} CANDIDATES: a list of executors that can be selected for the task. Each entry for an executor candidate has the following information:
-          - DESCRIPTION: a brief description of the executor candidate.
-          - NEW STATUS: whether an executor candidate is a NEW {Concept.EXECUTOR.value} or not.
-          - TASK PERFORMANCE: as defined above, including SUCCESS RATE and COMPLETION TIME. This information is only available for non-NEW {Concept.EXECUTOR.value} candidates.
+        - {EXECUTOR} CANDIDATES: a list of executors that can be selected for the task. Each entry for an executor candidate has the following information:
+          - DESCRIPTION: a brief description of the executor candidate's capabilities, as well as what it cannot do. This is what the candidate can _theoretically_ do, as opposed to its actual performance.
+          - NEW STATUS: whether an executor candidate is a NEW {EXECUTOR} or not.
+          - TASK PERFORMANCE: as defined above, including SUCCESS RATE and COMPLETION TIME. This information is only available for non-NEW {EXECUTOR} candidates.
         """
-        raise NotImplementedError
-        # > needs "new" or "null" option, which is a dummy bot that is always included
+        context = dedent_and_strip(context).format(
+            concepts=EXECUTOR_SELECTION_CONCEPTS,
+            EXECUTOR=Concept.EXECUTOR.value,
+        )
 
-        request = f"""
+        request = """
         ## REQUEST FOR YOU:
         Provide a step-by-step, robust reasoning process for the delegator to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
         - Assume that the delegator has access to what's described in DELEGATOR INFORMATION SECTIONS above, but no other information, except for general world knowledge that is available to a standard LLM like GPT-3."
         - The delegator requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "TASK INFORMATION" or "SUCCESS RATE"); however, only use capitalization to refer to specific terms—don't use capitalization as emphasis, as that could be confusing to the delegator.
-        - As an initial part of the reasoning, the delegator must figure out whether to lean towards exploration using NEW {Concept.EXECUTOR.value} candidates or exploitation using non-NEW {Concept.EXECUTOR.value} candidates. This of course depends on how good the non-NEW {Concept.EXECUTOR.value} candidates are.
+        - As an initial part of the reasoning, the delegator must figure out whether to lean towards exploration using NEW {EXECUTOR} candidates or exploitation using non-NEW {EXECUTOR} candidates. This of course depends on how good the non-NEW {EXECUTOR} candidates are.
+        - The delegator does _not_ have to select _any_ of the candidates, if it deems none of them to be suitable for the task.
         - The reasoning process should be written in second person and be around 5-7 steps, though you can add substeps within a step (a, b, c, etc.) if it is complex.
         - The reasoning steps can refer to the results of previous steps, and it may be effective to build up the orchestrator's mental context step by step, starting from basic information available, similar to writing a procedural script for a program but in natural language instead of code.
-        - The final decision of the {Concept.EXECUTOR.value} to use must be done on the last step only, after considering all the information available from the previous steps.
+        - The final decision of which {EXECUTOR} CANDIDATE to use (or to not use any at all) must be done on the last step only, after considering all the information available from the previous steps.
 
-        {{output_instructions}}
+        {output_instructions}
         """
         messages = [
-            SystemMessage(content=dedent_and_strip(context)),
+            SystemMessage(content=context),
             SystemMessage(
                 content=dedent_and_strip(request).format(
+                    EXECUTOR=Concept.EXECUTOR.value,
                     output_instructions=REASONING_OUTPUT_INSTRUCTIONS,
                 )
             ),
@@ -1114,6 +1121,8 @@ class ReasoningGenerator:
             f"{as_printable(messages)}",
             printout=VERBOSE,
         )
+        # needs "new" or "null" option, which is a dummy bot that is always included
+        raise NotImplementedError
 
     _orchestrator: "Orchestrator"
     """Orchestrator for which to generate reasoning. Must not be modified."""
@@ -2862,6 +2871,7 @@ def load_blueprint(blueprint_path: Path) -> Blueprint:
     if role == Role.BOT:
         blueprint = BotBlueprint.deserialize(blueprint_data)
         assert blueprint.description, "Blueprint description cannot be empty."
+        return blueprint
     raise NotImplementedError
 
 
@@ -2987,13 +2997,8 @@ class Delegator:
         You are a delegator for a task that must be completed. Your purpose is select an appropriate executor for the task based on a particular reasoning process.
 
         ## CONCEPTS:
-        These are the concepts you should be familiar with:
-        - TASK: a task that must be done. Tasks do _not_ have strict deadlines.
-        - {EXECUTOR}: an agent that is responsible for executing a task.
-        - TASK PERFORMANCE: the performance of an executor on tasks similar to the TASK, which is measured by the following metrics:
-          - SUCCESS RATE: the proportion of similar tasks that the executor has successfully completed.
-          - COMPLETION TIME: the average time in seconds it takes for the executor to complete a similar task.
-        - NEW {EXECUTOR}: an executor where there isn't enough history to determine its performance on the TASK. However, _all_ {EXECUTOR} candidates under consideration have done at least one similar task successfully.
+        These are the concepts you must be aware of in order to perform delegation:
+        {concepts}
 
         ## TASK INFORMATION:
         Here is the information about the task:
@@ -3011,6 +3016,7 @@ class Delegator:
             str(candidate) for candidate in candidates
         )
         context = dedent_and_strip(context).format(
+            concepts=EXECUTOR_SELECTION_CONCEPTS,
             EXECUTOR=Concept.EXECUTOR.value,
             task_information=task.information,
             executor_candidates=executor_candidates_printout,
@@ -3230,31 +3236,33 @@ class Swarm:
     @property
     def executor_selection_reasoning(self) -> str:
         """Reasoning for selecting an executor."""
-        raise NotImplementedError
-        # > needs "new" or "null" option, which is a dummy bot that is always included
-
         reasoning = """
-        1. Review the TASK INFORMATION section to fully understand the specifics of the TASK at hand, considering the skills, expertise, and resources that might be required for successful completion. Make note of any unique aspects of the TASK that could influence which EXECUTOR is best suited for it.
+        1. Review the TASK INFORMATION to understand the nature and requirements of the TASK. Take note of any specific skills, expertise, or resources that are mentioned as being necessary to complete the TASK successfully.
 
-        2. Consult the EXECUTOR CANDIDATES list and distinguish between NEW EXECUTOR candidates and those with track records. This will set the stage for a decision between exploring new options and relying on proven performance.
-          a. If all EXECUTOR CANDIDATES are NEW EXECUTORs, then move to step 7 directly.
-          b. If there are both NEW EXECUTORs and experienced ones, continue to the following steps to make an informed decision.
+        2. Examine the EXECUTOR CANDIDATES list to familiarize yourself with the potential executors' capabilities:
+          a. Analyze each executor candidate’s DESCRIPTION to assess their theoretical ability to handle the TASK, focusing on any standout strengths or weaknesses relative to the TASK requirements.
+          b. Identify if any of the candidates are NEW EXECUTOR, which signifies a lack of historical data on their TASK PERFORMANCE.
 
-        3. For EXECUTOR CANDIDATES that are not NEW EXECUTORs, examine the TASK PERFORMANCE metrics. Focus on the SUCCESS RATE and COMPLETION TIME for each experienced EXECUTOR candidate, ensuring you understand how these metrics reflect their effectiveness and efficiency.
-          a. Consider the SUCCESS RATE to determine reliability — a higher rate suggests consistent performance.
-          b. Evaluate the COMPLETION TIME to understand how quickly tasks are usually accomplished by each EXECUTOR.
+        3. For all non-NEW EXECUTOR candidates, evaluate their historical TASK PERFORMANCE:
+          a. Consider the SUCCESS RATE to understand how consistently each executor has completed similar tasks in the past.
+          b. Examine the COMPLETION TIME to gauge how efficiently each executor has completed similar tasks previously.
 
-        4. Rank the experienced EXECUTOR CANDIDATES based on their TASK PERFORMANCE metrics to identify which among them stands out as the most effective and efficient one. Use both the SUCCESS RATE and COMPLETION TIME to determine who has the best combination of reliability and speed.
+        4. Consider the importance of TASK PERFORMANCE relative to the TASK at hand:
+          a. If the TASK is complex or has high-stakes outcomes, lean towards candidates with a higher SUCCESS RATE.
+          b. If the TASK is time-sensitive, prioritize candidates with a lower COMPLETION TIME.
 
-        5. Assess if the top-ranked experienced EXECUTOR CANDIDATE(s) based on TASK PERFORMANCE metrics meet the expectations for the current TASK. Ensure their TASK PERFORMANCE is in alignment with the requirements specified in the TASK INFORMATION.
-          a. If there is a match in skill and performance expectation, consider leaning towards exploitation by selecting a top-ranked non-NEW EXECUTOR.
-          b. If the match is unclear or performance metrics are not satisfactory, consider the benefits of exploration with a NEW EXECUTOR.
+        5. Decide if any non-NEW EXECUTOR candidates are a suitable match based on the TASK INFORMATION and their TASK PERFORMANCE:
+          a. If one or more non-NEW EXECUTOR candidates seem well-suited for the TASK, prepare to make a selection from among them in the final step.
+          b. If no non-NEW EXECUTOR candidates are suitable, or if the TASK is one where exploration could yield better long-term results (e.g., low stakes or an opportunity to develop newer executors), consider a NEW EXECUTOR candidate.
 
-        6. If leaning towards exploration with a NEW EXECUTOR, reflect on the potential long-term benefit of diversifying the pool of proven executors and the opportunity to discover an EXECUTOR with possibly better or more suited capabilities for future tasks.
+        6. If considering a NEW EXECUTOR, evaluate the risk versus the potential of investing in the development of this executor:
+          a. Appraise the potential benefits of allowing a NEW EXECUTOR to gain experience and possibly become a reliable option for future tasks.
+          b. Balance the risk by reflecting on the criticality of the TASK, the theoretical capability of the NEW EXECUTOR, and the willingness to tolerate potential setbacks in TASK completion.
 
-        7. Make the final EXECUTOR selection:
-          a. Choose the top-ranked non-NEW EXECUTOR if their TASK PERFORMANCE aligns well with the TASK INFORMATION and they are considered the most suitable based on the previous steps.
-          b. Opt for a NEW EXECUTOR if there's a necessity or potential benefit in exploring new possibilities, especially if non-NEW EXECUTOR CANDIDATES didn’t match the TASK's requirements or there are no non-NEW EXECUTORS available. This step may require a degree of calculated risk-taking.
+        7. Finalize the selection process by comparing executors:
+          a. If a non-NEW EXECUTOR is deemed suitable based on their proven TASK PERFORMANCE and aptitude for the TASK, choose the best-fit candidate.
+          b. If a NEW EXECUTOR is being considered for the reasons outlined in step 6 and their DESCRIPTION aligns well with the TASK, select one of them to balance the immediate needs with long-term strategic development.
+          c. If neither non-NEW EXECUTOR candidates nor NEW EXECUTOR candidates are adequately matched to the TASK, opt not to delegate the TASK to any executor and reassess the required capabilities for the TASK.
         """
         return dedent_and_strip(reasoning)
 
@@ -3420,9 +3428,9 @@ async def test_curriculum_task_2() -> None:
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    # asyncio.run(test_curriculum_task_1())
     # asyncio.run(test_orchestrator())
-    asyncio.run(test_curriculum_task_2())
+    asyncio.run(test_curriculum_task_1())
+    # asyncio.run(test_curriculum_task_2())
 
 
 if __name__ == "__main__":
