@@ -6,7 +6,7 @@ import shelve
 import asyncio
 from itertools import chain
 from enum import Enum
-from dataclasses import InitVar, dataclass, asdict, field
+from dataclasses import InitVar, dataclass, asdict, field, fields, _asdict_inner  # type: ignore
 from functools import cached_property
 from pathlib import Path
 from uuid import UUID
@@ -379,6 +379,11 @@ class WorkValidator(Protocol):
     """A validator of a task."""
 
     @property
+    def name(self) -> str:
+        """Name of the validator."""
+        raise NotImplementedError
+
+    @property
     def id(self) -> RuntimeId:
         """Runtime id of the validator."""
         raise NotImplementedError
@@ -390,11 +395,11 @@ class WorkValidator(Protocol):
 
 @dataclass
 class Human:
-    """A human part of the hivemind. Can be slotted into various specialized roles for tasks that the agent can't yet handle autonomously."""
+    """A human agent. Can be slotted into various roles for tasks that the agent can't yet handle autonomously."""
 
     name: str = "Human"
-    reply_cache: MutableMapping[str, str] | None = None
     thread: list[str] = field(default_factory=list)
+    _reply_cache: MutableMapping[str, str] | None = None
 
     @property
     def id(self) -> RuntimeId:
@@ -420,8 +425,8 @@ class Human:
         self.thread.append(prompt)
         self.thread.append(
             reply := (
-                self.respond_using_cache(self.reply_cache)
-                if self.reply_cache is not None
+                self.respond_using_cache(self._reply_cache)
+                if self._reply_cache is not None
                 else self.respond_manually()
             )
         )
@@ -655,16 +660,24 @@ class Task:
     rank_limit: int | None
     validator: WorkValidator
     id_generator: IdGenerator
+    task_records_dir: Path
     name: str | None = None
     executor: Executor | None = None
     notes: dict[str, str] = field(default_factory=dict)
     work_status: TaskWorkStatus = TaskWorkStatus.IDENTIFIED
     execution_history: ExecutionHistory = field(default_factory=ExecutionHistory)
 
-    @cached_property
-    def id(self) -> TaskId:
-        """Id of the task."""
-        return generate_swarm_id(TaskId, self.id_generator)
+    id: TaskId = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Post init."""
+        self.task_records_dir.mkdir(parents=True, exist_ok=True)
+        self.id = generate_swarm_id(TaskId, self.id_generator)
+
+    # @cached_property
+    # def id(self) -> TaskId:
+    #     """Id of the task."""
+    #     return generate_swarm_id(TaskId, self.id_generator)
 
     @property
     def definition_of_done(self) -> str | None:
@@ -737,7 +750,6 @@ class Task:
             id=self.id,
             name=self.name,
             work_status=self.work_status.value,
-            # event_status=self.event_status.value,
         )
 
     def reformat_event_log(
@@ -804,17 +816,45 @@ class Task:
             generating_task_id=self.id,
             id=generate_swarm_id(EventId, self.id_generator),
         )
-        # Event(
-        #     data=TaskStatusChange(
-        #         changing_agent=self.executor_id,
-        #         task_id=self.id,
-        #         old_status=self.work_status,
-        #         new_status=new_status,
-        #         reason=status_change_reason,
-        #     ),
-        #     generating_task_id=self.id,
-        #     id=generate_swarm_id(EventId, self.id_generator),
-        # ),
+
+    @property
+    def serialization_location(self) -> Path:
+        """Location for serializing the task."""
+        return self.task_records_dir / f"{self.id}.yaml"
+
+    def serialize(self) -> dict[str, Any]:
+        """Serialize the task."""
+        excluded_fields = {"executor", "id_generator"}
+        modified_fields = {"validator", "work_status", "task_records_dir"}
+        unchanged_fields = {
+            "id",
+            "description",
+            "owner_id",
+            "rank_limit",
+            "name",
+            "notes",
+            "execution_history",
+        }
+        assert (excluded_fields | modified_fields | unchanged_fields) == (
+            field_names := {field.name for field in fields(self)}
+        ), f"Field names don't match expected fields:\n{field_names=}\n{excluded_fields=}\n{modified_fields=}\n{unchanged_fields=}"
+
+        unchanged_data: dict[str, Any] = {
+            field.name: _asdict_inner(getattr(self, field.name), dict)
+            for field in fields(self)
+            if field.name in unchanged_fields
+        }
+        modified_data = {
+            "validator": {"name": self.validator.name, "id": self.validator.id},
+            "work_status": self.work_status.value,
+            "task_records_dir": str(self.task_records_dir),
+        }
+        return unchanged_data | modified_data
+
+    def save(self) -> None:
+        """Save the task."""
+        serialized_data = self.serialize()
+        self.serialization_location.write_text(as_yaml_str(serialized_data))
 
     def update_executor(self, executor: Executor) -> None:
         """Update the executor of the task."""
@@ -827,12 +867,11 @@ class Task:
 
     def wrap_execution(self, success: bool) -> None:
         """Wrap up execution of the task."""
-        raise NotImplementedError
-        # > TODO: serialize tasks at the end of execution # maybe task should have swarm so we have record of global setting
         assert self.execution_history and self.executor
         self.executor.save_blueprint()
         self.executor = None
         self.execution_history.last_entry.success = success
+        self.save()
 
 
 @dataclass
@@ -1128,8 +1167,6 @@ class ReasoningGenerator:
             f"{as_printable(messages)}",
             printout=VERBOSE,
         )
-        # needs "new" or "null" option, which is a dummy bot that is always included
-        raise NotImplementedError
 
     _orchestrator: "Orchestrator"
     """Orchestrator for which to generate reasoning. Must not be modified."""
@@ -2293,6 +2330,7 @@ class Orchestrator:
             description=TaskDescription(information=identified_subtask),
             validator=self.task.validator,
             id_generator=self.id_generator,
+            task_records_dir=self.task.task_records_dir,
         )
         subtask_validation = self.validate_subtask_identification(identified_subtask)
         subtask_identification_event = Event(
@@ -3305,6 +3343,7 @@ class Swarm:
             rank_limit=None,
             validator=self.validator,
             id_generator=self.id_generator,
+            task_records_dir=self.task_records_dir,
         )
         self.delegator.assign_executor(task, self.recent_events_size, self.auto_wait)
         assert task.executor is not None, "Task executor assignment failed."
@@ -3337,6 +3376,8 @@ class Swarm:
         )
 
 
+# ....
+# > printout of done tasks need to include artifacts
 # (run_next_curriculum_task)
 # ....
 # add placeholder bots > brainstorm placeholder bots > bot: chat with github repo > embedchain? > bot: tavily > bot: perplexity > utility function writer > generic autogen code executor (does not save code)
@@ -3375,7 +3416,7 @@ def test_human_cache_response():
 
     def ask_questions():
         with shelve.open(str(cache_path), writeback=True) as cache:
-            human = Human(reply_cache=cache)
+            human = Human(_reply_cache=cache)
             human.advise("What is your name?")
             human.advise("What is your age?")
 
@@ -3389,7 +3430,7 @@ def test_human_cache_response():
 async def run_test_task(task: str) -> None:
     """Run a test task."""
     with shelve.open(".data/cache/human_reply", writeback=True) as cache:
-        human_tester = Human(reply_cache=cache)
+        human_tester = Human(_reply_cache=cache)
         swarm = Swarm(
             files_dir=Path("test/swarm"),
             validator=human_tester,
