@@ -729,7 +729,7 @@ class Task:
     def as_subtask_printout(self) -> str:
         """String representation of task as it would appear as a subtask."""
         if self.work_status == TaskWorkStatus.COMPLETED:
-            raise NotImplementedError
+            raise NotImplementedError("TODO")
             # > TODO: completed subtasks need to display artifacts # needs to be done in execute_and_validate
 
         if self.work_status in {TaskWorkStatus.COMPLETED, TaskWorkStatus.CANCELLED}:
@@ -1408,7 +1408,7 @@ def regenerate_task_executor(executor: Executor) -> Executor:
     if is_bot(executor.blueprint):
         return executor
 
-    raise NotImplementedError
+    raise NotImplementedError("TODO")
     # > TODO: agent regeneration: if agent fails task, first time is just a message; new version of agent probably should only have its knowledge updated on second fail; on third fail, whole agent is regenerated; on next fail, the next best agent is chosen, and the process repeats again; if the next best agent still can't solve the task, the task is auto-cancelled since it's likely too difficult (manual cancellation by orchestrator is still possible) > when regenerating agent components, include specific information from old agent > if agent is bot, skip update and regeneration and just message/choose next best agent
     # > mutation > update: unify mutation with generation: mutation is same as re-generating each component of agent, including knowledge > blueprint: model parameter # explain that cheaper model costs less but may reduce accuracy > blueprint: novelty parameter: likelihood of choosing unproven subagent > blueprint: temperature parameter > when mutating agent, either update knowledge, or tweak a single parameter > when mutating agent, use component optimization of other best agents (that have actual trajectories) > new mutation has a provisional rating based on the rating of the agent it was mutated from; but doesn't appear in optimization list until it has a trajectory > only mutate when agent fails at some task > add success record to reasoning processes > retrieve previous reasoning for tasks similar to current task
 
@@ -1751,9 +1751,6 @@ class Orchestrator:
 
     def serialize(self) -> dict[str, Any]:
         """Serialize the orchestrator to a dict."""
-        # raise NotImplementedError(
-        #     "TODO: implement serialization of orchestrator itself"
-        # )
         return asdict(self.blueprint)
 
     def save_blueprint(self, update_blueprint: bool = True) -> None:
@@ -1764,12 +1761,12 @@ class Orchestrator:
         assert self.blueprint.rank is not None, "Rank must not be None when saving."
         assert self.blueprint.description is not None
         default_yaml.dump(self.serialize(), self.serialization_location)
-        raise NotImplementedError
+        raise NotImplementedError("TODO")
         # > TODO: serialization: populate knowledge on save if knowledge is empty
 
     def accepts(self, task: Task) -> bool:
         """Decides whether the orchestrator accepts a task."""
-        raise NotImplementedError
+        raise NotImplementedError("TODO")
 
     @property
     def recent_events_size(self) -> int:
@@ -2047,7 +2044,9 @@ class Orchestrator:
             return self.subtask_action_context
         if self.action_mode == ActionModeName.DEFAULT:
             return self.default_action_context
-        raise NotImplementedError(f"task: {self.task.description}")
+        raise ValueError(
+            f"Unknown action mode: {self.action_mode}\ntask: {self.task.description}"
+        )
 
     def generate_subtask_action_reasoning(self) -> str:
         """Generate reasoning for choosing an action in subtask discussion mode."""
@@ -2072,7 +2071,9 @@ class Orchestrator:
             return self.subtask_action_reasoning
         if self.action_mode == ActionModeName.DEFAULT:
             return self.default_action_reasoning
-        raise NotImplementedError
+        raise ValueError(
+            f"Unknown action mode: {self.action_mode}\ntask: {self.task.description}"
+        )
 
     def choose_action(self) -> ActionDecision:
         """Choose an action to perform."""
@@ -2371,7 +2372,7 @@ class Orchestrator:
             for subtask in self.subtasks
             if subtask.work_status == TaskWorkStatus.COMPLETED
         ]:
-            raise NotImplementedError
+            raise NotImplementedError("TODO")
             # > TODO: when identifying new subtask, must send message containing relevant artifacts
         subtask_initiation_events = self.send_subtask_message(
             message_text="Hi, please feel free to ask me any questions about the context of this task—I've only given you a brief description to start with, but I can provide more information if you need it.",
@@ -2402,7 +2403,9 @@ class Orchestrator:
             )
         if self.action_mode == ActionModeName.DEFAULT:
             return self.subtasks.filter_by_status(TaskWorkStatus.IN_PROGRESS)
-        raise NotImplementedError
+        raise ValueError(
+            f"Unknown action mode: {self.action_mode}\ntask: {self.task.description}"
+        )
 
     @property
     def subtask_action_names(self) -> Set[str]:
@@ -2438,22 +2441,22 @@ class Orchestrator:
         if decision.action_name == ActionName.IDENTIFY_NEW_SUBTASK.value:
             return self.identify_new_subtask()
         if decision.action_name == ActionName.START_DISCUSSION_FOR_SUBTASK.value:
-            raise NotImplementedError
+            raise NotImplementedError("TODO")
         if decision.action_name == ActionName.REPORT_MAIN_TASK_COMPLETE.value:
-            raise NotImplementedError
+            raise NotImplementedError("TODO")
         if decision.action_name == ActionName.WAIT.value:
-            raise NotImplementedError
+            raise NotImplementedError("TODO")
         if decision.action_name == ActionName.MESSAGE_SUBTASK_EXECUTOR.value:
             return self.message_subtask_executor(decision.action_args["message"])
         if decision.action_name == ActionName.PAUSE_SUBTASK_DISCUSSION.value:
-            raise NotImplementedError
+            raise NotImplementedError("TODO")
 
         # > change task cancellation to task failing validation
         # > if a task is set to be complete, trigger validation agent automatically
         # > need to add fail reason for failed tasks
         # ....
         # (next_action_implementation) > pause subtask discussion: adds event that is a summary of the new items in the discussion to maintain state continuity # "The Definition of Done is a Python script that, when run, starts the agent. The agent should be able to have a simple back-and-forth conversation with the user. The agent needs to use the OpenAI Assistant API."
-        raise NotImplementedError
+        raise ValueError(f"Unknown action: {decision.action_name}")
 
     def message_from_owner(self, message: str) -> Event:
         """Create a message from the task owner."""
@@ -2669,7 +2672,7 @@ class Orchestrator:
         )
 
     async def execute(self) -> ExecutorReport:
-        """Execute the task. Adds a message (if provided) to the task's event log, and adds own message to the event log at the end of execution."""
+        """Execute the task."""
         while True:
             if self.auto_wait and self.awaitable_subtasks:
                 executor_reports = [
@@ -2698,40 +2701,23 @@ class Orchestrator:
             action_result = self.act(action_decision)
             if action_result.new_events:
                 self.add_to_event_log(action_result.new_events)
-            # if action_result.new_work_status:
-            #     self.task.work_status = action_result.new_work_status
             if action_result.pause_execution:
                 break
         task_completed = action_result.task_completed
-        if not (last_event := self.task.event_log.last_event):
-            raise NotImplementedError
-        if not isinstance(last_event.data, Message):  # type: ignore
-            raise NotImplementedError
-        if (
-            last_event.data.sender != self.id
-            and last_event.data.recipient != self.task.owner_id
-        ):
-            raise NotImplementedError
-        # if self.task.work_status != TaskWorkStatus.BLOCKED:
-        #     raise NotImplementedError
-        # status_change_reason = "Task is blocked until reply to message."
-        # events = (
-        #     [
-        #         Event(
-        #             data=TaskStatusChange(
-        #                 changing_agent=self.id,
-        #                 task_id=self.task.id,
-        #                 old_status=old_work_status,
-        #                 new_status=self.task.work_status,
-        #                 reason=status_change_reason,
-        #             ),
-        #             generating_task_id=self.task.id,
-        #             id=generate_swarm_id(EventId, self.id_generator),
-        #         )
-        #     ]
-        #     if self.task.work_status != old_work_status
-        #     else []
-        # )
+        assert (
+            (last_event := self.event_log.last_event)
+            and isinstance(last_event.data, Message)
+            and last_event.data.sender == self.id
+        ), f"Execution report creation: last event is expected to be a message from the orchestrator, but is: {last_event}"
+        # if not (last_event := self.task.event_log.last_event):
+        #     raise NotImplementedError("TODO")
+        # if not isinstance(last_event.data, Message):  # type: ignore
+        #     raise NotImplementedError("TODO")
+        # if (
+        #     last_event.data.sender != self.id
+        #     and last_event.data.recipient != self.task.owner_id
+        # ):
+        #     raise NotImplementedError("TODO")
         return ExecutorReport(
             reply=last_event.data.content,
             task_completed=task_completed,
@@ -2796,7 +2782,7 @@ def load_executor(blueprint: Blueprint, task: Task, files_dir: Path) -> Executor
         loader_location = files_dir / "loader.py"
         load_bot = extract_bot_loader(loader_location)
         return load_bot(blueprint, task, files_dir)
-    raise NotImplementedError
+    raise NotImplementedError("TODO")
 
 
 class Advisor(Protocol):
@@ -2828,7 +2814,7 @@ class BlueprintSearchResult:
         """Success rate of the blueprint given the tasks."""
         if not self.task_subpool:
             return None
-        raise NotImplementedError
+        raise NotImplementedError("TODO")
         # success_rate = (
         #     num_success := sum(task.success(blueprint_id=blueprint.id) for task in self.task_pool)
         # ) / (num_similar_tasks := len(self.task_pool))
@@ -2843,7 +2829,7 @@ class BlueprintSearchResult:
         """Completion time of the blueprint given the tasks."""
         if not self.task_subpool:
             return None
-        raise NotImplementedError
+        raise NotImplementedError("TODO")
         # completion_time = (
         #     sum(task.completion_time for task in self.task_pool)
         #     / task_pool_size
@@ -2854,7 +2840,7 @@ class BlueprintSearchResult:
         """Scaled completion time of the blueprint given the tasks."""
         if not self.task_subpool:
             return None
-        raise NotImplementedError
+        raise NotImplementedError("TODO")
         # scaled_completion_time = completion_time / (1 + completion_time)
 
     @property
@@ -2862,7 +2848,7 @@ class BlueprintSearchResult:
         """Rating of the blueprint given the tasks."""
         if not self.task_subpool:
             return None
-        raise NotImplementedError
+        raise NotImplementedError("TODO")
         # rating = success_rate / (1 + scaled_completion_time)
 
     def __str__(self) -> str:
@@ -2886,19 +2872,19 @@ def find_similar_tasks(task: Task, task_pool: Iterable[Task]) -> list[Task]:
     """Find similar tasks in a task pool."""
     if not task_pool:
         return []
-    raise NotImplementedError
+    raise NotImplementedError("TODO")
 
 
 def search_task_records(task: Task, task_records_dir: Path) -> list[Task]:
     """Search for similar tasks in the task records."""
     if not list(task_records_dir.iterdir()):
         return []
-    raise NotImplementedError
+    raise NotImplementedError("TODO")
 
 
 def rerank_tasks(task: Task, similar_tasks: list[Task]) -> list[Task]:
     """Rerank similar tasks based on task similarity."""
-    raise NotImplementedError
+    raise NotImplementedError("TODO")
 
 
 def is_bot(blueprint: Blueprint) -> bool:
@@ -2919,7 +2905,7 @@ def load_blueprint(blueprint_path: Path) -> Blueprint:
         blueprint = BotBlueprint.deserialize(blueprint_data)
         assert blueprint.description, "Blueprint description cannot be empty."
         return blueprint
-    raise NotImplementedError
+    raise NotImplementedError("TODO")
 
 
 def load_blueprints(executors_dir: Path) -> Iterable[Blueprint]:
@@ -2939,7 +2925,7 @@ def is_new(
     """Check if a blueprint is new."""
     if not similar_tasks:
         return True
-    raise NotImplementedError
+    raise NotImplementedError("TODO")
     # > TODO: update so that we don't need task history to be stored in blueprint
 
     # return len(blueprint.task_history) <= task_history_limit
@@ -2949,12 +2935,11 @@ def load_blueprint_tasks(
     blueprint_id: BlueprintId, task_records_dir: Path
 ) -> list[Task]:
     """Load tasks from the task records."""
-    raise NotImplementedError
+    raise NotImplementedError("TODO")
     # > TODO: update so that we don't need task history to be stored in blueprint
 
     # if not task_ids:
     #     return []
-    # raise NotImplementedError
 
 
 @dataclass(frozen=True)
@@ -3000,7 +2985,7 @@ class Delegator:
             if new:
                 return True, new
 
-            raise NotImplementedError
+            raise NotImplementedError("TODO")
             # > TODO: filter by minimum success rate, given large enough task history > task success is restricted to similar tasks that executor dealt with before
             # > need to be able to exclude bots as normal based on success rate—they might not be suitable for the task
 
@@ -3127,11 +3112,12 @@ class Delegator:
         self, task: Task, recent_events_size: int, auto_await: bool
     ) -> Executor:
         """Factory for creating a new executor for a task."""
-        if task.rank_limit and task.rank_limit > 0:
-            raise NotImplementedError(
-                "Unable to automatically create 0-ranked executor."
-            )
-        raise NotImplementedError
+        assert task.rank_limit is None or task.rank_limit > 0
+        # if task.rank_limit and task.rank_limit > 0:
+        #     raise NotImplementedError(
+        #         "Unable to automatically create 0-ranked executor."
+        #     )
+        raise NotImplementedError("TODO")
         # > TODO: make it so that executor selection reasoning is saved in orchestrator blueprint
 
         blueprint = OrchestratorBlueprint(
@@ -3173,7 +3159,7 @@ class Delegator:
         )
         if len(candidates) <= max_candidates:
             return candidates
-        raise NotImplementedError
+        raise NotImplementedError("TODO")
         # TODO: separate list for new vs old executors; take max 1/3 from new, max 2/3 from old, fill rest with remaining list
 
     def reorder_candidate_list(
@@ -3381,6 +3367,7 @@ class Swarm:
 # (run_next_curriculum_task)
 # ....
 # add placeholder bots > brainstorm placeholder bots > bot: chat with github repo > embedchain? > bot: tavily > bot: perplexity > utility function writer > generic autogen code executor (does not save code)
+# > need some way to handle execution environment (browser, jupyter notebook, etc.)
 # mvp task: buy something from amazon
 # ---MVP---
 # > bot: function writer (saved as function bots)
