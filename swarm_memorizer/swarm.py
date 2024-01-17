@@ -1,15 +1,5 @@
 """Structure for swarm agents."""
 
-import importlib.util
-import sys
-import shelve
-import asyncio
-from itertools import chain
-from enum import Enum
-from dataclasses import InitVar, dataclass, asdict, field, fields, _asdict_inner  # type: ignore
-from functools import cached_property
-from pathlib import Path
-from uuid import UUID
 from typing import (
     Generator,
     Iterable,
@@ -27,10 +17,22 @@ from typing import (
     Callable,
     Coroutine,
 )
+import sys
+import shelve
+import asyncio
+from itertools import chain
+from enum import Enum
+from dataclasses import InitVar, dataclass, asdict, field, fields
+from functools import cached_property
+from pathlib import Path
+from uuid import UUID
+import importlib.util
+import time
 
-from langchain.schema import SystemMessage, BaseMessage
 from ruamel.yaml import YAML, YAMLError
 from colorama import Fore
+from langchain.schema import SystemMessage, BaseMessage
+from llama_index.schema import TextNode
 
 from .config import configure_langchain_cache
 from .toolkit.models import super_creative_model, precise_model, query_model
@@ -162,7 +164,7 @@ class BotBlueprint:
         return asdict(self)
 
     @classmethod
-    def deserialize(cls, data: dict[Any, Any]) -> Self:
+    def from_serialized_data(cls, data: dict[Any, Any]) -> Self:
         """Deserialize the blueprint from a JSON-compatible dictionary."""
         return cls(
             name=data["name"],
@@ -626,6 +628,8 @@ class ExecutionOutcome:
 
     executor_id: RuntimeId
     blueprint_id: BlueprintId
+    validator_id: RuntimeId
+    validator_name: str
     success: bool
 
 
@@ -635,11 +639,14 @@ class ExecutionHistory:
 
     history: list[ExecutionOutcome] = field(default_factory=list)
 
-    def add(
-        self, executor_id: RuntimeId, blueprint_id: BlueprintId, success: bool
-    ) -> None:
+    # def add(
+    #     self, executor_id: RuntimeId, blueprint_id: BlueprintId, validator_id: RuntimeId, validator_name: str, success: bool
+    # ) -> None:
+    #     """Add an execution attempt to the history."""
+    #     self.history.append(ExecutionOutcome(executor_id, blueprint_id, validator_id, validator_name, success))
+    def add(self, execution_outcome: ExecutionOutcome) -> None:
         """Add an execution attempt to the history."""
-        self.history.append(ExecutionOutcome(executor_id, blueprint_id, success))
+        self.history.append(execution_outcome)
 
     @property
     def last_entry(self) -> ExecutionOutcome:
@@ -652,32 +659,131 @@ class ExecutionHistory:
 
 
 @dataclass
-class Task:
-    """Holds information about a task."""
+class TaskData:
+    """Data for a task."""
 
     description: TaskDescription
     owner_id: RuntimeId
     rank_limit: int | None
+    id: TaskId | None = None
+    name: str | None = None
+    execution_history: ExecutionHistory = field(default_factory=ExecutionHistory)
+
+    def serialize(self) -> dict[str, Any]:
+        """Serialize the task."""
+        return asdict(self)
+
+    @classmethod
+    def from_serialized_data(cls, data: dict[str, Any]) -> Self:
+        """Deserialize the task from a JSON-compatible dictionary."""
+        return cls(
+            id=TaskId(data["id"]),
+            description=TaskDescription(
+                information=data["description"]["information"],
+                definition_of_done=data["description"]["definition_of_done"],
+            ),
+            owner_id=RuntimeId(data["owner_id"]),
+            rank_limit=data["rank_limit"],
+            name=data["name"],
+            execution_history=ExecutionHistory(
+                history=[
+                    ExecutionOutcome(
+                        executor_id=RuntimeId(execution["executor_id"]),
+                        blueprint_id=BlueprintId(execution["blueprint_id"]),
+                        validator_id=RuntimeId(execution["validator_id"]),
+                        validator_name=execution["validator_name"],
+                        success=execution["success"],
+                    )
+                    for execution in data["execution_history"]["history"]
+                ]
+            ),
+        )
+
+    @property
+    def last_executor_blueprint_id(self) -> BlueprintId | None:
+        """Id of the last executor blueprint."""
+        assert self.execution_history
+        return self.execution_history.last_entry.blueprint_id
+
+
+@dataclass
+class Task:
+    """Holds information about a task."""
+
+    data: TaskData
+    # description: TaskDescription
+    # owner_id: RuntimeId
+    # rank_limit: int | None
     validator: WorkValidator
     id_generator: IdGenerator
     task_records_dir: Path
-    name: str | None = None
+    # name: str | None = None
     executor: Executor | None = None
-    notes: dict[str, str] = field(default_factory=dict)
     work_status: TaskWorkStatus = TaskWorkStatus.IDENTIFIED
-    execution_history: ExecutionHistory = field(default_factory=ExecutionHistory)
+    # execution_history: ExecutionHistory = field(default_factory=ExecutionHistory)
 
-    id: TaskId = field(init=False)
+    # id: TaskId = field(init=False)
 
     def __post_init__(self) -> None:
         """Post init."""
         self.task_records_dir.mkdir(parents=True, exist_ok=True)
-        self.id = generate_swarm_id(TaskId, self.id_generator)
+        self.data.id = self.data.id or generate_swarm_id(TaskId, self.id_generator)
 
-    # @cached_property
-    # def id(self) -> TaskId:
-    #     """Id of the task."""
-    #     return generate_swarm_id(TaskId, self.id_generator)
+    @property
+    def id(self) -> TaskId:
+        """Id of the task."""
+        assert self.data.id
+        return self.data.id
+
+    @property
+    def description(self) -> TaskDescription:
+        """Description of the task."""
+        return self.data.description
+
+    @description.setter
+    def description(self, value: TaskDescription) -> None:
+        """Set description of the task."""
+        self.data.description = value
+
+    @property
+    def owner_id(self) -> RuntimeId:
+        """Id of the task's owner."""
+        return self.data.owner_id
+
+    @owner_id.setter
+    def owner_id(self, value: RuntimeId) -> None:
+        """Set id of the task's owner."""
+        self.data.owner_id = value
+
+    @property
+    def rank_limit(self) -> int | None:
+        """Rank limit for the task."""
+        return self.data.rank_limit
+
+    @rank_limit.setter
+    def rank_limit(self, value: int | None) -> None:
+        """Set rank limit for the task."""
+        self.data.rank_limit = value
+
+    @property
+    def name(self) -> str | None:
+        """Name of the task."""
+        return self.data.name
+
+    @name.setter
+    def name(self, value: str | None) -> None:
+        """Set name of the task."""
+        self.data.name = value
+
+    @property
+    def execution_history(self) -> ExecutionHistory:
+        """Execution history for the task."""
+        return self.data.execution_history
+
+    @execution_history.setter
+    def execution_history(self, value: ExecutionHistory) -> None:
+        """Set execution history for the task."""
+        self.data.execution_history = value
 
     @property
     def definition_of_done(self) -> str | None:
@@ -719,13 +825,6 @@ class Task:
         return self.executor.id if self.executor else None
 
     @property
-    def last_executor_blueprint_id(self) -> BlueprintId | None:
-        """Id of the task's executor."""
-        assert self.execution_history
-        return self.execution_history.last_entry.blueprint_id
-        # return self.executor.blueprint.id if self.executor else None
-
-    @property
     def as_subtask_printout(self) -> str:
         """String representation of task as it would appear as a subtask."""
         if self.work_status == TaskWorkStatus.COMPLETED:
@@ -750,6 +849,18 @@ class Task:
             id=self.id,
             name=self.name,
             work_status=self.work_status.value,
+        )
+
+    @property
+    def current_execution_outcome(self) -> ExecutionOutcome:
+        """Add an execution outcome to the task."""
+        assert self.executor
+        return ExecutionOutcome(
+            executor_id=self.executor.id,
+            blueprint_id=self.executor.blueprint.id,
+            validator_id=self.validator.id,
+            validator_name=self.validator.name,
+            success=False,
         )
 
     def reformat_event_log(
@@ -822,48 +933,54 @@ class Task:
         """Location for serializing the task."""
         return self.task_records_dir / f"{self.id}.yaml"
 
-    def serialize(self) -> dict[str, Any]:
-        """Serialize the task."""
-        excluded_fields = {"executor", "id_generator"}
-        modified_fields = {"validator", "work_status", "task_records_dir"}
-        unchanged_fields = {
-            "id",
-            "description",
-            "owner_id",
-            "rank_limit",
-            "name",
-            "notes",
-            "execution_history",
-        }
-        assert (excluded_fields | modified_fields | unchanged_fields) == (
-            field_names := {field.name for field in fields(self)}
-        ), f"Field names don't match expected fields:\n{field_names=}\n{excluded_fields=}\n{modified_fields=}\n{unchanged_fields=}"
+    # def serialize(self) -> dict[str, Any]:
+    #     """Serialize the task."""
+    #     excluded_fields = {"executor", "id_generator", "task_records_dir"}
+    #     modified_fields = {"validator", "work_status"}
+    #     unchanged_fields = {
+    #         "id",
+    #         "description",
+    #         "owner_id",
+    #         "rank_limit",
+    #         "name",
+    #         "notes",
+    #         "execution_history",
+    #     }
+    #     assert (excluded_fields | modified_fields | unchanged_fields) == (
+    #         field_names := {field.name for field in fields(self)}
+    #     ), f"Field names don't match expected fields:\n{field_names=}\n{excluded_fields=}\n{modified_fields=}\n{unchanged_fields=}"
 
-        unchanged_data: dict[str, Any] = {
-            field.name: _asdict_inner(getattr(self, field.name), dict)
-            for field in fields(self)
-            if field.name in unchanged_fields
-        }
-        modified_data = {
-            "validator": {"name": self.validator.name, "id": self.validator.id},
-            "work_status": self.work_status.value,
-            "task_records_dir": str(self.task_records_dir),
-        }
-        return unchanged_data | modified_data
+    #     unchanged_data: dict[str, Any] = {
+    #         field.name: _asdict_inner(getattr(self, field.name), dict)
+    #         for field in fields(self)
+    #         if field.name in unchanged_fields
+    #     }
+    #     modified_data = {
+    #         "validator": {"name": self.validator.name, "id": self.validator.id},
+    #         "work_status": self.work_status.value,
+    #         # "task_records_dir": str(self.task_records_dir),
+    #     }
+    #     return unchanged_data | modified_data
 
     def save(self) -> None:
         """Save the task."""
-        serialized_data = self.serialize()
+        serialized_data = self.data.serialize()
         self.serialization_location.write_text(as_yaml_str(serialized_data))
+
+    def add_current_execution_outcome_to_history(self) -> None:
+        """Add an execution outcome to the task."""
+        self.execution_history.add(self.current_execution_outcome)
 
     def update_executor(self, executor: Executor) -> None:
         """Update the executor of the task."""
         if self.executor:
             self.executor.save_blueprint()
         self.executor = executor
-        self.execution_history.add(
-            executor_id=executor.id, blueprint_id=executor.blueprint.id, success=False
-        )
+        # self.execution_history.add(
+        #     # executor_id=executor.id, blueprint_id=executor.blueprint.id, validator_id=self.validator.id, validator_name=self.validator.name, success=False
+        #     self.current_execution_outcome
+        # )
+        self.add_current_execution_outcome_to_history()
 
     def wrap_execution(self, success: bool) -> None:
         """Wrap up execution of the task."""
@@ -872,6 +989,39 @@ class Task:
         self.executor = None
         self.execution_history.last_entry.success = success
         self.save()
+
+    @classmethod
+    def from_serialized_data(
+        cls,
+        data: dict[str, Any],
+        id_generator: IdGenerator,
+        task_records_dir: Path,
+    ) -> Self:
+        """Deserialize the task."""
+        raise NotImplementedError("TODO")
+        # TODO: this may never be needed
+        unchanged_fields = {"id", "description", "owner_id", "rank_limit", "name"}
+        modified_fields = {"validator", "work_status"}
+        excluded_fields = {"executor", "id_generator", "task_records_dir"}
+        assert (modified_fields | unchanged_fields) == (
+            field_names := set(data.keys())
+        ), f"Field names don't match expected fields:\n{field_names=}\n{excluded_fields=}\n{modified_fields=}\n{unchanged_fields=}"
+
+        unchanged_data = {
+            field.name: field.type(**data[field.name])
+            for field in fields(cls)
+            if field.name in unchanged_fields
+        }
+        modified_data = {
+            "validator": Human(),
+            "work_status": TaskWorkStatus(data["work_status"]),
+        }
+        return cls(
+            **unchanged_data,
+            **modified_data,
+            id_generator=id_generator,
+            task_records_dir=task_records_dir,
+        )
 
 
 @dataclass
@@ -2325,14 +2475,26 @@ class Orchestrator:
         )
         identified_subtask = extracted_results.identified_subtask
         subtask = Task(
-            name=identified_subtask,
-            owner_id=self.id,
-            rank_limit=None if self.rank_limit is None else self.rank_limit - 1,
-            description=TaskDescription(information=identified_subtask),
-            validator=self.task.validator,
+            data=TaskData(
+                name=identified_subtask,
+                owner_id=self.id,
+                rank_limit=None if self.rank_limit is None else self.rank_limit - 1,
+                description=TaskDescription(information=identified_subtask),
+            ),
             id_generator=self.id_generator,
             task_records_dir=self.task.task_records_dir,
+            validator=self.task.validator,
         )
+
+        # subtask = Task(
+        #     name=identified_subtask,
+        #     owner_id=self.id,
+        #     rank_limit=None if self.rank_limit is None else self.rank_limit - 1,
+        #     description=TaskDescription(information=identified_subtask),
+        #     validator=self.task.validator,
+        #     id_generator=self.id_generator,
+        #     task_records_dir=self.task.task_records_dir,
+        # )
         subtask_validation = self.validate_subtask_identification(identified_subtask)
         subtask_identification_event = Event(
             data=SubtaskIdentification(
@@ -2807,7 +2969,7 @@ class BlueprintSearchResult:
 
     blueprint: Blueprint
     is_new: bool
-    task_subpool: list[Task] = field(default_factory=list)
+    task_subpool: list[TaskData] = field(default_factory=list)
 
     @property
     def success_rate(self) -> float | None:
@@ -2875,14 +3037,41 @@ def find_similar_tasks(task: Task, task_pool: Iterable[Task]) -> list[Task]:
     raise NotImplementedError("TODO")
 
 
-def search_task_records(task: Task, task_records_dir: Path) -> list[Task]:
+def search_task_records(task: Task, task_records_dir: Path) -> list[TaskData]:
     """Search for similar tasks in the task records."""
-    if not list(task_records_dir.iterdir()):
+    start_time = time.time()
+    if not (task_record_files := list(task_records_dir.iterdir())):
         return []
+
+    nodes: list[TextNode] = []
+    for task_record_file in task_record_files:
+        old_task_data_dict = default_yaml.load(task_record_file)
+        old_task_data = TaskData.from_serialized_data(old_task_data_dict)
+        node = TextNode(
+            text=old_task_data.description.information,
+            metadata=old_task_data_dict,  # type: ignore
+        )
+        nodes.append(node)
+
+    breakpoint()
+    # VectorStoreIndex([node], storage_context=storage_context)
+    # index.insert_nodes(memory_nodes)
+    # create nodes
+    breakpoint()
+    # > add nodes to index
+    # create llamaindex retriever
+    breakpoint()
+    # > retriever must base retrieval on task info text only
+    # > retriever must retrieve all relevant results without bound
+    breakpoint()
+    if time.time() - start_time > 3:
+        raise NotImplementedError("TODO")
+        # > TODO: need more efficient system to retrieve tasks
     raise NotImplementedError("TODO")
+    # > add default id generator that uses random uuid as namespace
 
 
-def rerank_tasks(task: Task, similar_tasks: list[Task]) -> list[Task]:
+def rerank_tasks(task: Task, similar_tasks: list[TaskData]) -> list[TaskData]:
     """Rerank similar tasks based on task similarity."""
     raise NotImplementedError("TODO")
 
@@ -2902,7 +3091,7 @@ def load_blueprint(blueprint_path: Path) -> Blueprint:
             f"Invalid role for blueprint: {blueprint_data['role']}"
         ) from error
     if role == Role.BOT:
-        blueprint = BotBlueprint.deserialize(blueprint_data)
+        blueprint = BotBlueprint.from_serialized_data(blueprint_data)
         assert blueprint.description, "Blueprint description cannot be empty."
         return blueprint
     raise NotImplementedError("TODO")
@@ -2920,7 +3109,7 @@ def load_blueprints(executors_dir: Path) -> Iterable[Blueprint]:
 
 
 def is_new(
-    blueprint: Blueprint, similar_tasks: Sequence[Task], task_history_limit: int
+    blueprint: Blueprint, similar_tasks: Sequence[TaskData], task_history_limit: int
 ) -> bool:
     """Check if a blueprint is new."""
     if not similar_tasks:
@@ -2967,7 +3156,9 @@ class Delegator:
         similar_tasks = search_task_records(task, self.task_records_dir)
         if len(similar_tasks) > self.task_search_rerank_threshold:
             similar_tasks = rerank_tasks(task, similar_tasks)
-        past_blueprint_ids = [task.last_executor_blueprint_id for task in similar_tasks]
+        past_blueprint_ids = [
+            task_data.last_executor_blueprint_id for task_data in similar_tasks
+        ]
 
         def check_blueprint(blueprint: Blueprint) -> tuple[bool, bool]:
             """Check if a blueprint is a candidate for the task."""
@@ -3201,11 +3392,12 @@ class Delegator:
                 task.rank_limit = candidate.rank
                 return DelegationSuccessful(True)
 
-            task.execution_history.add(
-                executor_id=candidate.id,
-                blueprint_id=candidate.blueprint.id,
-                success=False,
-            )
+            # task.execution_history.add(
+            # executor_id=candidate.id,
+            # blueprint_id=candidate.blueprint.id,
+            # success=False,
+            # )
+            task.add_current_execution_outcome_to_history()
         return DelegationSuccessful(False)
 
     def assign_executor(
@@ -3323,14 +3515,25 @@ class Swarm:
 
     async def run(self, message: str) -> Reply:
         """Run the swarm with a message, and a way to continue the conversation. Rerunning this method starts a new conversation."""
+        # task = Task(
+        #     description=TaskDescription(information=message),
+        #     owner_id=self.id,
+        #     rank_limit=None,
+        #     validator=self.validator,
+        #     id_generator=self.id_generator,
+        #     task_records_dir=self.task_records_dir,
+        # )
         task = Task(
-            description=TaskDescription(information=message),
-            owner_id=self.id,
-            rank_limit=None,
+            data=TaskData(
+                description=TaskDescription(information=message),
+                owner_id=self.id,
+                rank_limit=None,
+            ),
             validator=self.validator,
             id_generator=self.id_generator,
             task_records_dir=self.task_records_dir,
         )
+
         self.delegator.assign_executor(task, self.recent_events_size, self.auto_wait)
         assert task.executor is not None, "Task executor assignment failed."
         task.work_status = TaskWorkStatus.IN_PROGRESS
@@ -3362,8 +3565,6 @@ class Swarm:
         )
 
 
-# ....
-# > printout of done tasks need to include artifacts
 # (run_next_curriculum_task)
 # ....
 # add placeholder bots > brainstorm placeholder bots > bot: chat with github repo > embedchain? > bot: tavily > bot: perplexity > utility function writer > generic autogen code executor (does not save code)
