@@ -32,6 +32,7 @@ import time
 from ruamel.yaml import YAML, YAMLError
 from colorama import Fore
 from langchain.schema import SystemMessage, BaseMessage
+from llama_index import VectorStoreIndex
 from llama_index.schema import TextNode
 
 from .config import configure_langchain_cache
@@ -3044,31 +3045,37 @@ def search_task_records(task: Task, task_records_dir: Path) -> list[TaskData]:
         return []
 
     nodes: list[TextNode] = []
+    task_data_list: list[TaskData] = []
     for task_record_file in task_record_files:
-        old_task_data_dict = default_yaml.load(task_record_file)
+        old_task_data_dict: dict[str, Any] = default_yaml.load(task_record_file)
         old_task_data = TaskData.from_serialized_data(old_task_data_dict)
         node = TextNode(
             text=old_task_data.description.information,
             metadata=old_task_data_dict,  # type: ignore
+            excluded_embed_metadata_keys=list(old_task_data_dict.keys()),
         )
         nodes.append(node)
-
-    breakpoint()
-    # VectorStoreIndex([node], storage_context=storage_context)
-    # index.insert_nodes(memory_nodes)
-    # create nodes
-    breakpoint()
-    # > add nodes to index
-    # create llamaindex retriever
-    breakpoint()
-    # > retriever must base retrieval on task info text only
-    # > retriever must retrieve all relevant results without bound
-    breakpoint()
+        task_data_list.append(old_task_data)
+    index = VectorStoreIndex(nodes)
+    results = (
+        index.as_query_engine(similarity_top_k=1000, response_mode="no_text")
+        .query(task.information)
+        .source_nodes
+    )
+    similarity_cutoff = 0.8
+    results = [
+        node.metadata["id"]
+        for node in results
+        if node.score and node.score > similarity_cutoff
+    ]
+    matching_task_data = [
+        task_data for task_data in task_data_list if str(task_data.id) in results
+    ]
     if time.time() - start_time > 3:
         raise NotImplementedError("TODO")
         # > TODO: need more efficient system to retrieve tasks
-    raise NotImplementedError("TODO")
-    # > add default id generator that uses random uuid as namespace
+
+    return matching_task_data
 
 
 def rerank_tasks(task: Task, similar_tasks: list[TaskData]) -> list[TaskData]:
@@ -3565,6 +3572,7 @@ class Swarm:
         )
 
 
+# > add default id generator that uses random uuid as namespace
 # (run_next_curriculum_task)
 # ....
 # add placeholder bots > brainstorm placeholder bots > bot: chat with github repo > embedchain? > bot: tavily > bot: perplexity > utility function writer > generic autogen code executor (does not save code)
