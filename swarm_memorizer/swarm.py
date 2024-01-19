@@ -1300,7 +1300,6 @@ class ReasoningGenerator:
             concepts=EXECUTOR_SELECTION_CONCEPTS,
             EXECUTOR=Concept.EXECUTOR.value,
         )
-
         request = """
         ## REQUEST FOR YOU:
         Provide a step-by-step, robust reasoning process for the delegator to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
@@ -1309,7 +1308,7 @@ class ReasoningGenerator:
         - As an initial part of the reasoning, the delegator must figure out whether to lean towards exploration using NEW {EXECUTOR} candidates or exploitation using non-NEW {EXECUTOR} candidates. This of course depends on how good the non-NEW {EXECUTOR} candidates are.
         - The delegator does _not_ have to select _any_ of the candidates, if it deems none of them to be suitable for the task.
         - The reasoning process should be written in second person and be around 5-7 steps, though you can add substeps within a step (a, b, c, etc.) if it is complex.
-        - The reasoning steps can refer to the results of previous steps, and it may be effective to build up the orchestrator's mental context step by step, starting from basic information available, similar to writing a procedural script for a program but in natural language instead of code.
+        - The reasoning steps can refer to the results of previous steps, and it may be effective to build up the delegator's mental context step by step, starting from basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but in natural language instead of code.
         - The final decision of which {EXECUTOR} CANDIDATE to use (or to not use any at all) must be done on the last step only, after considering all the information available from the previous steps.
 
         {output_instructions}
@@ -2986,8 +2985,9 @@ class BlueprintSearchResult:
     @property
     def success_rate(self) -> float | None:
         """Success rate of the blueprint given the tasks."""
-        if not self.task_subpool:
+        if not self.task_subpool or self.is_new:
             return None
+
         raise NotImplementedError("TODO")
         # success_rate = (
         #     num_success := sum(task.success(blueprint_id=blueprint.id) for task in self.task_pool)
@@ -3001,7 +3001,7 @@ class BlueprintSearchResult:
     @property
     def completion_time(self) -> float | None:
         """Completion time of the blueprint given the tasks."""
-        if not self.task_subpool:
+        if not self.task_subpool or self.is_new:
             return None
         raise NotImplementedError("TODO")
         # completion_time = (
@@ -3012,7 +3012,7 @@ class BlueprintSearchResult:
     @property
     def scaled_completion_time(self) -> float | None:
         """Scaled completion time of the blueprint given the tasks."""
-        if not self.task_subpool:
+        if not self.task_subpool or self.is_new:
             return None
         raise NotImplementedError("TODO")
         # scaled_completion_time = completion_time / (1 + completion_time)
@@ -3020,8 +3020,12 @@ class BlueprintSearchResult:
     @property
     def rating(self) -> float | None:
         """Rating of the blueprint given the tasks."""
-        if not self.task_subpool:
+        if not self.task_subpool or self.is_new:
             return None
+
+        if self.success_rate == 0:
+            return 0
+
         raise NotImplementedError("TODO")
         # rating = success_rate / (1 + scaled_completion_time)
 
@@ -3364,17 +3368,18 @@ class Delegator:
         max_candidates: int,
     ) -> list[BlueprintSearchResult]:
         """Find the top candidates."""
-        candidates = sorted(
-            candidates,
-            key=lambda result: float("inf")
-            if (rating := result.rating is None)
-            else rating,
-            reverse=True,
-        )
         if len(candidates) <= max_candidates:
-            return candidates
+            return list(candidates)
+
         raise NotImplementedError("TODO")
         # TODO: separate list for new vs old executors; take max 1/3 from new, max 2/3 from old, fill rest with remaining list
+        # candidates = sorted(
+        #     candidates,
+        #     key=lambda result: float("inf")
+        #     if (rating := result.rating is None)
+        #     else rating,
+        #     reverse=True,
+        # )
 
     def reorder_candidate_list(
         self,
