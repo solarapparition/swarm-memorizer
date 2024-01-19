@@ -706,6 +706,17 @@ class TaskData:
         assert self.execution_history
         return self.execution_history.last_entry.blueprint_id
 
+    @property
+    def execution_successful(self) -> bool:
+        """Whether the last execution was successful."""
+        assert self.execution_history
+        return self.execution_history.last_entry.success
+
+    @property
+    def all_executor_blueprint_ids(self) -> list[BlueprintId]:
+        """Ids of all executor blueprints."""
+        return [outcome.blueprint_id for outcome in self.execution_history.history]
+
 
 @dataclass
 class Task:
@@ -1209,7 +1220,7 @@ class ReasoningNotes(Enum):
     TERM_REFERENCES = """The orchestrator requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "MAIN TASK" or "KNOWLEDGE section"); however, only use capitalization to refer to specific terms—don't use capitalization as emphasis, as that could be confusing to the orchestrator."""
     SUBTASK_STATUS_INFO = f"Typically, subtasks that are {TaskWorkStatus.COMPLETED.value}, {TaskWorkStatus.CANCELLED.value}, {TaskWorkStatus.IN_PROGRESS.value}, or {TaskWorkStatus.IN_VALIDATION.value} do not need immediate attention unless the orchestrator discovers information that changes the status of the subtask. Subtasks that are {TaskWorkStatus.BLOCKED.value} will need action from the orchestrator to start or resume execution respectively."
     STEPS_RESTRICTIONS = "The reasoning process should be written in second person and be around 5-7 steps, though you can add substeps within a step (a, b, c, etc.) if it is complex."
-    PROCEDURAL_SCRIPTING = "The reasoning steps can refer to the results of previous steps, and it may be effective to build up the orchestrator's mental context step by step, starting from basic information available, similar to writing a procedural script for a program but in natural language instead of code."
+    PROCEDURAL_SCRIPTING = "The reasoning steps can refer to the results of previous steps, and it may be effective to build up the orchestrator's mental context step by step, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but in natural language instead of code."
 
 
 REASONING_OUTPUT_INSTRUCTIONS = """
@@ -3116,15 +3127,20 @@ def load_blueprints(executors_dir: Path) -> Iterable[Blueprint]:
 
 
 def is_new(
-    blueprint: Blueprint, similar_tasks: Sequence[TaskData], task_history_limit: int
+    blueprint: Blueprint, similar_task_data: Sequence[TaskData], task_history_limit: int
 ) -> bool:
     """Check if a blueprint is new."""
-    if not similar_tasks:
+    if not similar_task_data:
         return True
-    raise NotImplementedError("TODO")
-    # > TODO: update so that we don't need task history to be stored in blueprint
 
-    # return len(blueprint.task_history) <= task_history_limit
+    blueprint_ids = [
+        task_data.all_executor_blueprint_ids for task_data in similar_task_data
+    ]
+    num_tasks_containing_blueprint = sum(
+        blueprint.id in task_execution_blueprint_ids
+        for task_execution_blueprint_ids in blueprint_ids
+    )
+    return num_tasks_containing_blueprint <= task_history_limit
 
 
 def load_blueprint_tasks(
@@ -3572,8 +3588,7 @@ class Swarm:
         )
 
 
-# > add default id generator that uses random uuid as namespace
-# (run_next_curriculum_task)
+# (run_curriculum_task)
 # ....
 # add placeholder bots > brainstorm placeholder bots > bot: chat with github repo > embedchain? > bot: tavily > bot: perplexity > utility function writer > generic autogen code executor (does not save code)
 # > need some way to handle execution environment (browser, jupyter notebook, etc.)
