@@ -3593,10 +3593,11 @@ class Swarm:
         )
 
 
-# (run_curriculum_task)
+# (add_placeholder_bot) > brainstorm placeholder bots > bot: chat with github repo > embedchain? > bot: tavily > bot: perplexity > utility function writer > generic autogen code executor (does not save code)
 # ....
-# add placeholder bots > brainstorm placeholder bots > bot: chat with github repo > embedchain? > bot: tavily > bot: perplexity > utility function writer > generic autogen code executor (does not save code)
+# > (next_curriculum_task)
 # > need some way to handle execution environment (browser, jupyter notebook, etc.)
+# > add role parametrization for reasoning bullets and consolidate with delegator
 # mvp task: buy something from amazon
 # ---MVP---
 # > bot: function writer (saved as function bots)
@@ -3643,16 +3644,14 @@ def test_human_cache_response():
     cache_path.unlink(missing_ok=True)
 
 
-async def run_test_task(task: str) -> None:
+async def run_test_task(task: str, id_namespace: str) -> None:
     """Run a test task."""
     with shelve.open(".data/cache/human_reply", writeback=True) as cache:
         human_tester = Human(_reply_cache=cache)
         swarm = Swarm(
             files_dir=Path("test/swarm"),
             validator=human_tester,
-            id_generator=DefaultIdGenerator(
-                namespace=UUID("6bcf7dd4-8e29-58f6-bf5f-7566d4108df4"), seed="test"
-            ),
+            id_generator=DefaultIdGenerator(namespace=UUID(id_namespace), seed="test"),
         )
         reply = (result := await swarm.run(task)).content
         while (human_reply := human_tester.advise(reply)) and result.continue_func:
@@ -3674,22 +3673,22 @@ curriculum_test_tasks = [
 ]
 
 
-async def test_orchestrator() -> None:
-    """Run an example task that's likely to make use of all orchestrator actions."""
-    task = "Create an OpenAI assistant agent."
-    await run_test_task(task)
+# async def test_orchestrator() -> None:
+#     """Run an example task that's likely to make use of all orchestrator actions."""
+#     task = "Create an OpenAI assistant agent."
+#     await run_test_task(task)
 
 
 async def test_curriculum_task_1() -> None:
     """Curriculum task 1."""
     task = curriculum_test_tasks[0]
-    await run_test_task(task)
+    await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df4")
 
 
 async def test_curriculum_task_2() -> None:
     """Curriculum task 1."""
     task = curriculum_test_tasks[1]
-    await run_test_task(task)
+    await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df5")
 
 
 def test() -> None:
