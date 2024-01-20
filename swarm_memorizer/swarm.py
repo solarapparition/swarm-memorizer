@@ -1,5 +1,6 @@
 """Structure for swarm agents."""
 
+from textwrap import indent
 from typing import (
     Generator,
     Iterable,
@@ -660,6 +661,18 @@ class ExecutionHistory:
 
 
 @dataclass
+class ArtifactEntry:
+    """Entry for an artifact."""
+
+    location: str
+    description: str
+
+    def __str__(self) -> str:
+        """String representation of the artifact."""
+        return f"{self.location}: {self.description}"
+
+
+@dataclass
 class TaskData:
     """Data for a task."""
 
@@ -669,6 +682,7 @@ class TaskData:
     id: TaskId | None = None
     name: str | None = None
     execution_history: ExecutionHistory = field(default_factory=ExecutionHistory)
+    artifacts: list[ArtifactEntry] = field(default_factory=list)
 
     def serialize(self) -> dict[str, Any]:
         """Serialize the task."""
@@ -798,6 +812,16 @@ class Task:
         self.data.execution_history = value
 
     @property
+    def artifacts(self) -> list[ArtifactEntry]:
+        """Artifacts for the task."""
+        return self.data.artifacts
+
+    @artifacts.setter
+    def artifacts(self, value: list[ArtifactEntry]) -> None:
+        """Set artifacts for the task."""
+        self.data.artifacts = value
+
+    @property
     def definition_of_done(self) -> str | None:
         """Definition of done for the task."""
         return self.description.definition_of_done
@@ -837,11 +861,29 @@ class Task:
         return self.executor.id if self.executor else None
 
     @property
+    def artifacts_printout(self) -> str:
+        """String representation of the artifacts."""
+        return "\n".join(f"- {str(artifact)}" for artifact in self.artifacts) or NONE
+
+    @property
     def as_subtask_printout(self) -> str:
         """String representation of task as it would appear as a subtask."""
+        assert self.name
         if self.work_status == TaskWorkStatus.COMPLETED:
-            raise NotImplementedError("TODO")
-            # > TODO: completed subtasks need to display artifacts # needs to be done in execute_and_validate
+            template = """
+            - Id: {id}
+              Name: {name}
+              Artifacts:
+            {artifacts}
+            """
+
+            # TODO: completed subtasks need to display artifacts # needs to be done in execute_and_validate
+            breakpoint()
+            return dedent_and_strip(template).format(
+                id=self.id,
+                name=self.name,
+                artifacts=indent(self.artifacts_printout, "  "),
+            )
 
         if self.work_status in {TaskWorkStatus.COMPLETED, TaskWorkStatus.CANCELLED}:
             template = """
@@ -1000,6 +1042,12 @@ class Task:
         self.executor.save_blueprint()
         self.executor = None
         self.execution_history.last_entry.success = success
+
+        def extract_artifacts(event_log: EventLog) -> list[ArtifactEntry]:
+            """Extract artifacts from the event log."""
+            breakpoint()
+
+        self.artifacts = extract_artifacts(self.event_log.messages)
         self.save()
 
     @classmethod
@@ -1146,7 +1194,7 @@ class ActionDecision:
     """Decision for an action."""
 
     action_choice: str
-    justifications: str
+    comment: str
     additional_thoughts: str | None = None
 
     @cached_property
@@ -1636,12 +1684,13 @@ def validate_artifact_mentions(
 
     You do _not_ need to validate whether the ARTIFACT exists or not, just that the EXECUTOR was specific enough in their communications to allow someone to attempt to locate the ARTIFACT.
 
-    In your reply, you must include output from all steps of the reasoning process, in this block format:
+    In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
     ```start_of_reasoning_output
     1. {step_1_output}
     2. {step_2_output}
     3. [... etc.]
     ```end_of_reasoning_output
+
     After this block, you must output the validation result in this format:
     ```start_of_validation_output
     comment: |-
@@ -1990,7 +2039,7 @@ class Orchestrator:
         - `{IDENTIFY_NEW_SUBTASK}`: identify a new subtask from the MAIN TASK that is not yet on the existing subtask list. This adds the subtask to the list and begins a discussion thread with the subtask's executor to start work on the task.
         - `{START_DISCUSSION_FOR_SUBTASK}: "{{id}}"`: open a discussion thread with a subtask's executor, which allows you to exchange information about the subtask. {{id}} must be replaced with the id of the subtask to be discussed.
         - `{MESSAGE_TASK_OWNER}: "{{message}}"`: send a message to the MAIN TASK OWNER to gather or clarify information about the task. {{message}} must be replaced with the message you want to send.
-        - `{REPORT_MAIN_TASK_COMPLETE}`: report the main task as complete.
+        - `{REPORT_MAIN_TASK_COMPLETE}`: report the MAIN TASK as complete. This can _only_ be done when all subtasks of the MAIN TASK have been completed by executors.
         - `{WAIT}`: do nothing until the next event from an executor or the MAIN TASK OWNER.
         """
         return dedent_and_strip(
@@ -2013,16 +2062,19 @@ class Orchestrator:
         {action_choice_core}
         ```end_of_reasoning_steps
 
-        In your reply, you must include output from all steps of the reasoning process, in this block format:
+        In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
         ```start_of_action_reasoning_output
         1. {{step_1_output}}
         2. {{step_2_output}}
         3. [... etc.]
+
+        **Important:** The {MAIN_TASK} cannot be considered complete until all its subtasks have been completed by executors. No matter how simple the {MAIN_TASK} may seem, it must be broken down into subtasks.
         ```end_of_action_reasoning_output
+
         After this block, you must include the action you have decided on, in this format:
         ```start_of_action_choice_output
-        justifications: |-
-          {{justifications}}
+        comment: |-
+          {{comment}}
         action_choice: |-
           {{action_choice}} 
         ```end_of_action_choice_output
@@ -2096,6 +2148,7 @@ class Orchestrator:
             )
         return self.action_reasoning_template.format(
             action_choice_core=self.blueprint.reasoning.default_action_choice,
+            MAIN_TASK=Concept.MAIN_TASK.value,
             ORCHESTRATOR_ACTIONS=Concept.ORCHESTRATOR_ACTIONS.value,
         )
 
@@ -2222,6 +2275,7 @@ class Orchestrator:
             )
         return self.action_reasoning_template.format(
             action_choice_core=self.blueprint.reasoning.subtask_action_choice,
+            MAIN_TASK=Concept.MAIN_TASK.value,
             ORCHESTRATOR_ACTIONS=Concept.ORCHESTRATOR_ACTIONS.value,
         )
 
@@ -2314,12 +2368,13 @@ class Orchestrator:
         {subtask_extraction_core}
         ```end_of_reasoning_steps
 
-        In your reply, you must include output from all steps of the reasoning process, in this block format:
+        In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
         ```start_of_reasoning_output
         1. {{step_1_output}}
         2. {{step_2_output}}
         3. [... etc.]
         ```end_of_reasoning_output
+
         After this block, you must include the subtask you have identified for its executor. To the executor, the identified subtask becomes its own MAIN TASK, and you are the MAIN TASK OWNER of the subtask. The executor knows nothing about your original MAIN TASK. The subtask must be described in the following format:
         ```start_of_subtask_identification_output
         identified_subtask: |- # high-level, single-sentence description of the subtask
@@ -2462,6 +2517,15 @@ class Orchestrator:
             id=generate_swarm_id(EventId, self.id_generator),
         )
 
+    @property
+    def executor_selection_reasoning(self) -> str:
+        """Reasoning for selecting an executor."""
+        if not self.blueprint.reasoning.executor_selection:
+            self.blueprint.reasoning.executor_selection = (
+                self.reasoning_generator.generate_executor_selection_reasoning()
+            )
+        return self.blueprint.reasoning.executor_selection
+
     def identify_new_subtask(self) -> ActionResult:
         """Identify a new subtask."""
         messages = [
@@ -2535,7 +2599,12 @@ class Orchestrator:
                 new_events=[subtask_identification_event],
                 task_completed=False,
             )
-        self.delegator.assign_executor(subtask, self.recent_events_size, self.auto_wait)
+        self.delegator.assign_executor(
+            subtask,
+            self.recent_events_size,
+            self.auto_wait,
+            self.executor_selection_reasoning,
+        )
         assert subtask.executor is not None, "Task executor assignment failed."
         self.add_subtask(subtask)
         subtask_focus_event = self.focus_subtask(subtask)
@@ -3083,14 +3152,11 @@ def search_task_records(task: Task, task_records_dir: Path) -> list[TaskData]:
         for node in results
         if node.score and node.score > similarity_cutoff
     ]
-    matching_task_data = [
-        task_data for task_data in task_data_list if str(task_data.id) in results
-    ]
     if time.time() - start_time > 3:
         raise NotImplementedError("TODO")
         # > TODO: need more efficient system to retrieve tasks
 
-    return matching_task_data
+    return [task_data for task_data in task_data_list if str(task_data.id) in results]
 
 
 def rerank_tasks(task: Task, similar_tasks: list[TaskData]) -> list[TaskData]:
@@ -3166,12 +3232,22 @@ class Delegator:
     task_records_dir: Path
     task_search_rerank_threshold: int
     id_generator: IdGenerator
-    executor_selection_reasoning: str  # > TODO: this needs to be a property
+    _init_executor_selection_reasoning: str | None = None
 
     @cached_property
     def id(self) -> DelegatorId:
         """Id of the delegator."""
         return generate_swarm_id(DelegatorId, self.id_generator)
+
+    @cached_property
+    def executor_selection_reasoning(self) -> str:
+        """Reasoning for selecting an executor."""
+        raise NotImplementedError("TODO")
+        # > TODO: need to shift this to blueprint
+        return (
+            self._init_executor_selection_reasoning
+            or ReasoningGenerator.generate_executor_selection_reasoning()
+        )
 
     def search_blueprints(
         self,
@@ -3237,6 +3313,7 @@ class Delegator:
         self,
         candidates: list[BlueprintSearchResult],
         task: Task,
+        executor_selection_reasoning: str,
     ) -> BlueprintSearchResult | None:
         """Evaluate candidates for a task."""
         context = """
@@ -3273,9 +3350,11 @@ class Delegator:
         Use the following reasoning process to select the best {EXECUTOR} for the task:
         ```start_of_reasoning_steps
         {reasoning_steps}
+        
+        Remember that the task cannot be split among multiple {EXECUTOR}s; if no single {EXECUTOR} can complete the task, then the task must remain undelegated.
         ```end_of_reasoning_steps
 
-        In your reply, you must include output from all steps of the reasoning process, in this block format:
+        In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
         ```start_of_reasoning_output
         1. {{step_1_output}}
         2. {{step_2_output}}
@@ -3289,13 +3368,13 @@ class Delegator:
         executor_id: |-
           {{executor_id}}
         ```end_of_executor_choice
-        {{executor_id}} can be `{NONE}` if you decide that no {EXECUTOR} is suitable for the task.
+        {{executor_id}} can be `{NONE}` if you decide that no {EXECUTOR} is capable of performing the entire task end-to-end.
         Any additional comments or thoughts can be added before or after the output blocks.
         """
         request = dedent_and_strip(request).format(
             EXECUTOR=Concept.EXECUTOR.value,
             NONE=NONE,
-            reasoning_steps=self.executor_selection_reasoning,
+            reasoning_steps=executor_selection_reasoning,
         )
         messages = [
             SystemMessage(content=context),
@@ -3331,12 +3410,6 @@ class Delegator:
     ) -> Executor:
         """Factory for creating a new executor for a task."""
         assert task.rank_limit is None or task.rank_limit > 0
-        # if task.rank_limit and task.rank_limit > 0:
-        #     raise NotImplementedError(
-        #         "Unable to automatically create 0-ranked executor."
-        #     )
-        raise NotImplementedError("TODO")
-        # > TODO: make it so that executor selection reasoning is saved in orchestrator blueprint
 
         blueprint = OrchestratorBlueprint(
             name=f"orchestrator_{task.id}",
@@ -3353,7 +3426,6 @@ class Delegator:
             task_records_dir=self.task_records_dir,
             task_search_rerank_threshold=self.task_search_rerank_threshold,
             id_generator=self.id_generator,
-            # executor_selection_reasoning=ReasoningGenerator.generate_executor_selection_reasoning(),
         )
         return Orchestrator(
             blueprint=blueprint,
@@ -3361,6 +3433,7 @@ class Delegator:
             files_parent_dir=self.executors_dir,
             delegator=delegator,
         )
+        # TODO: make it so that executor selection reasoning is saved in orchestrator blueprint
 
     def find_top_candidates(
         self,
@@ -3385,6 +3458,7 @@ class Delegator:
         self,
         candidates: list[BlueprintSearchResult],
         task: Task,
+        executor_selection_reasoning: str,
     ) -> Generator[BlueprintSearchResult, None, None]:
         """Reorder the candidate list."""
         chosen: set[BlueprintId] = set()
@@ -3395,7 +3469,9 @@ class Delegator:
                 if candidate.blueprint.id not in chosen
             ]
             if not (
-                next_candidate := self.choose_next_executor(available_candidates, task)
+                next_candidate := self.choose_next_executor(
+                    available_candidates, task, executor_selection_reasoning
+                )
             ):
                 return
             chosen.add(next_candidate.blueprint.id)
@@ -3404,6 +3480,7 @@ class Delegator:
     def delegate(
         self,
         task: Task,
+        executor_selection_reasoning: str,
         max_candidates: int = 10,
     ) -> DelegationSuccessful:
         """Find an executor to delegate the task to."""
@@ -3411,7 +3488,9 @@ class Delegator:
         if not candidates:
             return DelegationSuccessful(False)
         candidates = self.find_top_candidates(candidates, max_candidates)
-        for candidate in self.reorder_candidate_list(candidates, task):
+        for candidate in self.reorder_candidate_list(
+            candidates, task, executor_selection_reasoning
+        ):
             candidate = load_executor(
                 candidate.blueprint, task, self.executors_dir / candidate.blueprint.id
             )
@@ -3429,10 +3508,14 @@ class Delegator:
         return DelegationSuccessful(False)
 
     def assign_executor(
-        self, task: Task, recent_events_size: int, auto_await: bool
+        self,
+        task: Task,
+        recent_events_size: int,
+        auto_await: bool,
+        executor_selection_reasoning: str,
     ) -> None:
         """Assign an existing or new executor to a task."""
-        delegation_successful = self.delegate(task)
+        delegation_successful = self.delegate(task, executor_selection_reasoning)
         # blueprints represent known capabilities; so, failure means we must create a new executor
         if not delegation_successful:
             task.update_executor(
@@ -3528,7 +3611,7 @@ class Swarm:
             task_records_dir=self.task_records_dir,
             task_search_rerank_threshold=self.task_search_rerank_threshold,
             id_generator=self.id_generator,
-            executor_selection_reasoning=self.executor_selection_reasoning,
+            _init_executor_selection_reasoning=self.executor_selection_reasoning,
         )
 
     @cached_property
@@ -3562,7 +3645,12 @@ class Swarm:
             task_records_dir=self.task_records_dir,
         )
 
-        self.delegator.assign_executor(task, self.recent_events_size, self.auto_wait)
+        self.delegator.assign_executor(
+            task,
+            self.recent_events_size,
+            self.auto_wait,
+            self.executor_selection_reasoning,
+        )
         assert task.executor is not None, "Task executor assignment failed."
         task.work_status = TaskWorkStatus.IN_PROGRESS
         executor_report = await execute_and_validate(task)
@@ -3593,14 +3681,17 @@ class Swarm:
         )
 
 
-# (add_placeholder_bot) > brainstorm placeholder bots > bot: chat with github repo > embedchain? > bot: tavily > bot: perplexity > utility function writer > generic autogen code executor (does not save code)
+# curriculum task 2: trivial compositional task: 3 + 4 * 5  # to test basic end-to-end orchestrator functionality
 # ....
+# > note: can use # comments in yaml output
+# > factor out reasoning output block # search: "steps of the reasoning process"
 # > (next_curriculum_task)
+# > (add_placeholder_bot) > brainstorm placeholder bots > bot: chat with github repo > embedchain? > bot: tavily > bot: perplexity > utility function writer > generic autogen code executor (does not save code)
 # > need some way to handle execution environment (browser, jupyter notebook, etc.)
+# > bot: function writer (saved as function bots)
 # > add role parametrization for reasoning bullets and consolidate with delegator
 # mvp task: buy something from amazon
 # ---MVP---
-# > bot: function writer (saved as function bots)
 # > factor out validations into separate variable
 # > unify validator functionality; validator protocol should hold specific functions to validate specific aspects of a task
 # > estimate rank of task based on previous successful tasks
@@ -3660,6 +3751,7 @@ async def run_test_task(task: str, id_namespace: str) -> None:
 
 curriculum_test_tasks = [
     "Write 'Hello, World!' to a file.",
+    "Calculate 3 + 4 * 5.",
     "Create a mock timestamp generator that advances by 1 second each time it is called.",
     # "Create a mock timestamp generator that advances by 1 second each time it is called, and run it 5 times.",
     # > basic coding task case: 20 lines or less of base python > coding bot will be equipped with function it wrote
@@ -3695,8 +3787,8 @@ def test() -> None:
     """Run tests."""
     configure_langchain_cache()
     # asyncio.run(test_orchestrator())
-    asyncio.run(test_curriculum_task_1())
-    # asyncio.run(test_curriculum_task_2())
+    # asyncio.run(test_curriculum_task_1())
+    asyncio.run(test_curriculum_task_2())
 
 
 if __name__ == "__main__":
