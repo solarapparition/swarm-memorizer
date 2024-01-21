@@ -97,11 +97,25 @@ def generate_swarm_id(
     return id_type(f"{str(id_generator())}")
 
 
-class ValidationResult(NamedTuple):
+@dataclass
+class Artifact:
+    """Entry for an artifact."""
+
+    location: str
+    description: str
+
+    def __str__(self) -> str:
+        """String representation of the artifact."""
+        return f"{self.location}: {self.description}"
+
+
+@dataclass
+class ValidationResult:
     """Validation of work done by agent."""
 
     valid: bool
     feedback: str
+    artifacts: list[Artifact] = field(default_factory=list)
 
 
 class Role(Enum):
@@ -661,18 +675,6 @@ class ExecutionHistory:
 
 
 @dataclass
-class ArtifactEntry:
-    """Entry for an artifact."""
-
-    location: str
-    description: str
-
-    def __str__(self) -> str:
-        """String representation of the artifact."""
-        return f"{self.location}: {self.description}"
-
-
-@dataclass
 class TaskData:
     """Data for a task."""
 
@@ -682,7 +684,7 @@ class TaskData:
     id: TaskId | None = None
     name: str | None = None
     execution_history: ExecutionHistory = field(default_factory=ExecutionHistory)
-    artifacts: list[ArtifactEntry] = field(default_factory=list)
+    artifacts: list[Artifact] = field(default_factory=list)
 
     def serialize(self) -> dict[str, Any]:
         """Serialize the task."""
@@ -812,12 +814,12 @@ class Task:
         self.data.execution_history = value
 
     @property
-    def artifacts(self) -> list[ArtifactEntry]:
+    def artifacts(self) -> list[Artifact]:
         """Artifacts for the task."""
         return self.data.artifacts
 
     @artifacts.setter
-    def artifacts(self, value: list[ArtifactEntry]) -> None:
+    def artifacts(self, value: list[Artifact]) -> None:
         """Set artifacts for the task."""
         self.data.artifacts = value
 
@@ -856,9 +858,10 @@ class Task:
         return self.as_main_task_printout
 
     @property
-    def executor_id(self) -> RuntimeId | None:
+    def executor_id(self) -> RuntimeId:
         """Id of the task's executor."""
-        return self.executor.id if self.executor else None
+        assert self.executor
+        return self.executor.id
 
     @property
     def artifacts_printout(self) -> str:
@@ -876,9 +879,6 @@ class Task:
               Artifacts:
             {artifacts}
             """
-
-            # TODO: completed subtasks need to display artifacts # needs to be done in execute_and_validate
-            breakpoint()
             return dedent_and_strip(template).format(
                 id=self.id,
                 name=self.name,
@@ -917,13 +917,17 @@ class Task:
             success=False,
         )
 
+    @property
+    def closed(self) -> bool:
+        """Whether the task is closed."""
+        return self.work_status in {TaskWorkStatus.COMPLETED, TaskWorkStatus.CANCELLED}
+
     def reformat_event_log(
         self,
         event_log: EventLog,
         pov: Literal[Concept.EXECUTOR, Concept.MAIN_TASK_OWNER, Concept.OBJECTIVE_POV],
     ) -> str:
         """Format an event log."""
-        assert self.executor_id is not None
 
         # use case for executor pov is for printing recent events log
         if pov == Concept.EXECUTOR:
@@ -933,7 +937,7 @@ class Task:
             subtask_executor_replacement = {
                 subtask.executor_id: f"{Concept.EXECUTOR.value} for subtask {subtask.id}"
                 for subtask in self.subtasks
-                if subtask.executor_id is not None
+                if subtask.executor
             }
             return event_log.to_str_with_pov(
                 pov_id=self.executor_id,
@@ -971,7 +975,7 @@ class Task:
 
     def execution_reply_message(self, reply: str) -> Event:
         """Create events for updating the status of the task upon execution."""
-        assert self.executor_id
+        assert self.executor
         return Event(
             data=Message(
                 sender=self.executor_id,
@@ -986,35 +990,6 @@ class Task:
     def serialization_location(self) -> Path:
         """Location for serializing the task."""
         return self.task_records_dir / f"{self.id}.yaml"
-
-    # def serialize(self) -> dict[str, Any]:
-    #     """Serialize the task."""
-    #     excluded_fields = {"executor", "id_generator", "task_records_dir"}
-    #     modified_fields = {"validator", "work_status"}
-    #     unchanged_fields = {
-    #         "id",
-    #         "description",
-    #         "owner_id",
-    #         "rank_limit",
-    #         "name",
-    #         "notes",
-    #         "execution_history",
-    #     }
-    #     assert (excluded_fields | modified_fields | unchanged_fields) == (
-    #         field_names := {field.name for field in fields(self)}
-    #     ), f"Field names don't match expected fields:\n{field_names=}\n{excluded_fields=}\n{modified_fields=}\n{unchanged_fields=}"
-
-    #     unchanged_data: dict[str, Any] = {
-    #         field.name: _asdict_inner(getattr(self, field.name), dict)
-    #         for field in fields(self)
-    #         if field.name in unchanged_fields
-    #     }
-    #     modified_data = {
-    #         "validator": {"name": self.validator.name, "id": self.validator.id},
-    #         "work_status": self.work_status.value,
-    #         # "task_records_dir": str(self.task_records_dir),
-    #     }
-    #     return unchanged_data | modified_data
 
     def save(self) -> None:
         """Save the task."""
@@ -1039,15 +1014,17 @@ class Task:
     def wrap_execution(self, success: bool) -> None:
         """Wrap up execution of the task."""
         assert self.execution_history and self.executor
+        # def extract_artifacts(messages: EventLog, task_owner_id: RuntimeId, executor_id: RuntimeId) -> list[ArtifactEntry]:
+        #     """Extract artifacts from the event log."""
+        #     blah = messages.to_str_with_objective_pov(task_owner_id=task_owner_id, executor_id=executor_id)
+
+        #     breakpoint()
+
+        # self.artifacts = extract_artifacts(self.event_log.messages, self.owner_id, self.executor_id)
+
         self.executor.save_blueprint()
         self.executor = None
         self.execution_history.last_entry.success = success
-
-        def extract_artifacts(event_log: EventLog) -> list[ArtifactEntry]:
-            """Extract artifacts from the event log."""
-            breakpoint()
-
-        self.artifacts = extract_artifacts(self.event_log.messages)
         self.save()
 
     @classmethod
@@ -1298,16 +1275,18 @@ class SubtaskIdentifcationResult:
     """Result of subtask identification."""
 
     identified_subtask: str
-    additional_thoughts: str | None = None
+    comment: str
+    relevant_artifacts: list[Artifact]
 
     @classmethod
     def from_yaml_str(cls, yaml_str: str) -> Self:
         """Create a subtask identification result from a YAML string."""
         data = default_yaml.load(yaml_str)
-        if (
-            additional_thoughts := data.get("additional_thoughts")
-        ) and "NONE" in additional_thoughts:
-            data["additional_thoughts"] = None
+        data["relevant_artifacts"] = (
+            [Artifact(**artifact) for artifact in relevant_artifacts]
+            if (relevant_artifacts := data["relevant_artifacts"])
+            else []
+        )
         return cls(**data)
 
 
@@ -1676,13 +1655,13 @@ def validate_artifact_mentions(
     ## REQUEST FOR YOU:
     Use the following reasoning process to validate that the executor has given sufficient information to locate the artifacts for the task:
     ```start_of_reasoning_steps
-    1. Review the TASK SPECIFICATION to fully understand the expectations for the task's completion, including the details of what the final ARTIFACT should be, and where and how it should be delivered or made accessible.
-    2. Examine the TASK CONVERSATION for any communications that reference the delivery or completion of the ARTIFACT. Look for specific details such as file names, URIs, timestamps, or any other identifiers that would allow someone to attempt to locate and access the ARTIFACT.
-    3. Cross-reference the information from the TASK CONVERSATION with the criteria outlined in the TASK SPECIFICATION to confirm that the EXECUTOR provided the necessary and correct details about the ARTIFACT. It is not necessary for you to actually locate the ARTIFACT yourself.
+    1. Review the TASK SPECIFICATION to fully understand the expectations for the task's completion, including the details of what the final ARTIFACT(s) should be, and where and how it should be delivered or made accessible.
+    2. Examine the TASK CONVERSATION for any communications that reference the delivery or completion of the ARTIFACT(s). Look for specific details such as file names, URIs, timestamps, or any other identifiers that would allow someone to attempt to locate and access the ARTIFACT(s).
+    3. Cross-reference the information from the TASK CONVERSATION with the criteria outlined in the TASK SPECIFICATION to confirm that the EXECUTOR provided the necessary and correct details about the ARTIFACT(s). It is not necessary for you to actually locate the ARTIFACT(s) yourself.
     4. If anything is unclear or incomplete, prepare to request clarification or additional information from the EXECUTOR.
     ```end_of_reasoning_steps
 
-    You do _not_ need to validate whether the ARTIFACT exists or not, just that the EXECUTOR was specific enough in their communications to allow someone to attempt to locate the ARTIFACT.
+    You do _not_ need to validate whether the ARTIFACT(s) exists or not, just that the EXECUTOR was specific enough in their communications to allow someone to attempt to locate the ARTIFACT(s).
 
     In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
     ```start_of_reasoning_output
@@ -1695,9 +1674,15 @@ def validate_artifact_mentions(
     ```start_of_validation_output
     comment: |-
       {validation_comment}
-    valid: !!bool |- # note: must be either `true` or `false`
+    valid: !!bool |-  # note: must be either `true` or `false`
       {validation_result}
-    ```end_of_action_choice_output
+    artifacts: # note: use [] to indicate no artifacts
+    - description: "{artifact_1_description}"
+      location: "{artifact_1_location}"
+    - description: "{artifact_2_description}"
+      location: "{artifact_2_location}"
+    - [... etc.]
+    ```end_of_validation_output
     Any additional comments or thoughts can be added before or after the output blocks.
     """
     request = dedent_and_strip(request)
@@ -1716,9 +1701,11 @@ def validate_artifact_mentions(
         raise ExtractionError("Could not extract validation output from the result.")
     validation_output = extracted_result[0]
     validation_result = default_yaml.load(validation_output)
+    artifacts = [Artifact(**artifact) for artifact in validation_result["artifacts"]]
     return ValidationResult(
         valid=validation_result["valid"],
         feedback=validation_result["comment"],
+        artifacts=artifacts,
     )
 
 
@@ -1737,20 +1724,44 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
         task, TaskWorkStatus.IN_VALIDATION, "Validation has begun for task."
     )
     validations = [validate_artifact_mentions, validate_task_completion]
-    validation_results = (validation(task, report) for validation in validations)
-    if failed_validation := next(
-        (result for result in validation_results if not result.valid), None
-    ):
+    failed_validation = None
+    artifacts = None
+    for validation in validations:
+        validation_result = validation(task, report)
+        if not validation_result.valid:
+            failed_validation = validation_result
+            break
+        if validation_result.artifacts:
+            artifacts = validation_result.artifacts
+    if failed_validation:
         new_status = TaskWorkStatus.BLOCKED
         reason = "Failed completion validation."
         new_executor = regenerate_task_executor(task.executor)  # MUTATION
         task.update_executor(new_executor)  # MUTATION
         validation_result = failed_validation  # MUTATION
     else:
+        assert artifacts, "Artifact(s) must be present if validation succeeded."
         new_status = TaskWorkStatus.COMPLETED
         reason = "Validated as complete."
+        task.artifacts = artifacts  # MUTATION
         task.wrap_execution(success=True)  # MUTATION
-        validation_result = ValidationResult(valid=True, feedback="")
+        validation_result = ValidationResult(
+            valid=True, feedback="", artifacts=artifacts
+        )
+    # validation_results = (validation(task, report) for validation in validations)
+    # if failed_validation := next(
+    #     (result for result in validation_results if not result.valid), None
+    # ):
+    #     new_status = TaskWorkStatus.BLOCKED
+    #     reason = "Failed completion validation."
+    #     new_executor = regenerate_task_executor(task.executor)  # MUTATION
+    #     task.update_executor(new_executor)  # MUTATION
+    #     validation_result = failed_validation  # MUTATION
+    # else:
+    #     new_status = TaskWorkStatus.COMPLETED
+    #     reason = "Validated as complete."
+    #     task.wrap_execution(success=True)  # MUTATION
+    #     validation_result = ValidationResult(valid=True, feedback="")
     validation_result_event = Event(
         data=TaskValidation(
             validator_id=task.validator.id,
@@ -2377,7 +2388,15 @@ class Orchestrator:
 
         After this block, you must include the subtask you have identified for its executor. To the executor, the identified subtask becomes its own MAIN TASK, and you are the MAIN TASK OWNER of the subtask. The executor knows nothing about your original MAIN TASK. The subtask must be described in the following format:
         ```start_of_subtask_identification_output
-        identified_subtask: |- # high-level, single-sentence description of the subtask
+        relevant_artifacts:  # use [] to indicate no artifacts
+        - description: "{{relevant_artifact_1_description}}"
+          location: "{{relevant_artifact_1_location}}"
+        - description: "{{relevant_artifact_2_description}}"
+          location: "{{relevant_artifact_2_location}}"
+        - [... etc.]
+        comment: |-
+          {{comment}}
+        identified_subtask: |-  # high-level, single-sentence description of the subtask
           {{identified_subtask}}
         ```end_of_subtask_identification_output
         Any additional comments or thoughts can be added before or after the output blocks.
@@ -2475,9 +2494,7 @@ class Orchestrator:
 
     def subtask_message(self, subtask: Task, message: str) -> Event:
         """Format a message to a subtask."""
-        assert (
-            subtask.executor_id is not None
-        ), "Cannot post message to subtask without an executor."
+        assert subtask.executor, "Cannot post message to subtask without an executor."
         return Event(
             data=Message(
                 sender=self.id,
@@ -2549,6 +2566,7 @@ class Orchestrator:
             extracted_results[-1]
         )
         identified_subtask = extracted_results.identified_subtask
+        subtask_validation = self.validate_subtask_identification(identified_subtask)
         subtask = Task(
             data=TaskData(
                 name=identified_subtask,
@@ -2560,17 +2578,6 @@ class Orchestrator:
             task_records_dir=self.task.task_records_dir,
             validator=self.task.validator,
         )
-
-        # subtask = Task(
-        #     name=identified_subtask,
-        #     owner_id=self.id,
-        #     rank_limit=None if self.rank_limit is None else self.rank_limit - 1,
-        #     description=TaskDescription(information=identified_subtask),
-        #     validator=self.task.validator,
-        #     id_generator=self.id_generator,
-        #     task_records_dir=self.task.task_records_dir,
-        # )
-        subtask_validation = self.validate_subtask_identification(identified_subtask)
         subtask_identification_event = Event(
             data=SubtaskIdentification(
                 owner_id=self.id,
@@ -2581,24 +2588,15 @@ class Orchestrator:
             generating_task_id=self.task.id,
             id=generate_swarm_id(EventId, self.id_generator),
         )
-        additional_thoughts_event = (
-            Event(
-                data=Thought(
-                    agent_id=self.id,
-                    content=extracted_results.additional_thoughts,
-                ),
-                generating_task_id=self.task.id,
-                id=generate_swarm_id(EventId, self.id_generator),
-            )
-            if extracted_results.additional_thoughts
-            else None
-        )
         if not subtask_validation.valid:
             return ActionResult(
                 pause_execution=PauseExecution(False),
                 new_events=[subtask_identification_event],
                 task_completed=False,
             )
+
+        # TODO: add relevant artifacts to main task printout
+        breakpoint()
         self.delegator.assign_executor(
             subtask,
             self.recent_events_size,
@@ -2608,25 +2606,15 @@ class Orchestrator:
         assert subtask.executor is not None, "Task executor assignment failed."
         self.add_subtask(subtask)
         subtask_focus_event = self.focus_subtask(subtask)
-
-        if [
-            subtask
-            for subtask in self.subtasks
-            if subtask.work_status == TaskWorkStatus.COMPLETED
-        ]:
-            raise NotImplementedError("TODO")
-            # > TODO: when identifying new subtask, must send message containing relevant artifacts
         subtask_initiation_events = self.send_subtask_message(
             message_text="Hi, please feel free to ask me any questions about the context of this task—I've only given you a brief description to start with, but I can provide more information if you need it.",
             initial=True,
         )
         new_events = [
             subtask_identification_event,
-            additional_thoughts_event,
             subtask_focus_event,
             *subtask_initiation_events,
         ]
-        new_events = [event for event in new_events if event is not None]
         return ActionResult(
             pause_execution=PauseExecution(False),
             new_events=new_events,
@@ -2937,6 +2925,8 @@ class Orchestrator:
                 )
                 executor_events.sort(key=lambda event: event.timestamp)
                 self.add_to_event_log(executor_events)
+            if self.focused_subtask and self.focused_subtask.closed:
+                self.state.focused_subtask = None
             action_decision = self.choose_action()
             if action_decision.additional_thoughts:
                 self.add_thought(action_decision.additional_thoughts)
@@ -3152,7 +3142,7 @@ def search_task_records(task: Task, task_records_dir: Path) -> list[TaskData]:
         for node in results
         if node.score and node.score > similarity_cutoff
     ]
-    if time.time() - start_time > 3:
+    if time.time() - start_time > 5:
         raise NotImplementedError("TODO")
         # > TODO: need more efficient system to retrieve tasks
 
@@ -3683,6 +3673,7 @@ class Swarm:
 
 # curriculum task 2: trivial compositional task: 3 + 4 * 5  # to test basic end-to-end orchestrator functionality
 # ....
+# > bot: multion
 # > note: can use # comments in yaml output
 # > factor out reasoning output block # search: "steps of the reasoning process"
 # > (next_curriculum_task)
