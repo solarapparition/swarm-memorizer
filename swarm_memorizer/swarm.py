@@ -8,7 +8,6 @@ from typing import (
     Literal,
     MutableMapping,
     NewType,
-    NamedTuple,
     Any,
     Self,
     Protocol,
@@ -106,7 +105,7 @@ class Artifact:
 
     def __str__(self) -> str:
         """String representation of the artifact."""
-        return f"{self.location}: {self.description}"
+        return f"- description: {self.description}\n  location: {self.location}"
 
 
 @dataclass
@@ -866,7 +865,7 @@ class Task:
     @property
     def artifacts_printout(self) -> str:
         """String representation of the artifacts."""
-        return "\n".join(f"- {str(artifact)}" for artifact in self.artifacts) or NONE
+        return "\n".join(str(artifact) for artifact in self.artifacts) or NONE
 
     @property
     def as_subtask_printout(self) -> str:
@@ -1014,14 +1013,6 @@ class Task:
     def wrap_execution(self, success: bool) -> None:
         """Wrap up execution of the task."""
         assert self.execution_history and self.executor
-        # def extract_artifacts(messages: EventLog, task_owner_id: RuntimeId, executor_id: RuntimeId) -> list[ArtifactEntry]:
-        #     """Extract artifacts from the event log."""
-        #     blah = messages.to_str_with_objective_pov(task_owner_id=task_owner_id, executor_id=executor_id)
-
-        #     breakpoint()
-
-        # self.artifacts = extract_artifacts(self.event_log.messages, self.owner_id, self.executor_id)
-
         self.executor.save_blueprint()
         self.executor = None
         self.execution_history.last_entry.success = success
@@ -1111,19 +1102,36 @@ class ActionName(Enum):
     CANCEL_SUBTASK = "CANCEL_SUBTASK"
 
 
-ORCHESTRATOR_CONCEPTS = f"""
-- {Concept.ORCHESTRATOR.value}: the agent that is responsible for managing the execution of a main task and managing the statuses of its subtasks, while communicating with the task's owner to gather required information for the task. The orchestrator must communicate with both the task owner and subtask executors to complete the main task as efficiently as possible.
-- {Concept.MAIN_TASK.value}: the main task that the orchestrator is responsible for managing, which it does by identifying subtasks and providing support for specialized executor agents for the subtasks.
-- {Concept.SUBTASK.value}: a task that must be executed in order to complete the main task. The orchestrator does NOT execute subtasks itself; instead, it facilitates the resolution of subtasks by making high-level decisions regarding each subtask in the context of the overall task and providing support for the subtask executors.
+ORCHESTRATOR_CONCEPTS = """
+- {ORCHESTRATOR}: the agent that is responsible for managing the execution of a main task and managing the statuses of its subtasks, while communicating with the task's owner to gather required information for the task. The orchestrator must communicate with both the task owner and subtask executors to complete the main task as efficiently as possible.
+- {MAIN_TASK}: the main task that the orchestrator is responsible for managing, which it does by identifying subtasks and providing support for specialized executor agents for the subtasks.
+- {MAIN_TASK_OWNER}: the one who requested the main task to be done. The orchestrator must communicate with the task owner to gather background information required to complete the main task.
+- {SUBTASK}: a task that must be executed in order to complete the main task. The orchestrator does NOT execute subtasks itself; instead, it facilitates the resolution of subtasks by making high-level decisions regarding each subtask in the context of the overall task and providing support for the subtask executors.
 - SUBTASK STATUS: the status of subtasks that have already been identified. The status of a subtask can be one of the following:
-  - {TaskWorkStatus.BLOCKED.value}: the subtask is blocked by some issue, and execution cannot continue until the issue is resolved, typically by discussing the blocker and/or identifying a new subtask to resolve the blocker.
-  - {TaskWorkStatus.IN_PROGRESS.value}: the subtask is currently being executed by a subtask executor.
-  - {TaskWorkStatus.IN_VALIDATION.value}: the subtask has been reported as completed by its executor, but is still being validated by a validator. Validation happens automatically and does not require or action from the orchestrator.
-  - {TaskWorkStatus.COMPLETED.value}: the subtask has been validated as complete by a validator. Completed subtasks provide a record of overall successful progress for the main task.
-  - {TaskWorkStatus.CANCELLED.value}: the subtask has been cancelled for various reason and will not be done.
-- SUBTASK EXECUTOR: an agent that is responsible for executing a subtask. Subtask executors specialize in executing certain types of tasks; whenever a subtask is identified, an executor is automatically assigned to it without any action required from the orchestrator.
-- {Concept.MAIN_TASK_OWNER.value}: the one who requested the main task to be done. The orchestrator must communicate with the task owner to gather background information required to complete the main task.
-""".strip()
+  - {BLOCKED}: the subtask is blocked by some issue, and execution cannot continue until the issue is resolved, typically by discussing the blocker and/or identifying a new subtask to resolve the blocker.
+  - {IN_PROGRESS}: the subtask is currently being executed by a subtask executor.
+  - {IN_VALIDATION}: the subtask has been reported as completed by its executor, but is still being validated by a validator. Validation happens automatically and does not require or action from the orchestrator.
+  - {COMPLETED}: the subtask has been validated as complete by a validator. Completed subtasks provide a record of overall successful progress for the main task.
+  - {CANCELLED}: the subtask has been cancelled for various reason and will not be done.
+- {SUBTASK_EXECUTOR}: an agent that is responsible for executing a {SUBTASK}. {SUBTASK_EXECUTOR}s specialize in executing certain types of tasks; whenever a subtask is identified, an executor is automatically assigned to it without any action required from the orchestrator.
+- {ARTIFACT}: some information at a location that is relevant to the {MAIN_TASK} and/or its {SUBTASK}s. {ARTIFACT}s have both `location` and `description` parameters. There are two sources of {ARTIFACT}s:
+  - {MAIN_TASK_OWNER}: the task owner may provide {ARTIFACT}s to the {ORCHESTRATOR} when initiating a task, or in later discussion with the {ORCHESTRATOR}.
+  - {SUBTASK} Completion: when a {SUBTASK} is marked as {COMPLETED}, any {ARTIFACT}s generated by its completion is listed under the {SUBTASK}'s entry.
+""".strip().format(
+    **{
+        "ORCHESTRATOR": Concept.ORCHESTRATOR.value,
+        "MAIN_TASK": Concept.MAIN_TASK.value,
+        "MAIN_TASK_OWNER": Concept.MAIN_TASK_OWNER.value,
+        "SUBTASK": Concept.SUBTASK.value,
+        "BLOCKED": TaskWorkStatus.BLOCKED.value,
+        "IN_PROGRESS": TaskWorkStatus.IN_PROGRESS.value,
+        "IN_VALIDATION": TaskWorkStatus.IN_VALIDATION.value,
+        "COMPLETED": TaskWorkStatus.COMPLETED.value,
+        "CANCELLED": TaskWorkStatus.CANCELLED.value,
+        "SUBTASK_EXECUTOR": Concept.EXECUTOR.value,
+        "ARTIFACT": Concept.ARTIFACT.value,
+    }
+)
 
 
 def query_and_extract_reasoning(
@@ -1231,8 +1239,6 @@ class ActionResult:
     pause_execution: PauseExecution
     new_events: list[Event]
     task_completed: bool
-    # new_work_status: TaskWorkStatus | None = None
-    # new_event_status: TaskEventStatus | None = None
 
 
 class ReasoningNotes(Enum):
@@ -1525,6 +1531,7 @@ class ReasoningGenerator:
         - {Concept.ORCHESTRATOR.value}: the agent that is responsible for managing the execution of a main task while communicating with the {Concept.MAIN_TASK_OWNER.value} to gather required information for the task.
         - {Concept.MAIN_TASK_OWNER.value}: the agent that owns the main task and is responsible for providing information to the orchestrator to help it execute the main task.
         - {Concept.MAIN_TASK.value}: the task that the orchestrator is responsible for executing.
+        - {Concept.ARTIFACT.value}: some information at a location that is relevant to the execution of the {Concept.MAIN_TASK.value}. {Concept.ARTIFACT.value} have both a `description` and `location` parameters. {Concept.ARTIFACT.value}s are provided by the {Concept.MAIN_TASK_OWNER.value} during conversation in {Concept.TASK_MESSAGES.value}.
 
         ## {Concept.ORCHESTRATOR_INFORMATION_SECTIONS.value}:
         The orchestrator has access to the following information:
@@ -2595,8 +2602,9 @@ class Orchestrator:
                 task_completed=False,
             )
 
-        # TODO: add relevant artifacts to main task printout
         breakpoint()
+        # add relevant artifacts to subtask description before assigning executor
+        # send relevant artifacts as a message
         self.delegator.assign_executor(
             subtask,
             self.recent_events_size,
@@ -3464,6 +3472,7 @@ class Delegator:
                 )
             ):
                 return
+
             chosen.add(next_candidate.blueprint.id)
             yield next_candidate
 
@@ -3477,6 +3486,7 @@ class Delegator:
         candidates = self.search_blueprints(task, task.rank_limit)
         if not candidates:
             return DelegationSuccessful(False)
+
         candidates = self.find_top_candidates(candidates, max_candidates)
         for candidate in self.reorder_candidate_list(
             candidates, task, executor_selection_reasoning
@@ -3489,11 +3499,6 @@ class Delegator:
                 task.rank_limit = candidate.rank
                 return DelegationSuccessful(True)
 
-            # task.execution_history.add(
-            # executor_id=candidate.id,
-            # blueprint_id=candidate.blueprint.id,
-            # success=False,
-            # )
             task.add_current_execution_outcome_to_history()
         return DelegationSuccessful(False)
 
@@ -3616,14 +3621,6 @@ class Swarm:
 
     async def run(self, message: str) -> Reply:
         """Run the swarm with a message, and a way to continue the conversation. Rerunning this method starts a new conversation."""
-        # task = Task(
-        #     description=TaskDescription(information=message),
-        #     owner_id=self.id,
-        #     rank_limit=None,
-        #     validator=self.validator,
-        #     id_generator=self.id_generator,
-        #     task_records_dir=self.task_records_dir,
-        # )
         task = Task(
             data=TaskData(
                 description=TaskDescription(information=message),
@@ -3683,6 +3680,7 @@ class Swarm:
 # > add role parametrization for reasoning bullets and consolidate with delegator
 # mvp task: buy something from amazon
 # ---MVP---
+# > replace messaging with instructor.patch
 # > factor out validations into separate variable
 # > unify validator functionality; validator protocol should hold specific functions to validate specific aspects of a task
 # > estimate rank of task based on previous successful tasks
@@ -3784,20 +3782,3 @@ def test() -> None:
 
 if __name__ == "__main__":
     test()
-
-# SUBTASK_DESCRIPTION_REQUIREMENTS = """
-# - Term Definitions: every term related to the main task is defined within the subtask description. No assumptions of prior knowledge.
-# - Contextual Independence: subtask description stands independently of the main task description. Should be understandable without main task details.
-# - Objective Clarity: Clearly state the subtask's objective. Objective should be specific, measurable, and achievable within the scope of the subtask.
-# """
-
-
-# Example of serialization
-# bot_blueprint = BotBlueprint(
-#     name="solarapparition",
-#     task_history=[],
-#     _id_generator=self.id_generator,
-# )
-# from os import makedirs
-# makedirs(self.executors_dir / bot_blueprint.id, exist_ok=True)
-# default_yaml.dump(bot_blueprint.serialize(), self.executors_dir / bot_blueprint.id / "blueprint.yaml")
