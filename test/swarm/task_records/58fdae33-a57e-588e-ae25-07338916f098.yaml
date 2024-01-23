@@ -1,0 +1,23 @@
+"description":
+  "information": |-
+    Write 'Hello, World!' to a file.
+  "definition_of_done": !!null |
+"owner_id": |-
+  da7e3d14-16c9-5861-9694-6ff78a4a612e
+"rank_limit": !!int |-
+  0
+"id": |-
+  58fdae33-a57e-588e-ae25-07338916f098
+"name": !!null |
+"execution_history":
+  "history":
+  - "executor_id": |-
+      9b9672d4-5cee-5eef-9ad2-661c0946e351_58fdae33-a57e-588e-ae25-07338916f098
+    "blueprint_id": |-
+      9b9672d4-5cee-5eef-9ad2-661c0946e351
+    "validator_id": |-
+      Human
+    "validator_name": |-
+      Human
+    "success": !!bool |-
+      true
