@@ -12,6 +12,7 @@ from autogen import AssistantAgent, UserProxyAgent  # type: ignore
 from swarm_memorizer.swarm import (
     Blueprint,
     EventLog,
+    Message as SwarmMessage,
     Task,
     Executor,
     RuntimeId,
@@ -70,7 +71,7 @@ class Adder:
     def accepts(self, task: Task) -> bool:
         """Check if task is accepted by executor."""
         prompt = """
-        Determine whether the following request is a request to add two numbers:
+        Determine whether the following request is a request for adding two numbers together (one or more of the numbers can may be in artifacts or files containing their value(s)):
         ```
         {task_information}
         ```
@@ -102,16 +103,24 @@ class Adder:
         return dedent_and_strip(role)
 
     @property
+    def primary_function_name(self) -> str:
+        """Return primary function name."""
+        return "add"
+
+    @property
     def task_prompt(self) -> str:
         """Return task prompt."""
-        task = """
+        task = f"""
         # TASK
         Use the following reasoning process to determine what action to take:
         
-        ## CASE 1: the user has provided all required arguments of your primary function
+        ## CASE 1: you have all required arguments of your primary function (`{self.primary_function_name}`), and the arguments are valid for what the function expects
         - ACTION: pass the arguments to the primary function
 
-        ## CASE 2: the user has not provided all required arguments of your function, or the arguments are invalid for what the function expects
+        ## CASE 2: you do not yet have all required arguments of your primary function, BUT has provided artifact(s) that point to the missing arguments
+        - ACTION: read in the artifact(s) and pass the arguments to the primary function
+
+        ## CASE 3: neither CASE 1 nor CASE 2 are true, i.e. the arguments are missing or invalid, and there are no artifacts that point to the missing arguments
         - ACTION: call the error function to create an error message to the user
         """
         return dedent_and_strip(task)
@@ -133,7 +142,10 @@ class Adder:
                 json.loads(message["content"].strip())
             except json.JSONDecodeError:
                 return False
-            return message["role"] == "function"
+            return message["role"] == "function" and message["name"] in [
+                "error_message",
+                "add",
+            ]
 
         assistant = AssistantAgent(
             "assistant",
@@ -176,21 +188,41 @@ class Adder:
                 return {
                     "artifact_path": str(artifact_path),
                     "successful": True,
-                    "message": "Execution successful. See artifact for result.",
+                    "message": "Execution successful; new artifact generated containing result.",
                 }
             except Exception as error:  # pylint:disable=broad-except
                 return error_message(f"Execution failed with error:\n{error}")
-                # return {
-                #     "artifact": None,
-                #     "successful": False,
-                #     "message": f"Execution failed with error:\n{error}",
-                # }
+
+        @user_proxy.register_for_execution()  # type: ignore
+        @assistant.register_for_llm(description="Read text from a file.")  # type: ignore
+        def read_artifact_value(  # type: ignore
+            artifact_path: Annotated[str, "The path to the artifact to read."]
+        ) -> Annotated[dict[str, Any], "The result of reading the artifact."]:
+            try:
+                return {
+                    "artifact_value": Path(artifact_path).read_text(encoding="utf-8"),
+                    "successful": True,
+                }
+            except Exception as error:  # pylint:disable=broad-except
+                return error_message(f"Execution failed with error:\n{error}")
 
         user_proxy.send(  # type: ignore
             self.task.information, assistant, request_reply=False, silent=True
         )
-        for _ in self.discussion_messages.events[1:]:
-            raise NotImplementedError
+        for message_event in self.discussion_messages.events:
+            assert hasattr(message_event.data, "recipient")
+            message_data: SwarmMessage = message_event.data  # type: ignore
+            assert self.id in {message_data.recipient, message_data.sender}
+
+            if message_data.recipient == self.id:
+                user_proxy.send(  # type: ignore
+                    message_data.content,
+                    recipient=assistant,
+                    request_reply=False,
+                    silent=True,
+                )
+                continue
+            raise NotImplementedError("TODO: handle messages from assistant")
             # TODO: depending on originating party of message, send to assistant or user_proxy
         assistant.chat_messages[user_proxy].append(  # type: ignore
             {"role": "system", "content": self.task_prompt}

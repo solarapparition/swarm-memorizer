@@ -3,6 +3,6 @@
 "name": |-
   Adder
 "description": |-
-  Adds two number together.
+  Adds two number together. One or both numbers can be from a file.
 "role": |-
   bot

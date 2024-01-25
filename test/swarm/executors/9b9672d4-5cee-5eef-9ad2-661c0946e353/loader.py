@@ -180,11 +180,6 @@ class Multiplier:
                 }
             except Exception as error:  # pylint:disable=broad-except
                 return error_message(f"Execution failed with error:\n{error}")
-                # return {
-                #     "artifact": None,
-                #     "successful": False,
-                #     "message": f"Execution failed with error:\n{error}",
-                # }
 
         user_proxy.send(  # type: ignore
             self.task.information, assistant, request_reply=False, silent=True

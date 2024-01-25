@@ -673,6 +673,11 @@ class ExecutionHistory:
         return bool(self.history)
 
 
+def artifacts_printout(artifacts: Sequence[Artifact]) -> str:
+    """String representation of the artifacts."""
+    return "\n".join(str(artifact) for artifact in artifacts) or NONE
+
+
 @dataclass
 class TaskData:
     """Data for a task."""
@@ -680,10 +685,11 @@ class TaskData:
     description: TaskDescription
     owner_id: RuntimeId
     rank_limit: int | None
+    input_artifacts: list[Artifact]
     id: TaskId | None = None
     name: str | None = None
     execution_history: ExecutionHistory = field(default_factory=ExecutionHistory)
-    artifacts: list[Artifact] = field(default_factory=list)
+    output_artifacts: list[Artifact] = field(default_factory=list)
 
     def serialize(self) -> dict[str, Any]:
         """Serialize the task."""
@@ -700,6 +706,7 @@ class TaskData:
             ),
             owner_id=RuntimeId(data["owner_id"]),
             rank_limit=data["rank_limit"],
+            input_artifacts=data["input_artifacts"],
             name=data["name"],
             execution_history=ExecutionHistory(
                 history=[
@@ -732,24 +739,32 @@ class TaskData:
         """Ids of all executor blueprints."""
         return [outcome.blueprint_id for outcome in self.execution_history.history]
 
+    @property
+    def input_artifacts_printout(self) -> str:
+        """String representation of the artifacts."""
+        return artifacts_printout(self.input_artifacts)
+
+    @property
+    def output_artifacts_printout(self) -> str:
+        """String representation of the artifacts."""
+        return artifacts_printout(self.output_artifacts)
+
+    @property
+    def information_with_artifacts(self) -> str:
+        """Information on the task with artifacts."""
+        return f"Information:\n{self.description.information}\n\nInput Artifacts:\n{self.input_artifacts_printout}"
+
 
 @dataclass
 class Task:
     """Holds information about a task."""
 
     data: TaskData
-    # description: TaskDescription
-    # owner_id: RuntimeId
-    # rank_limit: int | None
     validator: WorkValidator
     id_generator: IdGenerator
     task_records_dir: Path
-    # name: str | None = None
     executor: Executor | None = None
     work_status: TaskWorkStatus = TaskWorkStatus.IDENTIFIED
-    # execution_history: ExecutionHistory = field(default_factory=ExecutionHistory)
-
-    # id: TaskId = field(init=False)
 
     def __post_init__(self) -> None:
         """Post init."""
@@ -813,14 +828,24 @@ class Task:
         self.data.execution_history = value
 
     @property
-    def artifacts(self) -> list[Artifact]:
+    def input_artifacts(self) -> list[Artifact]:
         """Artifacts for the task."""
-        return self.data.artifacts
+        return self.data.input_artifacts
 
-    @artifacts.setter
-    def artifacts(self, value: list[Artifact]) -> None:
+    @input_artifacts.setter
+    def input_artifacts(self, value: list[Artifact]) -> None:
         """Set artifacts for the task."""
-        self.data.artifacts = value
+        self.data.input_artifacts = value
+
+    @property
+    def output_artifacts(self) -> list[Artifact]:
+        """Artifacts for the task."""
+        return self.data.output_artifacts
+
+    @output_artifacts.setter
+    def output_artifacts(self, value: list[Artifact]) -> None:
+        """Set artifacts for the task."""
+        self.data.output_artifacts = value
 
     @property
     def definition_of_done(self) -> str | None:
@@ -831,6 +856,11 @@ class Task:
     def information(self) -> str:
         """Information on the task."""
         return self.description.information
+
+    @property
+    def information_with_artifacts(self) -> str:
+        """Information on the task with artifacts."""
+        return self.data.information_with_artifacts
 
     @cached_property
     def event_log(self) -> EventLog:
@@ -863,9 +893,14 @@ class Task:
         return self.executor.id
 
     @property
-    def artifacts_printout(self) -> str:
+    def input_artifacts_printout(self) -> str:
         """String representation of the artifacts."""
-        return "\n".join(str(artifact) for artifact in self.artifacts) or NONE
+        return self.data.input_artifacts_printout
+
+    @property
+    def output_artifacts_printout(self) -> str:
+        """String representation of the artifacts."""
+        return self.data.output_artifacts_printout
 
     @property
     def as_subtask_printout(self) -> str:
@@ -881,7 +916,7 @@ class Task:
             return dedent_and_strip(template).format(
                 id=self.id,
                 name=self.name,
-                artifacts=indent(self.artifacts_printout, "  "),
+                artifacts=indent(self.output_artifacts_printout, "  "),
             )
 
         if self.work_status in {TaskWorkStatus.COMPLETED, TaskWorkStatus.CANCELLED}:
@@ -999,9 +1034,9 @@ class Task:
         """Add an execution outcome to the task."""
         self.execution_history.add(self.current_execution_outcome)
 
-    def update_executor(self, executor: Executor) -> None:
+    def change_executor(self, executor: Executor) -> None:
         """Update the executor of the task."""
-        if self.executor:
+        if self.executor:  # save the previous executor's changes
             self.executor.save_blueprint()
         self.executor = executor
         # self.execution_history.add(
@@ -1304,6 +1339,7 @@ These are the concepts you should be familiar with:
   - SUCCESS RATE: the proportion of similar tasks that the executor has successfully completed.
   - COMPLETION TIME: the average time in seconds it takes for the executor to complete a similar task.
 - NEW {Concept.EXECUTOR.value}: an executor where there isn't enough history to determine its performance on the TASK. However, _all_ {Concept.EXECUTOR.value} candidates under consideration have done at least one similar task successfully.
+- {Concept.ARTIFACT.value}: some information at a location that is relevant to the TASK, typically provided as input to the {Concept.EXECUTOR.value} for the TASK, and generated by them in turn as outputs.
 """.strip()
 
 
@@ -1323,7 +1359,7 @@ class ReasoningGenerator:
         
         ## DELEGATOR INFORMATION SECTIONS:
         The delegator has access to several sections of information that is relevant to its decisionmaking.
-        - TASK INFORMATION contains a brief description of information about the TASK.
+        - TASK INFORMATION contains a brief description of information about the TASK. This _may_ include information both the TASK requirement itself, and also contextual information for why the task is being executed.
         - {EXECUTOR} CANDIDATES: a list of executors that can be selected for the task. Each entry for an executor candidate has the following information:
           - DESCRIPTION: a brief description of the executor candidate's capabilities, as well as what it cannot do. This is what the candidate can _theoretically_ do, as opposed to its actual performance.
           - NEW STATUS: whether an executor candidate is a NEW {EXECUTOR} or not.
@@ -1640,7 +1676,8 @@ def validate_artifact_mentions(
     These are the concepts you should be familiar with:
     - {Concept.EXECUTOR.value}: the agent that is responsible for executing a task.
     - {Concept.MAIN_TASK_OWNER.value}: the agent that owns the task and is responsible for providing information to the executor to help it execute the task.
-    - {Concept.ARTIFACT.value}: the output of a task, in the form of a file, message, or some other identifying information like a URI. The executor must provide the artifacts for the task to be considered complete.
+    - {Concept.ARTIFACT.value}: the output of a task, in the form of a file, message, or some other identifying information like a URI. {Concept.ARTIFACT.value}s are often provided as inputs to {Concept.EXECUTOR.value}s, and are generated as outputs by them. The {Concept.EXECUTOR.value} _must_ provide the artifacts for the task to be considered complete.
+    - {Concept.ARTIFACT.value} LOCATION: the location of the {Concept.ARTIFACT.value}, which can be a file path, URI, or some other identifier. {Concept.EXECUTOR.value}s have full discretion over the {Concept.ARTIFACT.value} LOCATION.
 
     ## TASK SPECIFICATION:
     Here is the task specification:
@@ -1666,9 +1703,10 @@ def validate_artifact_mentions(
     2. Examine the TASK CONVERSATION for any communications that reference the delivery or completion of the ARTIFACT(s). Look for specific details such as file names, URIs, timestamps, or any other identifiers that would allow someone to attempt to locate and access the ARTIFACT(s).
     3. Cross-reference the information from the TASK CONVERSATION with the criteria outlined in the TASK SPECIFICATION to confirm that the EXECUTOR provided the necessary and correct details about the ARTIFACT(s). It is not necessary for you to actually locate the ARTIFACT(s) yourself.
     4. If anything is unclear or incomplete, prepare to request clarification or additional information from the EXECUTOR.
-    ```end_of_reasoning_steps
 
     You do _not_ need to validate whether the ARTIFACT(s) exists or not, just that the EXECUTOR was specific enough in their communications to allow someone to attempt to locate the ARTIFACT(s).
+    ```end_of_reasoning_steps
+
 
     In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
     ```start_of_reasoning_output
@@ -1744,13 +1782,13 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
         new_status = TaskWorkStatus.BLOCKED
         reason = "Failed completion validation."
         new_executor = regenerate_task_executor(task.executor)  # MUTATION
-        task.update_executor(new_executor)  # MUTATION
+        task.change_executor(new_executor)  # MUTATION
         validation_result = failed_validation  # MUTATION
     else:
         assert artifacts, "Artifact(s) must be present if validation succeeded."
         new_status = TaskWorkStatus.COMPLETED
         reason = "Validated as complete."
-        task.artifacts = artifacts  # MUTATION
+        task.output_artifacts = artifacts  # MUTATION
         task.wrap_execution(success=True)  # MUTATION
         validation_result = ValidationResult(
             valid=True, feedback="", artifacts=artifacts
@@ -2078,6 +2116,7 @@ class Orchestrator:
         Use the following reasoning process to decide what to do next:
         ```start_of_reasoning_steps
         {action_choice_core}
+        **Important:** The {MAIN_TASK} cannot be considered complete until all its subtasks have been completed by executors, _and_ there are no additional subtasks that can be added. No matter how simple the {MAIN_TASK} may seem, it must be broken down into subtasks.
         ```end_of_reasoning_steps
 
         In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
@@ -2085,8 +2124,6 @@ class Orchestrator:
         1. {{step_1_output}}
         2. {{step_2_output}}
         3. [... etc.]
-
-        **Important:** The {MAIN_TASK} cannot be considered complete until all its subtasks have been completed by executors. No matter how simple the {MAIN_TASK} may seem, it must be broken down into subtasks.
         ```end_of_action_reasoning_output
 
         After this block, you must include the action you have decided on, in this format:
@@ -2395,18 +2432,18 @@ class Orchestrator:
 
         After this block, you must include the subtask you have identified for its executor. To the executor, the identified subtask becomes its own MAIN TASK, and you are the MAIN TASK OWNER of the subtask. The executor knows nothing about your original MAIN TASK. The subtask must be described in the following format:
         ```start_of_subtask_identification_output
+        comment: |-
+          {{comment}}
         relevant_artifacts:  # use [] to indicate no artifacts
         - description: "{{relevant_artifact_1_description}}"
           location: "{{relevant_artifact_1_location}}"
         - description: "{{relevant_artifact_2_description}}"
           location: "{{relevant_artifact_2_location}}"
         - [... etc.]
-        comment: |-
-          {{comment}}
         identified_subtask: |-  # high-level, single-sentence description of the subtask
           {{identified_subtask}}
         ```end_of_subtask_identification_output
-        Any additional comments or thoughts can be added before or after the output blocks.
+        Remember, the subtask should only include information from the MAIN TASK that is relevant to the executor; additional context may confuse the executor as to what is in scope.
         """
         return dedent_and_strip(template).format(
             subtask_extraction_core=self.blueprint.reasoning.subtask_extraction
@@ -2580,6 +2617,7 @@ class Orchestrator:
                 owner_id=self.id,
                 rank_limit=None if self.rank_limit is None else self.rank_limit - 1,
                 description=TaskDescription(information=identified_subtask),
+                input_artifacts=extracted_results.relevant_artifacts,
             ),
             id_generator=self.id_generator,
             task_records_dir=self.task.task_records_dir,
@@ -2602,20 +2640,25 @@ class Orchestrator:
                 task_completed=False,
             )
 
-        breakpoint()
-        # add relevant artifacts to subtask description before assigning executor
-        # send relevant artifacts as a message
         self.delegator.assign_executor(
             subtask,
             self.recent_events_size,
             self.auto_wait,
             self.executor_selection_reasoning,
         )
+        # send relevant artifacts as a message
         assert subtask.executor is not None, "Task executor assignment failed."
         self.add_subtask(subtask)
         subtask_focus_event = self.focus_subtask(subtask)
+        initial_message = "Hi, please feel free to ask me any questions about the context of this task—I've only given you a brief description to start with, but I can provide more information if you need it."
+        addendum = (
+            f"\nHere are some existing artifacts that may be relevant for the task:\n{subtask.input_artifacts_printout}"
+            if subtask.input_artifacts
+            else ""
+        )
+        initial_message += addendum
         subtask_initiation_events = self.send_subtask_message(
-            message_text="Hi, please feel free to ask me any questions about the context of this task—I've only given you a brief description to start with, but I can provide more information if you need it.",
+            message_text=initial_message,
             initial=True,
         )
         new_events = [
@@ -2681,7 +2724,9 @@ class Orchestrator:
         if decision.action_name == ActionName.START_DISCUSSION_FOR_SUBTASK.value:
             raise NotImplementedError("TODO")
         if decision.action_name == ActionName.REPORT_MAIN_TASK_COMPLETE.value:
-            raise NotImplementedError("TODO")
+            # commit
+            breakpoint()
+
         if decision.action_name == ActionName.WAIT.value:
             raise NotImplementedError("TODO")
         if decision.action_name == ActionName.MESSAGE_SUBTASK_EXECUTOR.value:
@@ -2693,7 +2738,7 @@ class Orchestrator:
         # > if a task is set to be complete, trigger validation agent automatically
         # > need to add fail reason for failed tasks
         # ....
-        # (next_action_implementation) > pause subtask discussion: adds event that is a summary of the new items in the discussion to maintain state continuity # "The Definition of Done is a Python script that, when run, starts the agent. The agent should be able to have a simple back-and-forth conversation with the user. The agent needs to use the OpenAI Assistant API."
+        # (next_action_implementation) > pause subtask discussion: adds event that is a summary of the new items in the discussion to maintain state continuity
         raise ValueError(f"Unknown action: {decision.action_name}")
 
     def message_from_owner(self, message: str) -> Event:
@@ -2752,7 +2797,6 @@ class Orchestrator:
         """
         reasoning = dedent_and_strip(reasoning)
 
-        # You are a task specification agent that specializes in understanding the context for a {Concepts.MAIN_TASK.value} and updating its information sections based on new information.
         context = f"""
         ## MISSION:
         You are an advanced task orchestrator that specializes in managing the execution of a {Concept.MAIN_TASK.value} and delegating its {Concept.SUBTASK.value} to an {Concept.EXECUTOR.value} that can execute those tasks, while communicating with the {Concept.MAIN_TASK_OWNER.value} to gather required information for the {Concept.MAIN_TASK.value}.
@@ -3120,7 +3164,7 @@ def find_similar_tasks(task: Task, task_pool: Iterable[Task]) -> list[Task]:
     raise NotImplementedError("TODO")
 
 
-def search_task_records(task: Task, task_records_dir: Path) -> list[TaskData]:
+def search_task_records(task_info: str, task_records_dir: Path) -> list[TaskData]:
     """Search for similar tasks in the task records."""
     start_time = time.time()
     if not (task_record_files := list(task_records_dir.iterdir())):
@@ -3132,7 +3176,7 @@ def search_task_records(task: Task, task_records_dir: Path) -> list[TaskData]:
         old_task_data_dict: dict[str, Any] = default_yaml.load(task_record_file)
         old_task_data = TaskData.from_serialized_data(old_task_data_dict)
         node = TextNode(
-            text=old_task_data.description.information,
+            text=old_task_data.information_with_artifacts,
             metadata=old_task_data_dict,  # type: ignore
             excluded_embed_metadata_keys=list(old_task_data_dict.keys()),
         )
@@ -3141,7 +3185,7 @@ def search_task_records(task: Task, task_records_dir: Path) -> list[TaskData]:
     index = VectorStoreIndex(nodes)
     results = (
         index.as_query_engine(similarity_top_k=1000, response_mode="no_text")
-        .query(task.information)
+        .query(task_info)
         .source_nodes
     )
     similarity_cutoff = 0.8
@@ -3157,7 +3201,7 @@ def search_task_records(task: Task, task_records_dir: Path) -> list[TaskData]:
     return [task_data for task_data in task_data_list if str(task_data.id) in results]
 
 
-def rerank_tasks(task: Task, similar_tasks: list[TaskData]) -> list[TaskData]:
+def rerank_tasks(task_info: str, similar_tasks: list[TaskData]) -> list[TaskData]:
     """Rerank similar tasks based on task similarity."""
     raise NotImplementedError("TODO")
 
@@ -3249,14 +3293,14 @@ class Delegator:
 
     def search_blueprints(
         self,
-        task: Task,
+        task_info: str,
         rank_limit: int | None = None,
         task_history_limit: int = 10,
     ) -> list[BlueprintSearchResult]:
         """Search for blueprints of executors that can handle a task."""
-        similar_tasks = search_task_records(task, self.task_records_dir)
+        similar_tasks = search_task_records(task_info, self.task_records_dir)
         if len(similar_tasks) > self.task_search_rerank_threshold:
-            similar_tasks = rerank_tasks(task, similar_tasks)
+            similar_tasks = rerank_tasks(task_info, similar_tasks)
         past_blueprint_ids = [
             task_data.last_executor_blueprint_id for task_data in similar_tasks
         ]
@@ -3301,7 +3345,7 @@ class Delegator:
             ]
             assert candidate_similar_tasks or is_bot(
                 blueprint
-            ), f"Blueprint search: no similar tasks found for non-bot blueprint:\n\nBlueprint:\n{blueprint}\n\nTask:\n{task}"
+            ), f"Blueprint search: no similar tasks found for non-bot blueprint:\n\nBlueprint:\n{blueprint}\n\nTask:\n{task_info}"
             search_results.append(
                 BlueprintSearchResult(blueprint, new, candidate_similar_tasks)
             )
@@ -3349,7 +3393,7 @@ class Delegator:
         ```start_of_reasoning_steps
         {reasoning_steps}
         
-        Remember that the task cannot be split among multiple {EXECUTOR}s; if no single {EXECUTOR} can complete the task, then the task must remain undelegated.
+        Remember that the task cannot be split among multiple {EXECUTOR}s; if no single {EXECUTOR} can complete the task, then the task must remain undelegated. However, some parts of the TASK INFORMATION may be context—the {EXECUTOR} doesn't need to be able to execute any part of the work outside of the primary task.
         ```end_of_reasoning_steps
 
         In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
@@ -3483,7 +3527,9 @@ class Delegator:
         max_candidates: int = 10,
     ) -> DelegationSuccessful:
         """Find an executor to delegate the task to."""
-        candidates = self.search_blueprints(task, task.rank_limit)
+        candidates = self.search_blueprints(
+            task.information_with_artifacts, task.rank_limit
+        )
         if not candidates:
             return DelegationSuccessful(False)
 
@@ -3494,8 +3540,8 @@ class Delegator:
             candidate = load_executor(
                 candidate.blueprint, task, self.executors_dir / candidate.blueprint.id
             )
+            task.change_executor(candidate)
             if candidate.accepts(task):
-                task.update_executor(candidate)
                 task.rank_limit = candidate.rank
                 return DelegationSuccessful(True)
 
@@ -3513,7 +3559,7 @@ class Delegator:
         delegation_successful = self.delegate(task, executor_selection_reasoning)
         # blueprints represent known capabilities; so, failure means we must create a new executor
         if not delegation_successful:
-            task.update_executor(
+            task.change_executor(
                 self.make_executor(task, recent_events_size, auto_await)
             )
 
@@ -3626,12 +3672,12 @@ class Swarm:
                 description=TaskDescription(information=message),
                 owner_id=self.id,
                 rank_limit=None,
+                input_artifacts=[],
             ),
             validator=self.validator,
             id_generator=self.id_generator,
             task_records_dir=self.task_records_dir,
         )
-
         self.delegator.assign_executor(
             task,
             self.recent_events_size,
@@ -3670,6 +3716,10 @@ class Swarm:
 
 # curriculum task 2: trivial compositional task: 3 + 4 * 5  # to test basic end-to-end orchestrator functionality
 # ....
+# > autonomous goal: learn to do more tasks
+# > bot: autogen web surfer agent
+# > bot: cognosys agent
+# > explore chain-of-code # https://arxiv.org/abs/2312.04474
 # > bot: multion
 # > note: can use # comments in yaml output
 # > factor out reasoning output block # search: "steps of the reasoning process"
