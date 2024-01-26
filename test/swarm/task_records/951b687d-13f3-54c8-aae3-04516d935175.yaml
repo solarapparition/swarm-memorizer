@@ -1,6 +1,6 @@
 "description":
   "information": |-  # high-level, single-sentence description of the subtask
-    Add the number 3 to the result found in the provided artifact to complete the calculation of the expression 3 + 4 * 5.
+    Add 3 to the result of multiplying 4 by 5.
   "definition_of_done": !!null |
 "owner_id": |-
   5d0a8988-ffff-5ee5-8eed-4de0455c5da6_a2a68ec9-f47c-5de3-be6a-488cc8c994ee
@@ -10,11 +10,11 @@
 - "location": |-
     test/swarm/executors/9b9672d4-5cee-5eef-9ad2-661c0946e353/output/mult_4_5.txt
   "description": |-
-    The result of multiplying 4 by 5
+    Result of multiplying 4 by 5
 "id": |-
   951b687d-13f3-54c8-aae3-04516d935175
 "name": |-  # high-level, single-sentence description of the subtask
-  Add the number 3 to the result found in the provided artifact to complete the calculation of the expression 3 + 4 * 5.
+  Add 3 to the result of multiplying 4 by 5.
 "execution_history":
   "history":
   - "executor_id": |-
@@ -31,8 +31,8 @@
 - "location": |-
     test/swarm/executors/9b9672d4-5cee-5eef-9ad2-661c0946e353/output/mult_4_5.txt
   "description": |-
-    The result of multiplying 4 by 5
+    Result of multiplying 4 by 5
 - "location": |-
-    test/swarm/executors/9b9672d4-5cee-5eef-9ad2-661c0946e352/output/sum_3_20.txt
+    test/swarm/executors/9b9672d4-5cee-5eef-9ad2-661c0946e352/output/sum_20_3.txt
   "description": |-
-    The result of adding 3 to the result of multiplying 4 by 5
+    Final result after adding 3 to the multiplication result

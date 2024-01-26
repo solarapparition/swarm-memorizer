@@ -481,6 +481,10 @@ class TaskList:
         """Whether the task list is empty."""
         return bool(self.items)
 
+    def __len__(self) -> int:
+        """Length of the task list."""
+        return len(self.items)
+
     def filter_by_status(self, status: TaskWorkStatus) -> "TaskList":
         """Filter the task list by status."""
         return TaskList(
@@ -1281,6 +1285,7 @@ class ReasoningNotes(Enum):
 
     ORCHESTRATOR_OVERVIEW = "Provide a step-by-step, robust reasoning process for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:"
     ACTION_RESTRICTIONS = f"The final action that the orchestrator decides on MUST be one of the {Concept.ORCHESTRATOR_ACTIONS.value} described above. The orchestrator cannot perform any other actions."
+    TASK_COMPLETION_RESTRICTIONS = f"No matter how simple the {Concept.MAIN_TASK.value} is, it can only be done by being split into subtasks before it can be reported as complete. The orchestrator can only report the {Concept.MAIN_TASK.value} as complete if {Concept.ARTIFACT.value}s have been generated from the completion of subtasks."
     FOCUSED_SUBTASK_RESTRICTIONS = f"The orchestrator cannot directly change the {Concept.FOCUSED_SUBTASK.value}. To focus on a different subtask, it must first use the {ActionName.PAUSE_SUBTASK_DISCUSSION.value} action first. Overall, the orchestrator should be focused on helping the EXECUTOR of the {Concept.FOCUSED_SUBTASK.value}, and will need strong reason to change its focus."
     INFORMATION_RESTRICTIONS = f"Assume that the orchestrator has access to what's described in {Concept.ORCHESTRATOR_INFORMATION_SECTIONS.value} above, but no other information, except for general world knowledge that is available to a standard LLM like GPT-3."
     TERM_REFERENCES = """The orchestrator requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "MAIN TASK" or "KNOWLEDGE section"); however, only use capitalization to refer to specific terms—don't use capitalization as emphasis, as that could be confusing to the orchestrator."""
@@ -1296,7 +1301,7 @@ Provide the reasoning process in the following format:
 2. {reasoning step 2}
 3. [... etc.]
 ```end_of_reasoning_process
-You may add comments or thoughts before or after the reasoning process, but the reasoning process block itself must only contain the reasoning steps.
+You may add comments or thoughts before or after the reasoning process, but the reasoning process block itself must only contain the reasoning steps. Remember, the block must start with "```start_of_reasoning_process" and end with "```end_of_reasoning_process".
 """.strip()
 
 
@@ -1409,7 +1414,9 @@ class ReasoningGenerator:
     @property
     def default_mode_actions(self) -> str:
         """Actions available to the orchestrator in the default state."""
-        return self._orchestrator.default_mode_actions
+        return self._orchestrator.default_mode_actions.replace(
+            "{completion_disabled_note}", ""
+        )
 
     @property
     def role(self) -> Role:
@@ -1437,6 +1444,7 @@ class ReasoningGenerator:
         ## REQUEST FOR YOU:
         {ReasoningNotes.ORCHESTRATOR_OVERVIEW.value}
         - {ReasoningNotes.ACTION_RESTRICTIONS.value}
+        - {ReasoningNotes.TASK_COMPLETION_RESTRICTIONS.value}
         - {ReasoningNotes.INFORMATION_RESTRICTIONS.value}
         - {ReasoningNotes.TERM_REFERENCES.value}
         - {ReasoningNotes.SUBTASK_STATUS_INFO.value}
@@ -1531,6 +1539,7 @@ class ReasoningGenerator:
         - {ReasoningNotes.INFORMATION_RESTRICTIONS.value}
         - {ReasoningNotes.TERM_REFERENCES.value}
         - In its current state, the orchestrator is not able to perform any other actions besides subtask identification and the reasoning preceeding it.
+        - The {Concept.SUBTASK.value} must be smaller than the {Concept.MAIN_TASK.value}, even if the {Concept.MAIN_TASK.value} seems straightforward.
         - {ReasoningNotes.STEPS_RESTRICTIONS.value}
         - {ReasoningNotes.PROCEDURAL_SCRIPTING.value}
         - The orchestrator should only perform the subtask identification on the _last_ step, after it has considered _all_ the information it needs. No other actions need to be performed after subtask identification.
@@ -2095,7 +2104,7 @@ class Orchestrator:
         - `{IDENTIFY_NEW_SUBTASK}`: identify a new subtask from the MAIN TASK that is not yet on the existing subtask list. This adds the subtask to the list and begins a discussion thread with the subtask's executor to start work on the task.
         - `{START_DISCUSSION_FOR_SUBTASK}: "{{id}}"`: open a discussion thread with a subtask's executor, which allows you to exchange information about the subtask. {{id}} must be replaced with the id of the subtask to be discussed.
         - `{MESSAGE_TASK_OWNER}: "{{message}}"`: send a message to the MAIN TASK OWNER to gather or clarify information about the task. {{message}} must be replaced with the message you want to send.
-        - `{REPORT_MAIN_TASK_COMPLETE}`: report the MAIN TASK as complete. This can _only_ be done when all subtasks of the MAIN TASK have been completed by executors.
+        - `{REPORT_MAIN_TASK_COMPLETE}`: report the MAIN TASK as complete. This can only be done _after_ subtasks have been identified and completed.{{completion_disabled_note}}
         - `{WAIT}`: do nothing until the next event from an executor or the MAIN TASK OWNER.
         """
         return dedent_and_strip(
@@ -2116,8 +2125,8 @@ class Orchestrator:
         Use the following reasoning process to decide what to do next:
         ```start_of_reasoning_steps
         {action_choice_core}
-        **Important:** The {MAIN_TASK} cannot be considered complete until all its subtasks have been completed by executors, _and_ there are no additional subtasks that can be added. No matter how simple the {MAIN_TASK} may seem, it must be broken down into subtasks.
         ```end_of_reasoning_steps
+        **Important:** Remember that for the sake of following a consistent process, the MAIN TASK needs at least one subtask to be identified before it can be completed.
 
         In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
         ```start_of_action_reasoning_output
@@ -2217,10 +2226,21 @@ class Orchestrator:
         These are the actions you can currently perform.
         {default_mode_actions}
         """
+        if any(
+            subtask.work_status != TaskWorkStatus.COMPLETED
+            for subtask in self.task.subtasks
+        ):
+            completion_disabled_note = "[**Disabled**: subtasks must be completed before the main task can be completed.]"
+        elif len(self.task.subtasks) < 2:
+            completion_disabled_note = "[**Disabled**: the main task must have had at least 2 subtasks identified before it can be completed.]"
+        else:
+            completion_disabled_note = ""
         return dedent_and_strip(template).format(
             default_mode_status=self.default_mode_status,
             ORCHESTRATOR_ACTIONS=Concept.ORCHESTRATOR_ACTIONS.value,
-            default_mode_actions=self.default_mode_actions,
+            default_mode_actions=self.default_mode_actions.replace(
+                "{completion_disabled_note}", completion_disabled_note
+            ),
         )
 
     @property
@@ -2429,6 +2449,7 @@ class Orchestrator:
         2. {{step_2_output}}
         3. [... etc.]
         ```end_of_reasoning_output
+        **Important**: for the sake of following a consistent process, a subtask _must_ be identified, even if the MAIN TASK seems straightforward.
 
         After this block, you must include the subtask you have identified for its executor. To the executor, the identified subtask becomes its own MAIN TASK, and you are the MAIN TASK OWNER of the subtask. The executor knows nothing about your original MAIN TASK. The subtask must be described in the following format:
         ```start_of_subtask_identification_output
@@ -2714,6 +2735,24 @@ class Orchestrator:
             # new_work_status=TaskWorkStatus.IN_PROGRESS,
         )
 
+    def report_main_task_complete(self) -> ActionResult:
+        """Report the main task as complete."""
+        assert self.task.work_status == TaskWorkStatus.IN_PROGRESS
+
+        # upgrade to gpt4-turbo-preview
+        breakpoint()
+        # find artifacts # needs to be a separate function reusable by bots
+        # task completion message # contains artifacts
+        # last event must be the message
+        breakpoint()
+        ActionResult(
+            pause_execution=PauseExecution(True),
+            new_events=new_events,
+            task_completed=True,
+        )
+        breakpoint()
+        # > upgrade to new embedding model
+
     def act(self, decision: ActionDecision) -> ActionResult:
         """Act on a decision."""
         decision.validate_action(valid_actions=self.action_names)
@@ -2724,8 +2763,9 @@ class Orchestrator:
         if decision.action_name == ActionName.START_DISCUSSION_FOR_SUBTASK.value:
             raise NotImplementedError("TODO")
         if decision.action_name == ActionName.REPORT_MAIN_TASK_COMPLETE.value:
-            # commit
+            return self.report_main_task_complete()
             breakpoint()
+            # > test if current bots are being retrieved properly
 
         if decision.action_name == ActionName.WAIT.value:
             raise NotImplementedError("TODO")
@@ -2734,12 +2774,13 @@ class Orchestrator:
         if decision.action_name == ActionName.PAUSE_SUBTASK_DISCUSSION.value:
             raise NotImplementedError("TODO")
 
+        raise NotImplementedError("TODO")
         # > change task cancellation to task failing validation
         # > if a task is set to be complete, trigger validation agent automatically
         # > need to add fail reason for failed tasks
         # ....
         # (next_action_implementation) > pause subtask discussion: adds event that is a summary of the new items in the discussion to maintain state continuity
-        raise ValueError(f"Unknown action: {decision.action_name}")
+        # raise ValueError(f"Unknown action: {decision.action_name}")
 
     def message_from_owner(self, message: str) -> Event:
         """Create a message from the task owner."""
@@ -2993,15 +3034,6 @@ class Orchestrator:
             and isinstance(last_event.data, Message)
             and last_event.data.sender == self.id
         ), f"Execution report creation: last event is expected to be a message from the orchestrator, but is: {last_event}"
-        # if not (last_event := self.task.event_log.last_event):
-        #     raise NotImplementedError("TODO")
-        # if not isinstance(last_event.data, Message):  # type: ignore
-        #     raise NotImplementedError("TODO")
-        # if (
-        #     last_event.data.sender != self.id
-        #     and last_event.data.recipient != self.task.owner_id
-        # ):
-        #     raise NotImplementedError("TODO")
         return ExecutorReport(
             reply=last_event.data.content,
             task_completed=task_completed,
@@ -3017,7 +3049,6 @@ class Orchestrator:
     ) -> Self:
         """Deserialize an orchestrator from a YAML file."""
         blueprint_data = default_yaml.load(blueprint_location)
-        # blueprint_data["task_history"] = tuple(blueprint_data["task_history"])
         return cls(
             blueprint=OrchestratorBlueprint(**blueprint_data),
             task=task,
@@ -3360,7 +3391,7 @@ class Delegator:
         """Evaluate candidates for a task."""
         context = """
         ## MISSION:
-        You are a delegator for a task that must be completed. Your purpose is select an appropriate executor for the task based on a particular reasoning process.
+        You are a delegator for a task that must be completed. Your purpose is to select an appropriate executor for the task based on a particular reasoning process.
 
         ## CONCEPTS:
         These are the concepts you must be aware of in order to perform delegation:
@@ -3384,7 +3415,7 @@ class Delegator:
         context = dedent_and_strip(context).format(
             concepts=EXECUTOR_SELECTION_CONCEPTS,
             EXECUTOR=Concept.EXECUTOR.value,
-            task_information=task.information,
+            task_information=task.information_with_artifacts,
             executor_candidates=executor_candidates_printout,
         )
         request = """
