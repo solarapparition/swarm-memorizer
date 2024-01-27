@@ -647,6 +647,7 @@ class ExecutionOutcome:
 
     executor_id: RuntimeId
     blueprint_id: BlueprintId
+    executor_rank: int | None
     validator_id: RuntimeId
     validator_name: str
     success: bool
@@ -658,11 +659,6 @@ class ExecutionHistory:
 
     history: list[ExecutionOutcome] = field(default_factory=list)
 
-    # def add(
-    #     self, executor_id: RuntimeId, blueprint_id: BlueprintId, validator_id: RuntimeId, validator_name: str, success: bool
-    # ) -> None:
-    #     """Add an execution attempt to the history."""
-    #     self.history.append(ExecutionOutcome(executor_id, blueprint_id, validator_id, validator_name, success))
     def add(self, execution_outcome: ExecutionOutcome) -> None:
         """Add an execution attempt to the history."""
         self.history.append(execution_outcome)
@@ -717,6 +713,7 @@ class TaskData:
                     ExecutionOutcome(
                         executor_id=RuntimeId(execution["executor_id"]),
                         blueprint_id=BlueprintId(execution["blueprint_id"]),
+                        executor_rank=execution["executor_rank"],
                         validator_id=RuntimeId(execution["validator_id"]),
                         validator_name=execution["validator_name"],
                         success=execution["success"],
@@ -731,6 +728,12 @@ class TaskData:
         """Id of the last executor blueprint."""
         assert self.execution_history
         return self.execution_history.last_entry.blueprint_id
+
+    @property
+    def last_executor_rank(self) -> int | None:
+        """Rank of the last executor."""
+        assert self.execution_history
+        return self.execution_history.last_entry.executor_rank
 
     @property
     def execution_successful(self) -> bool:
@@ -897,6 +900,11 @@ class Task:
         return self.executor.id
 
     @property
+    def last_executor_rank(self) -> int | None:
+        """Rank of the last executor."""
+        return self.data.last_executor_rank
+
+    @property
     def input_artifacts_printout(self) -> str:
         """String representation of the artifacts."""
         return self.data.input_artifacts_printout
@@ -950,6 +958,7 @@ class Task:
         return ExecutionOutcome(
             executor_id=self.executor.id,
             blueprint_id=self.executor.blueprint.id,
+            executor_rank=self.executor.rank,
             validator_id=self.validator.id,
             validator_name=self.validator.name,
             success=False,
@@ -1040,21 +1049,18 @@ class Task:
 
     def change_executor(self, executor: Executor) -> None:
         """Update the executor of the task."""
-        if self.executor:  # save the previous executor's changes
-            self.executor.save_blueprint()
+        # we assume that the executor is being changed because the previous executor failed, so we don't save the blueprint
         self.executor = executor
-        # self.execution_history.add(
-        #     # executor_id=executor.id, blueprint_id=executor.blueprint.id, validator_id=self.validator.id, validator_name=self.validator.name, success=False
-        #     self.current_execution_outcome
-        # )
         self.add_current_execution_outcome_to_history()
 
     def wrap_execution(self, success: bool) -> None:
         """Wrap up execution of the task."""
         assert self.execution_history and self.executor
+        self.execution_history.last_entry.success = success
+        assert self.executor.rank is not None
+        self.execution_history.last_entry.executor_rank = self.executor.rank
         self.executor.save_blueprint()
         self.executor = None
-        self.execution_history.last_entry.success = success
         self.save()
 
     @classmethod
@@ -1237,6 +1243,7 @@ class ActionDecision:
         if self.action_name in [
             ActionName.MESSAGE_TASK_OWNER.value,
             ActionName.MESSAGE_SUBTASK_EXECUTOR.value,
+            ActionName.REPORT_MAIN_TASK_COMPLETE.value,
         ]:
             action_args["message"] = (
                 self.action_choice.replace(f"{self.action_name}:", "")
@@ -1290,7 +1297,7 @@ class ReasoningNotes(Enum):
     INFORMATION_RESTRICTIONS = f"Assume that the orchestrator has access to what's described in {Concept.ORCHESTRATOR_INFORMATION_SECTIONS.value} above, but no other information, except for general world knowledge that is available to a standard LLM like GPT-3."
     TERM_REFERENCES = """The orchestrator requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "MAIN TASK" or "KNOWLEDGE section"); however, only use capitalization to refer to specific terms—don't use capitalization as emphasis, as that could be confusing to the orchestrator."""
     SUBTASK_STATUS_INFO = f"Typically, subtasks that are {TaskWorkStatus.COMPLETED.value}, {TaskWorkStatus.CANCELLED.value}, {TaskWorkStatus.IN_PROGRESS.value}, or {TaskWorkStatus.IN_VALIDATION.value} do not need immediate attention unless the orchestrator discovers information that changes the status of the subtask. Subtasks that are {TaskWorkStatus.BLOCKED.value} will need action from the orchestrator to start or resume execution respectively."
-    STEPS_RESTRICTIONS = "The reasoning process should be written in second person and be around 5-7 steps, though you can add substeps within a step (a, b, c, etc.) if it is complex."
+    STEPS_RESTRICTIONS = "The reasoning process should be written in second person and be around 5-7 steps, though you can add substeps within a step (a/b/c, i/ii/iii, etc.) nested arbitrarily deep as needed."
     PROCEDURAL_SCRIPTING = "The reasoning steps can refer to the results of previous steps, and it may be effective to build up the orchestrator's mental context step by step, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but in natural language instead of code."
 
 
@@ -1381,7 +1388,7 @@ class ReasoningGenerator:
         - The delegator requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "TASK INFORMATION" or "SUCCESS RATE"); however, only use capitalization to refer to specific terms—don't use capitalization as emphasis, as that could be confusing to the delegator.
         - As an initial part of the reasoning, the delegator must figure out whether to lean towards exploration using NEW {EXECUTOR} candidates or exploitation using non-NEW {EXECUTOR} candidates. This of course depends on how good the non-NEW {EXECUTOR} candidates are.
         - The delegator does _not_ have to select _any_ of the candidates, if it deems none of them to be suitable for the task.
-        - The reasoning process should be written in second person and be around 5-7 steps, though you can add substeps within a step (a, b, c, etc.) if it is complex.
+        - {step_restrictions}
         - The reasoning steps can refer to the results of previous steps, and it may be effective to build up the delegator's mental context step by step, starting from basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but in natural language instead of code.
         - The final decision of which {EXECUTOR} CANDIDATE to use (or to not use any at all) must be done on the last step only, after considering all the information available from the previous steps.
 
@@ -1393,6 +1400,7 @@ class ReasoningGenerator:
                 content=dedent_and_strip(request).format(
                     EXECUTOR=Concept.EXECUTOR.value,
                     output_instructions=REASONING_OUTPUT_INSTRUCTIONS,
+                    step_restrictions=ReasoningNotes.STEPS_RESTRICTIONS.value,
                 )
             ),
         ]
@@ -1716,7 +1724,6 @@ def validate_artifact_mentions(
     You do _not_ need to validate whether the ARTIFACT(s) exists or not, just that the EXECUTOR was specific enough in their communications to allow someone to attempt to locate the ARTIFACT(s).
     ```end_of_reasoning_steps
 
-
     In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
     ```start_of_reasoning_output
     1. {step_1_output}
@@ -1867,14 +1874,21 @@ class Orchestrator:
     @property
     def executor_max_rank(self) -> int | None:
         """Maximum rank of the orchestrator's task executors."""
-        executors = [subtask.executor for subtask in self.task.subtasks]
-        ranks = [
-            executor.rank
-            for executor in executors
-            if executor is not None and executor.rank is not None
-        ]
-        # if filtered ranks is less than num executors, it means some task have either not been delegated or its executor is unranked
-        return None if len(ranks) != len(executors) else max(ranks)
+        ranks: list[int | None] = []
+        for subtask in self.task.subtasks:
+            if subtask.work_status == TaskWorkStatus.COMPLETED:
+                assert subtask.last_executor_rank is not None
+                ranks.append(subtask.last_executor_rank)
+                continue
+            if subtask.work_status == TaskWorkStatus.CANCELLED:
+                continue
+            if subtask.executor is None:
+                ranks.append(None)
+                continue
+            ranks.append(subtask.executor.rank)
+        int_ranks = [rank for rank in ranks if rank is not None]
+        # if some subtask has no ranked executor, it means it either has not been delegated or its executor is unranked
+        return None if not int_ranks or len(int_ranks) < len(ranks) else max(int_ranks)
 
     @property
     def rank_limit(self) -> int | None:
@@ -2034,7 +2048,10 @@ class Orchestrator:
             self.blueprint.rank = self.rank
         # assume that at the point of saving, all executors have been saved and so would have a rank
         assert self.blueprint.rank is not None, "Rank must not be None when saving."
-        assert self.blueprint.description is not None
+        breakpoint()
+        assert (
+            self.blueprint.description is not None
+        ), "Description must exist when saving."
         default_yaml.dump(self.serialize(), self.serialization_location)
         raise NotImplementedError("TODO")
         # > TODO: serialization: populate knowledge on save if knowledge is empty
@@ -2104,8 +2121,9 @@ class Orchestrator:
         - `{IDENTIFY_NEW_SUBTASK}`: identify a new subtask from the MAIN TASK that is not yet on the existing subtask list. This adds the subtask to the list and begins a discussion thread with the subtask's executor to start work on the task.
         - `{START_DISCUSSION_FOR_SUBTASK}: "{{id}}"`: open a discussion thread with a subtask's executor, which allows you to exchange information about the subtask. {{id}} must be replaced with the id of the subtask to be discussed.
         - `{MESSAGE_TASK_OWNER}: "{{message}}"`: send a message to the MAIN TASK OWNER to gather or clarify information about the task. {{message}} must be replaced with the message you want to send.
-        - `{REPORT_MAIN_TASK_COMPLETE}`: report the MAIN TASK as complete. This can only be done _after_ subtasks have been identified and completed.{{completion_disabled_note}}
+        - `{REPORT_MAIN_TASK_COMPLETE}: "{{message}}"`: mark the MAIN TASK as complete, and send a message containing descriptions and the exact location(s) of the final ARTIFACT(s) that the task requires. This can only be done after ARTIFACT(s) containing the final results for the task have been generated by subtask executors.
         - `{WAIT}`: do nothing until the next event from an executor or the MAIN TASK OWNER.
+        When sending a message, always refer to the MAIN TASK as 'the task' rather than 'MAIN TASK', because the MAIN TASK OWNER might have other tasks that they own.
         """
         return dedent_and_strip(
             actions.format(
@@ -2115,6 +2133,7 @@ class Orchestrator:
                 MESSAGE_TASK_OWNER=ActionName.MESSAGE_TASK_OWNER.value,
                 REPORT_MAIN_TASK_COMPLETE=ActionName.REPORT_MAIN_TASK_COMPLETE.value,
                 WAIT=ActionName.WAIT.value,
+                MAIN_TASK_OWNER=Concept.MAIN_TASK_OWNER.value,
             )
         )
 
@@ -2126,7 +2145,7 @@ class Orchestrator:
         ```start_of_reasoning_steps
         {action_choice_core}
         ```end_of_reasoning_steps
-        **Important:** Remember that for the sake of following a consistent process, the MAIN TASK needs at least one subtask to be identified before it can be completed.
+        **Important:** Remember that for the sake of following a consistent process, the MAIN TASK needs at least one subtask to be identified before it can be completed (usually more). As an orchestrator, you cannot execute any part of the MAIN TASK yourself, including finishing the MAIN TASK.
 
         In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
         ```start_of_action_reasoning_output
@@ -2399,13 +2418,14 @@ class Orchestrator:
         """Send message to main task owner."""
         return ActionResult(
             new_events=[
-                Event(
-                    data=Message(
-                        sender=self.id, recipient=self.task.owner_id, content=message
-                    ),
-                    generating_task_id=self.task.id,
-                    id=generate_swarm_id(EventId, self.id_generator),
-                ),
+                self.to_owner_message(message),
+                # Event(
+                #     data=Message(
+                #         sender=self.id, recipient=self.task.owner_id, content=message
+                #     ),
+                #     generating_task_id=self.task.id,
+                #     id=generate_swarm_id(EventId, self.id_generator),
+                # ),
             ],
             pause_execution=PauseExecution(True),
             task_completed=False,
@@ -2735,23 +2755,17 @@ class Orchestrator:
             # new_work_status=TaskWorkStatus.IN_PROGRESS,
         )
 
-    def report_main_task_complete(self) -> ActionResult:
+    def report_main_task_complete(self, message: str) -> ActionResult:
         """Report the main task as complete."""
-        assert self.task.work_status == TaskWorkStatus.IN_PROGRESS
-
-        # upgrade to gpt4-turbo-preview
-        breakpoint()
-        # find artifacts # needs to be a separate function reusable by bots
-        # task completion message # contains artifacts
-        # last event must be the message
-        breakpoint()
-        ActionResult(
+        assert (
+            self.task.work_status == TaskWorkStatus.IN_PROGRESS
+        ), "Can't report a task as complete if it isn't in progress."
+        message_event = self.to_owner_message(message)
+        return ActionResult(
             pause_execution=PauseExecution(True),
-            new_events=new_events,
+            new_events=[message_event],
             task_completed=True,
         )
-        breakpoint()
-        # > upgrade to new embedding model
 
     def act(self, decision: ActionDecision) -> ActionResult:
         """Act on a decision."""
@@ -2763,10 +2777,7 @@ class Orchestrator:
         if decision.action_name == ActionName.START_DISCUSSION_FOR_SUBTASK.value:
             raise NotImplementedError("TODO")
         if decision.action_name == ActionName.REPORT_MAIN_TASK_COMPLETE.value:
-            return self.report_main_task_complete()
-            breakpoint()
-            # > test if current bots are being retrieved properly
-
+            return self.report_main_task_complete(decision.action_args["message"])
         if decision.action_name == ActionName.WAIT.value:
             raise NotImplementedError("TODO")
         if decision.action_name == ActionName.MESSAGE_SUBTASK_EXECUTOR.value:
@@ -2782,7 +2793,7 @@ class Orchestrator:
         # (next_action_implementation) > pause subtask discussion: adds event that is a summary of the new items in the discussion to maintain state continuity
         # raise ValueError(f"Unknown action: {decision.action_name}")
 
-    def message_from_owner(self, message: str) -> Event:
+    def from_owner_message(self, message: str) -> Event:
         """Create a message from the task owner."""
         return Event(
             data=Message(
@@ -2794,7 +2805,7 @@ class Orchestrator:
             id=generate_swarm_id(EventId, self.id_generator),
         )
 
-    def message_to_owner(self, message: str) -> Event:
+    def to_owner_message(self, message: str) -> Event:
         """Create a message to the task owner."""
         return Event(
             data=Message(
@@ -3225,7 +3236,7 @@ def search_task_records(task_info: str, task_records_dir: Path) -> list[TaskData
         for node in results
         if node.score and node.score > similarity_cutoff
     ]
-    if time.time() - start_time > 5:
+    if time.time() - start_time > 10:
         raise NotImplementedError("TODO")
         # > TODO: need more efficient system to retrieve tasks
 
@@ -3747,6 +3758,13 @@ class Swarm:
 
 # curriculum task 2: trivial compositional task: 3 + 4 * 5  # to test basic end-to-end orchestrator functionality
 # ....
+# > test if current bots are being retrieved properly
+# > bot creation: try generating command external agent interface using python fire lib
+# > bot: search: exaai
+# > bot creation: robocorp (langchain thing)
+# > bot: webvoyager
+# > bot: code chain: huggingface.co/papers/2310.08992
+# > upgrade to new embedding model
 # > autonomous goal: learn to do more tasks
 # > bot: autogen web surfer agent
 # > bot: cognosys agent

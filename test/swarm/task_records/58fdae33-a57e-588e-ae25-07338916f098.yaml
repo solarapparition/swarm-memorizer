@@ -15,6 +15,8 @@
       9b9672d4-5cee-5eef-9ad2-661c0946e351_58fdae33-a57e-588e-ae25-07338916f098
     "blueprint_id": |-
       9b9672d4-5cee-5eef-9ad2-661c0946e351
+    "executor_rank": !!int |-
+      0
     "validator_id": |-
       Human
     "validator_name": |-
