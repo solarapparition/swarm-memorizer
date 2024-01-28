@@ -874,11 +874,6 @@ class Task:
     def information(self) -> str:
         """Information on the task."""
         return self.description.information
-    
-    @property
-    def initial_information(self) -> str:
-        """Initial information on the task."""
-        return self.description.initial_information
 
     @property
     def information_with_artifacts(self) -> str:
@@ -2063,9 +2058,9 @@ class Orchestrator:
         if update_blueprint:
             self.blueprint.rank = self.rank
         # assume that at the point of saving, all executors have been saved and so would have a rank
-        assert self.blueprint.rank is not None, "Orchestrator rank must not be None when saving."
-        
-
+        assert (
+            self.blueprint.rank is not None
+        ), "Orchestrator rank must not be None when saving."
 
         # test
         breakpoint()
@@ -3595,7 +3590,7 @@ class Delegator:
     ) -> DelegationSuccessful:
         """Find an executor to delegate the task to."""
         candidates = self.search_blueprints(
-            task.initial_information, task.rank_limit
+            task.data.initial_information, task.rank_limit
         )
         if not candidates:
             return DelegationSuccessful(False)
