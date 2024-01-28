@@ -579,6 +579,12 @@ class TaskDescription:
     information: str
     definition_of_done: str | None = None
 
+    initial_information: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Post init."""
+        self.initial_information = self.information
+
     @property
     def full(self) -> str:
         """Full description of the task."""
@@ -761,6 +767,11 @@ class TaskData:
         """Information on the task with artifacts."""
         return f"Information:\n{self.description.information}\n\nInput Artifacts:\n{self.input_artifacts_printout}"
 
+    @property
+    def initial_information(self) -> str:
+        """Initial information on the task."""
+        return self.description.initial_information
+
 
 @dataclass
 class Task:
@@ -863,6 +874,11 @@ class Task:
     def information(self) -> str:
         """Information on the task."""
         return self.description.information
+    
+    @property
+    def initial_information(self) -> str:
+        """Initial information on the task."""
+        return self.description.initial_information
 
     @property
     def information_with_artifacts(self) -> str:
@@ -2047,11 +2063,20 @@ class Orchestrator:
         if update_blueprint:
             self.blueprint.rank = self.rank
         # assume that at the point of saving, all executors have been saved and so would have a rank
-        assert self.blueprint.rank is not None, "Rank must not be None when saving."
+        assert self.blueprint.rank is not None, "Orchestrator rank must not be None when saving."
+        
+
+
+        # test
+        breakpoint()
+        # when retrieving/saving agent, use "initial information" field # post init hook
+        breakpoint()
+        # > need to create orchestrator description
+        # > need to write orchestrator knowledge
         breakpoint()
         assert (
             self.blueprint.description is not None
-        ), "Description must exist when saving."
+        ), "Orchestrator needs a description when saving blueprint."
         default_yaml.dump(self.serialize(), self.serialization_location)
         raise NotImplementedError("TODO")
         # > TODO: serialization: populate knowledge on save if knowledge is empty
@@ -3218,7 +3243,7 @@ def search_task_records(task_info: str, task_records_dir: Path) -> list[TaskData
         old_task_data_dict: dict[str, Any] = default_yaml.load(task_record_file)
         old_task_data = TaskData.from_serialized_data(old_task_data_dict)
         node = TextNode(
-            text=old_task_data.information_with_artifacts,
+            text=old_task_data.initial_information,
             metadata=old_task_data_dict,  # type: ignore
             excluded_embed_metadata_keys=list(old_task_data_dict.keys()),
         )
@@ -3570,7 +3595,7 @@ class Delegator:
     ) -> DelegationSuccessful:
         """Find an executor to delegate the task to."""
         candidates = self.search_blueprints(
-            task.information_with_artifacts, task.rank_limit
+            task.initial_information, task.rank_limit
         )
         if not candidates:
             return DelegationSuccessful(False)

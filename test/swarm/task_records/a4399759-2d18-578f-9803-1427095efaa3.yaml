@@ -2,6 +2,8 @@
   "information": |-  # high-level, single-sentence description of the subtask
     Calculate 4 * 5.
   "definition_of_done": !!null |
+  "initial_information": |-  # high-level, single-sentence description of the subtask
+    Calculate 4 * 5.
 "owner_id": |-
   5d0a8988-ffff-5ee5-8eed-4de0455c5da6_a2a68ec9-f47c-5de3-be6a-488cc8c994ee
 "rank_limit": !!int |-
