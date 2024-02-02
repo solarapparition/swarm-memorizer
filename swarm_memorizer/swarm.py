@@ -80,6 +80,7 @@ class Concept(Enum):
     LAST_READ_MAIN_TASK_OWNER_MESSAGE = f"LAST READ {MAIN_TASK_OWNER} MESSAGE"
     OBJECTIVE_POV = "OBJECTIVE POV"
     ARTIFACT = "ARTIFACT"
+    CONTEXT = "CONTEXT"
 
 
 def as_printable(messages: Sequence[BaseMessage]) -> str:
@@ -269,14 +270,27 @@ class TaskStatusChange:
 
 
 @dataclass(frozen=True)
-class SubtaskFocus:
+class StartedSubtaskDiscussion:
     """Data for changing the focus of a main task owner."""
 
     owner_id: RuntimeId
     subtask_id: TaskId
 
     def __str__(self) -> str:
-        return f"{self.owner_id}: I've changed focus to subtask {self.subtask_id}."
+        return (
+            f"{self.owner_id}: I've started discussion for subtask {self.subtask_id}."
+        )
+
+
+@dataclass(frozen=True)
+class PausedSubtaskDiscussion:
+    """Data for unfocusing from a subtask."""
+
+    owner_id: RuntimeId
+    subtask_id: TaskId
+
+    def __str__(self) -> str:
+        return f"{self.owner_id}: I've paused discussion for subtask {self.subtask_id}."
 
 
 @dataclass(frozen=True)
@@ -324,7 +338,8 @@ EventData = (
     Message
     | SubtaskIdentification
     | TaskStatusChange
-    | SubtaskFocus
+    | StartedSubtaskDiscussion
+    | PausedSubtaskDiscussion
     | TaskDescriptionUpdate
     | Thought
     | TaskValidation
@@ -694,6 +709,7 @@ class TaskData:
     input_artifacts: list[Artifact]
     id: TaskId | None = None
     name: str | None = None
+    context: str | None = None
     execution_history: ExecutionHistory = field(default_factory=ExecutionHistory)
     output_artifacts: list[Artifact] = field(default_factory=list)
 
@@ -880,6 +896,11 @@ class Task:
         """Information on the task with artifacts."""
         return self.data.information_with_artifacts
 
+    @property
+    def initial_information(self) -> str:
+        """Initial information on the task."""
+        return self.data.initial_information
+
     @cached_property
     def event_log(self) -> EventLog:
         """Event log for the task."""
@@ -980,13 +1001,17 @@ class Task:
         """Whether the task is closed."""
         return self.work_status in {TaskWorkStatus.COMPLETED, TaskWorkStatus.CANCELLED}
 
+    @property
+    def context(self) -> str | None:
+        """Information for the context of the task."""
+        return self.data.context
+
     def reformat_event_log(
         self,
         event_log: EventLog,
         pov: Literal[Concept.EXECUTOR, Concept.MAIN_TASK_OWNER, Concept.OBJECTIVE_POV],
     ) -> str:
         """Format an event log."""
-
         # use case for executor pov is for printing recent events log
         if pov == Concept.EXECUTOR:
             task_id_replacement = {
@@ -1357,6 +1382,7 @@ class SubtaskIdentifcationResult:
 EXECUTOR_SELECTION_CONCEPTS = f"""
 These are the concepts you should be familiar with:
 - TASK: a task that must be done. Tasks do _not_ have strict deadlines.
+- {Concept.CONTEXT.value}: the context in which the TASK is being executed—provides background information that is relevant to the TASK, but not strictly required for its execution.
 - {Concept.EXECUTOR.value}: an agent that is responsible for executing a task.
 - TASK PERFORMANCE: the performance of an executor on tasks similar to the TASK, which is measured by the following metrics:
   - SUCCESS RATE: the proportion of similar tasks that the executor has successfully completed.
@@ -1382,7 +1408,7 @@ class ReasoningGenerator:
         
         ## DELEGATOR INFORMATION SECTIONS:
         The delegator has access to several sections of information that is relevant to its decisionmaking.
-        - TASK INFORMATION contains a brief description of information about the TASK. This _may_ include information both the TASK requirement itself, and also contextual information for why the task is being executed.
+        - TASK INFORMATION contains a brief description of information about the TASK. This will always include information the TASK requirement itself, but _may_ also contain contextual information for why the task is being executed.
         - {EXECUTOR} CANDIDATES: a list of executors that can be selected for the task. Each entry for an executor candidate has the following information:
           - DESCRIPTION: a brief description of the executor candidate's capabilities, as well as what it cannot do. This is what the candidate can _theoretically_ do, as opposed to its actual performance.
           - NEW STATUS: whether an executor candidate is a NEW {EXECUTOR} or not.
@@ -1395,10 +1421,11 @@ class ReasoningGenerator:
         request = """
         ## REQUEST FOR YOU:
         Provide a step-by-step, robust reasoning process for the delegator to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
-        - Assume that the delegator has access to what's described in DELEGATOR INFORMATION SECTIONS above, but no other information, except for general world knowledge that is available to a standard LLM like GPT-3."
+        - Assume that the delegator has access to what's described in DELEGATOR INFORMATION SECTIONS above, but no other information, except for general world knowledge that is available to a standard LLM like GPT-3.
         - The delegator requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "TASK INFORMATION" or "SUCCESS RATE"); however, only use capitalization to refer to specific terms—don't use capitalization as emphasis, as that could be confusing to the delegator.
         - As an initial part of the reasoning, the delegator must figure out whether to lean towards exploration using NEW {EXECUTOR} candidates or exploitation using non-NEW {EXECUTOR} candidates. This of course depends on how good the non-NEW {EXECUTOR} candidates are.
         - The delegator does _not_ have to select _any_ of the candidates, if it deems none of them to be suitable for the task.
+        - The delegator must understand the difference between the actual requirements of the TASK and the {CONTEXT} that the TASK is being executed in. {EXECUTOR} candidates only need to be able to fulfill the actual requirements of the TASK itself—the {CONTEXT} is for background information only.
         - {step_restrictions}
         - The reasoning steps can refer to the results of previous steps, and it may be effective to build up the delegator's mental context step by step, starting from basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but in natural language instead of code.
         - The final decision of which {EXECUTOR} CANDIDATE to use (or to not use any at all) must be done on the last step only, after considering all the information available from the previous steps.
@@ -1410,6 +1437,7 @@ class ReasoningGenerator:
             SystemMessage(
                 content=dedent_and_strip(request).format(
                     EXECUTOR=Concept.EXECUTOR.value,
+                    CONTEXT=Concept.CONTEXT.value,
                     output_instructions=REASONING_OUTPUT_INSTRUCTIONS,
                     step_restrictions=ReasoningNotes.STEPS_RESTRICTIONS.value,
                 )
@@ -2053,21 +2081,36 @@ class Orchestrator:
         """Serialize the orchestrator to a dict."""
         return asdict(self.blueprint)
 
+    def determine_knowledge(self) -> str:
+        """Determine the knowledge of the orchestrator."""
+
+        breakpoint()
+        # commit # added task context
+        # > write out full logs of main task and subtask discussions
+        # > encourage reflection on each of the subtasks
+        breakpoint()
+        # generate knowledge update reasoning # > record success/failure of executors and their names # > record task identification success/failures
+        breakpoint()
+        # figure out what was learned
+        breakpoint()
+        # > orchestrator need name when saved
+        # > add knowledge to executor selection # > regenerate logic
+
     def save_blueprint(self, update_blueprint: bool = True) -> None:
         """Serialize the orchestrator to YAML."""
         if update_blueprint:
             self.blueprint.rank = self.rank
-        # assume that at the point of saving, all executors have been saved and so would have a rank
+        # assume that at the point of saving, all executors have been saved and so we can calculate the rank
         assert (
             self.blueprint.rank is not None
         ), "Orchestrator rank must not be None when saving."
 
-        # test
+        if not self.blueprint.knowledge:
+            self.blueprint.knowledge = self.determine_knowledge()
+
+        # need to write orchestrator knowledge
         breakpoint()
-        # when retrieving/saving agent, use "initial information" field # post init hook
-        breakpoint()
-        # > need to create orchestrator description
-        # > need to write orchestrator knowledge
+        # need to write orchestrator description
         breakpoint()
         assert (
             self.blueprint.description is not None
@@ -2437,19 +2480,9 @@ class Orchestrator:
     def message_task_owner(self, message: str) -> ActionResult:
         """Send message to main task owner."""
         return ActionResult(
-            new_events=[
-                self.to_owner_message(message),
-                # Event(
-                #     data=Message(
-                #         sender=self.id, recipient=self.task.owner_id, content=message
-                #     ),
-                #     generating_task_id=self.task.id,
-                #     id=generate_swarm_id(EventId, self.id_generator),
-                # ),
-            ],
+            new_events=[self.to_owner_message(message)],
             pause_execution=PauseExecution(True),
             task_completed=False,
-            # new_work_status=TaskWorkStatus.BLOCKED,
         )
 
     @property
@@ -2623,7 +2656,7 @@ class Orchestrator:
         status_change_event = change_status(
             focused_subtask,
             TaskWorkStatus.IN_PROGRESS,
-            f"Sent message to {Concept.EXECUTOR.value} regarding subtask.",
+            f"Sent message to {Concept.EXECUTOR.value} unblock subtask.",
         )
         return [status_change_event] if report_status_change else []
 
@@ -2631,9 +2664,23 @@ class Orchestrator:
         """Focus on a subtask."""
         self.state.focused_subtask = subtask
         return Event(
-            data=SubtaskFocus(
+            data=StartedSubtaskDiscussion(
                 owner_id=self.id,
                 subtask_id=subtask.id,
+            ),
+            generating_task_id=self.task.id,
+            id=generate_swarm_id(EventId, self.id_generator),
+        )
+
+    def unfocus_subtask(self) -> Event:
+        """Unfocus on a subtask."""
+        assert self.state.focused_subtask, "Can't unfocus without a focused subtask."
+        subtask_id = self.state.focused_subtask.id
+        self.state.focused_subtask = None
+        return Event(
+            data=PausedSubtaskDiscussion(
+                owner_id=self.id,
+                subtask_id=subtask_id,
             ),
             generating_task_id=self.task.id,
             id=generate_swarm_id(EventId, self.id_generator),
@@ -2672,6 +2719,7 @@ class Orchestrator:
         )
         identified_subtask = extracted_results.identified_subtask
         subtask_validation = self.validate_subtask_identification(identified_subtask)
+        subtask_context = f'This task is a subtask of the following parent task:\n"""\n{self.task.initial_information}\n"""'
         subtask = Task(
             data=TaskData(
                 name=identified_subtask,
@@ -2679,6 +2727,7 @@ class Orchestrator:
                 rank_limit=None if self.rank_limit is None else self.rank_limit - 1,
                 description=TaskDescription(information=identified_subtask),
                 input_artifacts=extracted_results.relevant_artifacts,
+                context=subtask_context,
             ),
             id_generator=self.id_generator,
             task_records_dir=self.task.task_records_dir,
@@ -3050,7 +3099,7 @@ class Orchestrator:
                 executor_events.sort(key=lambda event: event.timestamp)
                 self.add_to_event_log(executor_events)
             if self.focused_subtask and self.focused_subtask.closed:
-                self.state.focused_subtask = None
+                self.unfocus_subtask()
             action_decision = self.choose_action()
             if action_decision.additional_thoughts:
                 self.add_thought(action_decision.additional_thoughts)
@@ -3429,10 +3478,15 @@ class Delegator:
         {concepts}
 
         ## TASK INFORMATION:
-        Here is the information about the task:
+        Here is the information about the TASK:
         ```start_of_task_info
         {task_information}
         ```end_of_task_info
+
+        Here is information about the CONTEXT for the task, if available:
+        ```start_of_context_info
+        {context_information}
+        ```end_of_context_info
 
         ## {EXECUTOR} CANDIDATES:
         Here are the {EXECUTOR} candidates that can be selected for the task.
@@ -3447,6 +3501,7 @@ class Delegator:
             concepts=EXECUTOR_SELECTION_CONCEPTS,
             EXECUTOR=Concept.EXECUTOR.value,
             task_information=task.information_with_artifacts,
+            context_information=task.context,
             executor_candidates=executor_candidates_printout,
         )
         request = """
@@ -3779,6 +3834,7 @@ class Swarm:
 # curriculum task 2: trivial compositional task: 3 + 4 * 5  # to test basic end-to-end orchestrator functionality
 # ....
 # > test if current bots are being retrieved properly
+# > bot: slack agent: https://python.langchain.com/docs/integrations/toolkits/slack
 # > bot creation: try generating command external agent interface using python fire lib
 # > bot: search: exaai
 # > bot creation: robocorp (langchain thing)

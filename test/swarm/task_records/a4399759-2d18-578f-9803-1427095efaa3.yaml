@@ -17,6 +17,11 @@
   a4399759-2d18-578f-9803-1427095efaa3
 "name": |-  # high-level, single-sentence description of the subtask
   Calculate 4 * 5.
+"context": |-
+  This task is a subtask of the following parent task:
+  """
+  Calculate 3 + 4 * 5.
+  """
 "execution_history":
   "history":
   - "executor_id": |-

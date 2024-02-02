@@ -71,14 +71,16 @@ class Adder:
     def accepts(self, task: Task) -> bool:
         """Check if task is accepted by executor."""
         prompt = """
-        Determine whether the following request is a request for adding two numbers together (one or more of the numbers can may be in artifacts or files containing their value(s)):
+        Determine whether the following request is a request for adding two numbers together (one or more of the numbers may be in artifacts or files containing their value(s)):
         ```
         {task_information}
         ```
 
         Reply with either "y" or "n", and no other text.
         """
-        prompt = dedent_and_strip(prompt).format(task_information=task.information)
+        prompt = dedent_and_strip(prompt).format(
+            task_information=task.information_with_artifacts
+        )
         return (
             get_choice(
                 prompt,
