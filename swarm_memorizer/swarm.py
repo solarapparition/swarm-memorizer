@@ -1454,9 +1454,53 @@ class ReasoningGenerator:
     """Orchestrator for which to generate reasoning. Must not be modified."""
 
     @property
-    def base_info(self) -> str:
-        """Base information for the orchestrator."""
-        return self._orchestrator.base_info
+    def default_mode_info_sections(self) -> str:
+        """Basic information orchestrators in default state have access to."""
+        template = f"""
+        - {OrchestratorInformationSection.KNOWLEDGE.value}
+        - {OrchestratorInformationSection.MAIN_TASK_DESCRIPTION.value}
+        - {OrchestratorInformationSection.SUBTASKS.value}
+        - {OrchestratorInformationSection.RECENT_EVENTS_LOG.value}
+        """
+        return dedent_and_strip(template)
+
+    @property
+    def subtask_mode_info_sections(self) -> str:
+        """Basic information orchestrators in subtask discussion mode have access to."""
+        template = f"""
+        - {OrchestratorInformationSection.KNOWLEDGE.value}
+        - {OrchestratorInformationSection.MAIN_TASK_DESCRIPTION.value}
+        - {OrchestratorInformationSection.SUBTASKS.value}
+        - {OrchestratorInformationSection.RECENT_EVENTS_LOG.value}
+        - {OrchestratorInformationSection.FOCUSED_SUBTASK.value}
+        - {OrchestratorInformationSection.FOCUSED_SUBTASK_FULL_DISCUSSION_LOG.value}
+        """
+        return dedent_and_strip(template)
+
+    # @property
+    def info_sections(self, mode: ActionModeName) -> str:
+        """Basic information orchestrators have access to."""
+        if mode == ActionModeName.SUBTASK_DISCUSSION:
+            return self.subtask_mode_info_sections
+        return self.default_mode_info_sections
+        # if self.focused_subtask:
+        #     return self.subtask_mode_info_sections
+        # return self.default_mode_info_sections
+
+    def base_info(self, mode: ActionModeName) -> str:
+        """Basic information orchestrators have access to."""
+        template = f"""
+        ## CONCEPTS:
+        {{orchestrator_concepts}}
+
+        ## {Concept.ORCHESTRATOR_INFORMATION_SECTIONS.value}:
+        By default, the orchestrator has access to the following information. Note that all information here is read-only; while identifying new subtasks, the orchestrator cannot modify any of the information here.
+        {{orchestrator_information_sections}}
+        """
+        return dedent_and_strip(template).format(
+            orchestrator_concepts=ORCHESTRATOR_CONCEPTS,
+            orchestrator_information_sections=self.info_sections(mode),
+        )
 
     @property
     def default_mode_actions(self) -> str:
@@ -1504,7 +1548,7 @@ class ReasoningGenerator:
             SystemMessage(
                 content=dedent_and_strip(context).format(
                     mission=ORCHESTRATOR_INSTRUCTOR_MISSION,
-                    base_info=self.base_info,
+                    base_info=self.base_info(ActionModeName.DEFAULT),
                     ORCHESTRATOR_ACTIONS=Concept.ORCHESTRATOR_ACTIONS.value,
                     actions=self.default_mode_actions,
                 )
@@ -1551,7 +1595,7 @@ class ReasoningGenerator:
             SystemMessage(
                 content=dedent_and_strip(context).format(
                     mission=ORCHESTRATOR_INSTRUCTOR_MISSION,
-                    base_info=self.base_info,
+                    base_info=self.base_info(ActionModeName.SUBTASK_DISCUSSION),
                     ORCHESTRATOR_ACTIONS=Concept.ORCHESTRATOR_ACTIONS.value,
                     actions=self.subtask_mode_actions,
                 )
@@ -1595,7 +1639,7 @@ class ReasoningGenerator:
         messages = [
             SystemMessage(
                 content=dedent_and_strip(context).format(
-                    base_info=self.base_info,
+                    base_info=self.base_info(ActionModeName.DEFAULT),
                     msi=MODULAR_SUBTASK_IDENTIFICATION,
                 )
             ),
@@ -2084,10 +2128,71 @@ class Orchestrator:
     def determine_knowledge(self) -> str:
         """Determine the knowledge of the orchestrator."""
 
+        def generate_learning_reasoning() -> str:
+            """Generate reasoning for learning after task completion."""
+            context = """
+            ## MISSION:
+            You are the instructor for an AI task orchestration agent. Your purpose is to provide step-by-step guidance for the agent to think through what it has learned from the completion of a task.
+
+            ## CONCEPTS:
+            """
+            breakpoint()
+            """
+            ## MISSION:
+            {mission}
+
+            {base_info}
+
+            ## {ORCHESTRATOR_ACTIONS}:
+
+            """
+
+        """
+
+
+        ## ORCHESTRATOR INFORMATION SECTIONS:
+        By default, the orchestrator has access to the following information. Note that all information here is read-only; while identifying new subtasks, the orchestrator cannot modify any of the information here.
+        - KNOWLEDGE: background knowledge relating to the orchestrator's area of specialization. The information may or may not be relevant to the specific main task, but is provided as support for the orchestrator's decisionmaking.
+        - MAIN TASK DESCRIPTION: a description of information about the main task that the orchestrator has learned so far from the MAIN TASK OWNER. This may NOT be a complete description of the main task, so the orchestrator must always take into account if there is enough information for performing its actions. Additional information may also be in the RECENT EVENTS LOG, as messages from the main task owner.
+        - SUBTASKS: a list of all subtasks that have been identified by the orchestrator so far; for each one, there is a high-level description of what must be done, as well as the subtask's status. This is not an exhaustive list of all required subtasks for the main task; there may be additional subtasks that are required. This list is automatically maintained and updated by a background process.
+        - RECENT EVENTS LOG: a log of recent events that have occurred during the execution of the task. This can include status updates for subtasks, messages from the main task owner, and the orchestrator's own previous thoughts/decisions.
+
+        ## ORCHESTRATOR ACTIONS:
+        In its default state, the orchestrator can perform the following actions:
+        - `IDENTIFY_NEW_SUBTASK`: identify a new subtask from the MAIN TASK that is not yet on the existing subtask list. This adds the subtask to the list and begins a discussion thread with the subtask's executor to start work on the task.
+        - `START_DISCUSSION_FOR_SUBTASK: "{id}"`: open a discussion thread with a subtask's executor, which allows you to exchange information about the subtask. {id} must be replaced with the id of the subtask to be discussed.
+        - `ASK_MAIN_TASK_OWNER: "{message}"`: send a message to the MAIN TASK OWNER to gather or clarify information about the task. {message} must be replaced with the message you want to send.
+        - `REPORT_MAIN_TASK_COMPLETE: "{message}"`: mark the MAIN TASK as complete, and send a message containing descriptions and the exact location(s) of the final ARTIFACT(s) that the task requires. This can only be done after ARTIFACT(s) containing the final results for the task have been generated by subtask executors.
+        - `WAIT`: do nothing until the next event from an executor or the MAIN TASK OWNER.
+        When sending a message, always refer to the MAIN TASK as 'the task' rather than 'MAIN TASK', because the MAIN TASK OWNER might have other tasks that they own.
+
+        ---
+
+        [SYSTEM]:
+
+        ## REQUEST FOR YOU:
+        Provide a step-by-step, robust reasoning process for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
+        - The final action that the orchestrator decides on MUST be one of the ORCHESTRATOR ACTIONS described above. The orchestrator cannot perform any other actions.
+        - No matter how simple the MAIN TASK is, it can only be done by being split into subtasks before it can be reported as complete. The orchestrator can only report the MAIN TASK as complete if ARTIFACTs have been generated from the completion of subtasks.
+        - Assume that the orchestrator has access to what's described in ORCHESTRATOR INFORMATION SECTIONS above, but no other information, except for general world knowledge that is available to a standard LLM like GPT-3.
+        - The orchestrator requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "MAIN TASK" or "KNOWLEDGE section"); however, only use capitalization to refer to specific terms—don't use capitalization as emphasis, as that could be confusing to the orchestrator.
+        - Typically, subtasks that are COMPLETED, CANCELLED, IN_PROGRESS, or IN_VALIDATION do not need immediate attention unless the orchestrator discovers information that changes the status of the subtask. Subtasks that are BLOCKED will need action from the orchestrator to start or resume execution respectively.
+        - The reasoning process should be written in second person and be around 5-7 steps, though you can add substeps within a step (a/b/c, i/ii/iii, etc.) nested arbitrarily deep as needed.
+        - The reasoning steps can refer to the results of previous steps, and it may be effective to build up the orchestrator's mental context step by step, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but in natural language instead of code.
+
+        Provide the reasoning process in the following format:
+        ```start_of_reasoning_process
+        1. {reasoning step 1}
+        2. {reasoning step 2}
+        3. [... etc.]
+        ```end_of_reasoning_process
+        You may add comments or thoughts before or after the reasoning process, but the reasoning process block itself must only contain the reasoning steps. Remember, the block must start with "```start_of_reasoning_process" and end with "```end_of_reasoning_process".
+        """
+
+        # write out full logs of main task and subtask discussions
+        reasoning = generate_learning_reasoning()
         breakpoint()
-        # commit # added task context
-        # > write out full logs of main task and subtask discussions
-        # > encourage reflection on each of the subtasks
+        # encourage reflection on each of the subtasks
         breakpoint()
         # generate knowledge update reasoning # > record success/failure of executors and their names # > record task identification success/failures
         breakpoint()
@@ -2229,52 +2334,52 @@ class Orchestrator:
         """
         return dedent_and_strip(template)
 
-    @property
-    def default_mode_info_sections(self) -> str:
-        """Basic information orchestrators in default state have access to."""
-        template = f"""
-        - {OrchestratorInformationSection.KNOWLEDGE.value}
-        - {OrchestratorInformationSection.MAIN_TASK_DESCRIPTION.value}
-        - {OrchestratorInformationSection.SUBTASKS.value}
-        - {OrchestratorInformationSection.RECENT_EVENTS_LOG.value}
-        """
-        return dedent_and_strip(template)
+    # @property
+    # def default_mode_info_sections(self) -> str:
+    #     """Basic information orchestrators in default state have access to."""
+    #     template = f"""
+    #     - {OrchestratorInformationSection.KNOWLEDGE.value}
+    #     - {OrchestratorInformationSection.MAIN_TASK_DESCRIPTION.value}
+    #     - {OrchestratorInformationSection.SUBTASKS.value}
+    #     - {OrchestratorInformationSection.RECENT_EVENTS_LOG.value}
+    #     """
+    #     return dedent_and_strip(template)
 
-    @property
-    def subtask_mode_info_sections(self) -> str:
-        """Basic information orchestrators in subtask discussion mode have access to."""
-        template = f"""
-        - {OrchestratorInformationSection.KNOWLEDGE.value}
-        - {OrchestratorInformationSection.MAIN_TASK_DESCRIPTION.value}
-        - {OrchestratorInformationSection.SUBTASKS.value}
-        - {OrchestratorInformationSection.RECENT_EVENTS_LOG.value}
-        - {OrchestratorInformationSection.FOCUSED_SUBTASK.value}
-        - {OrchestratorInformationSection.FOCUSED_SUBTASK_FULL_DISCUSSION_LOG.value}
-        """
-        return dedent_and_strip(template)
+    # @property
+    # def subtask_mode_info_sections(self) -> str:
+    #     """Basic information orchestrators in subtask discussion mode have access to."""
+    #     template = f"""
+    #     - {OrchestratorInformationSection.KNOWLEDGE.value}
+    #     - {OrchestratorInformationSection.MAIN_TASK_DESCRIPTION.value}
+    #     - {OrchestratorInformationSection.SUBTASKS.value}
+    #     - {OrchestratorInformationSection.RECENT_EVENTS_LOG.value}
+    #     - {OrchestratorInformationSection.FOCUSED_SUBTASK.value}
+    #     - {OrchestratorInformationSection.FOCUSED_SUBTASK_FULL_DISCUSSION_LOG.value}
+    #     """
+    #     return dedent_and_strip(template)
 
-    @property
-    def info_sections(self) -> str:
-        """Basic information orchestrators have access to."""
-        if self.focused_subtask:
-            return self.subtask_mode_info_sections
-        return self.default_mode_info_sections
+    # @property
+    # def info_sections(self) -> str:
+    #     """Basic information orchestrators have access to."""
+    #     if self.focused_subtask:
+    #         return self.subtask_mode_info_sections
+    #     return self.default_mode_info_sections
 
-    @property
-    def base_info(self) -> str:
-        """Basic information orchestrators have access to."""
-        template = f"""
-        ## CONCEPTS:
-        {{orchestrator_concepts}}
+    # @property
+    # def base_info(self) -> str:
+    #     """Basic information orchestrators have access to."""
+    #     template = f"""
+    #     ## CONCEPTS:
+    #     {{orchestrator_concepts}}
 
-        ## {Concept.ORCHESTRATOR_INFORMATION_SECTIONS.value}:
-        By default, the orchestrator has access to the following information. Note that all information here is read-only; while identifying new subtasks, the orchestrator cannot modify any of the information here.
-        {{orchestrator_information_sections}}
-        """
-        return dedent_and_strip(template).format(
-            orchestrator_concepts=ORCHESTRATOR_CONCEPTS,
-            orchestrator_information_sections=self.info_sections,
-        )
+    #     ## {Concept.ORCHESTRATOR_INFORMATION_SECTIONS.value}:
+    #     By default, the orchestrator has access to the following information. Note that all information here is read-only; while identifying new subtasks, the orchestrator cannot modify any of the information here.
+    #     {{orchestrator_information_sections}}
+    #     """
+    #     return dedent_and_strip(template).format(
+    #         orchestrator_concepts=ORCHESTRATOR_CONCEPTS,
+    #         orchestrator_information_sections=self.info_sections,
+    #     )
 
     @property
     def reasoning_generator(self) -> ReasoningGenerator:
@@ -2501,6 +2606,10 @@ class Orchestrator:
 
     def generate_subtask_identification_reasoning(self) -> str:
         """Generate reasoning for extracting a subtask."""
+        # we have this because subtask identification generation assumes that the mode is default, so logic might decohere otherwise
+        assert (
+            not self.focused_subtask
+        ), "Cannot generate subtask identification reasoning in subtask discussion mode."
         return self.reasoning_generator.generate_subtask_identification_reasoning()
 
     @property
@@ -3833,6 +3942,7 @@ class Swarm:
 
 # curriculum task 2: trivial compositional task: 3 + 4 * 5  # to test basic end-to-end orchestrator functionality
 # ....
+# > investigate using campfire as backend
 # > test if current bots are being retrieved properly
 # > bot: slack agent: https://python.langchain.com/docs/integrations/toolkits/slack
 # > bot creation: try generating command external agent interface using python fire lib
