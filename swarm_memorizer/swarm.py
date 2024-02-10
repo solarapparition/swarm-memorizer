@@ -1998,6 +1998,52 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
     return report
 
 
+def generate_agent_description(task_information: str) -> str:
+    """Generate a description for an agent based on a task it has done."""
+    context = """
+    {
+        "system_instruction": "Develop Agent Capability Descriptions",
+        "task": "Refine task descriptions into agent capability descriptions.",
+        "objective": "To transform a given task description into a detailed and actionable description of an agent's capabilities and limitations.",
+        "steps": [
+            "Analyze the provided task description.",
+            "Identify and list potential capabilities and limitations relevant to the task.",
+            "Create a comprehensive description that outlines these capabilities and limitations, focusing on clarity and actionability."
+        ],
+        "parameters": {
+            "input": "Task description",
+            "output": "Agent capability and limitation description",
+            "constraints": ["Do not create the actual agent", "Ensure the description is specific and actionable"]
+        },
+        "output": "A clear, concise, and actionable description of what an agent can and cannot do, based on the provided task description. The output should be wrapped in specific blocks indicated by ```start_of_agent_description_output and ```end_of_agent_description_output.",
+        "feedback": "Descriptions should avoid generalities and be directly relevant to the task, providing clear guidance on the agent's capabilities."
+    }
+    """
+    context = dedent_and_strip(context)
+    request = """
+    ```start_of_task_description
+    {task_information}
+    ```end_of_task_description
+    """
+    request = dedent_and_strip(request).format(task_information=task_information)
+    messages = [
+        SystemMessage(content=context),
+        SystemMessage(content=request),
+    ]
+    output = query_model(
+        model=precise_model,
+        messages=messages,
+        preamble=f"Generating agent description from task description...\n{as_printable(messages)}",
+        printout=VERBOSE,
+        color=AGENT_COLOR,
+    )
+    output = extract_blocks(output, "start_of_agent_description_output")
+    assert (
+        output and len(output) == 1
+    ), "Exactly one agent description output is expected."
+    return output[0]
+
+
 @dataclass(frozen=True)
 class Orchestrator:
     """A recursively auto-specializing swarm agent."""
@@ -2007,12 +2053,6 @@ class Orchestrator:
     files_parent_dir: Path
     delegator: "Delegator"
     state: OrchestratorState = field(default_factory=OrchestratorState)
-
-    @classmethod
-    @property
-    def default_recent_events_size(cls) -> int:
-        """Default size of recent events."""
-        return 10
 
     @property
     def focused_subtask(self) -> Task | None:
@@ -2060,9 +2100,9 @@ class Orchestrator:
         if self.blueprint.rank is not None:
             return self.blueprint.rank
         if (
-            rank := None
-            if self.executor_max_rank is None
-            else 1 + self.executor_max_rank
+            rank := (
+                None if self.executor_max_rank is None else 1 + self.executor_max_rank
+            )
         ) is not None:
             assert (
                 rank >= 1
@@ -2328,9 +2368,7 @@ class Orchestrator:
             printout=VERBOSE,
         )
         output = extract_blocks(output, "start_of_reasoning_output")
-        assert (
-            output and len(output) == 1
-        ), "Exactly one reasoning output is expected."
+        assert output and len(output) == 1, "Exactly one reasoning output is expected."
         return output[0]
 
     def generate_knowledge(self) -> str:
@@ -2374,7 +2412,7 @@ class Orchestrator:
             SUBTASK=Concept.SUBTASK.value,
             ARTIFACT=Concept.ARTIFACT.value,
         )
-        messages=[
+        messages = [
             SystemMessage(content=context),
             AIMessage(content=brainstorming),
             SystemMessage(content=request),
@@ -2387,9 +2425,7 @@ class Orchestrator:
             color=AGENT_COLOR,
         )
         output = extract_blocks(output, "start_of_learnings_output")
-        assert (
-            output and len(output) == 1
-        ), "Exactly one learning output is expected."
+        assert output and len(output) == 1, "Exactly one learning output is expected."
         return output[0]
 
     def save_blueprint(self, update_blueprint: bool = True) -> None:
@@ -2403,17 +2439,12 @@ class Orchestrator:
 
         if not self.blueprint.knowledge:
             self.blueprint.knowledge = self.generate_knowledge()
-
-
-        # replace reasoning generation with nested dictionary
-        breakpoint()
-        # > genericize task description
-        # need to write orchestrator description
-        assert (
-            self.blueprint.description is not None
-        ), "Orchestrator needs a description when saving blueprint."
+        if not self.blueprint.description:
+            self.blueprint.description = generate_agent_description(
+                self.task.information
+            )
         default_yaml.dump(self.serialize(), self.serialization_location)
-        # serialization: populate knowledge on save if knowledge is empty
+
         raise NotImplementedError("TODO")
         # > orchestrator's "accepts" should be based on list of tasks that have succeeded, and failed, ranked by rating
         # > refer to "knowledge" as things that have been learned from a similar task before
@@ -2819,6 +2850,7 @@ class Orchestrator:
         template = """
         Use the following reasoning process to decide what to do next:
         ```start_of_reasoning_process
+        Remember, the subtask must not be the same as the MAIN TASK itself, no matter how straightforward the MAIN TASK is.
         {subtask_extraction_core}
         ```end_of_reasoning_process
 
@@ -2826,7 +2858,7 @@ class Orchestrator:
         ```start_of_reasoning_output
         {{reasoning_output}}
         ```end_of_reasoning_output
-        **Important**: for the sake of following a consistent process, a subtask _must_ be identified, even if the MAIN TASK seems straightforward. The subtask must be a proper subtask, as in it must be "smaller" than the MAIN TASK.
+        **Important**: for the sake of following a consistent process, a subtask _must_ be identified, even if the MAIN TASK seems straightforward.
 
         After this block, you must include the subtask you have identified for its executor. To the executor, the identified subtask becomes its own MAIN TASK, and you are the MAIN TASK OWNER of the subtask. The executor knows nothing about your original MAIN TASK. The subtask must be described in the following format:
         ```start_of_subtask_identification_output
@@ -3312,10 +3344,12 @@ class Orchestrator:
                     extracted_result["main_task_definition_of_done"], YAML()
                 ),
             ),
-            None
-            if (followup_needed := extracted_result.get("needed_followup"))
-            and "NONE" in followup_needed
-            else followup_needed,
+            (
+                None
+                if (followup_needed := extracted_result.get("needed_followup"))
+                and "NONE" in followup_needed
+                else followup_needed
+            ),
         )
 
     def update_main_task_description(self) -> None:
@@ -4117,9 +4151,9 @@ class Swarm:
 
         return Reply(
             content=executor_report.reply,
-            continue_func=None
-            if executor_report.task_completed
-            else continue_conversation,
+            continue_func=(
+                None if executor_report.task_completed else continue_conversation
+            ),
         )
 
 
