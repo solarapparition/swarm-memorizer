@@ -1258,7 +1258,7 @@ class ActionModeName(Enum):
 
 
 ORCHESTRATOR_INSTRUCTOR_MISSION = """
-You are the instructor for an AI task orchestration agent. Your purpose is to provide step-by-step guidance for the agent to think through what it must do next.""".strip()
+You are the instructor for an AI task orchestration agent. Your purpose is to provide a guidance structure for the agent to think through what it must do next.""".strip()
 
 MODULAR_SUBTASK_IDENTIFICATION = """
 "Modular Subtask Identification" (MSI) is a philosophy for identifying a required subtask from a main task that emphasizes two principles:
@@ -1338,25 +1338,24 @@ class ActionResult:
 class ReasoningNotes(Enum):
     """Notes for action reasoning."""
 
-    ORCHESTRATOR_OVERVIEW = "Provide a step-by-step, robust reasoning process for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:"
+    ORCHESTRATOR_OVERVIEW = "Provide a nested, robust reasoning structure in JSON format for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:"
     ACTION_RESTRICTIONS = f"The final action that the orchestrator decides on MUST be one of the {Concept.ORCHESTRATOR_ACTIONS.value} described above. The orchestrator cannot perform any other actions."
     TASK_COMPLETION_RESTRICTIONS = f"No matter how simple the {Concept.MAIN_TASK.value} is, it can only be done by being split into subtasks before it can be reported as complete. The orchestrator can only report the {Concept.MAIN_TASK.value} as complete if {Concept.ARTIFACT.value}s have been generated from the completion of subtasks."
     FOCUSED_SUBTASK_RESTRICTIONS = f"The orchestrator cannot directly change the {Concept.FOCUSED_SUBTASK.value}. To focus on a different subtask, it must first use the {ActionName.PAUSE_SUBTASK_DISCUSSION.value} action first. Overall, the orchestrator should be focused on helping the EXECUTOR of the {Concept.FOCUSED_SUBTASK.value}, and will need strong reason to change its focus."
     INFORMATION_RESTRICTIONS = f"Assume that the orchestrator has access to what's described in {Concept.ORCHESTRATOR_INFORMATION_SECTIONS.value} above, but no other information, except for general world knowledge that is available to a standard LLM like GPT-3."
     TERM_REFERENCES = """The orchestrator requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "MAIN TASK" or "KNOWLEDGE section"); however, only use capitalization to refer to specific terms—don't use capitalization as emphasis, as that could be confusing to the orchestrator."""
     SUBTASK_STATUS_INFO = f"Typically, subtasks that are {TaskWorkStatus.COMPLETED.value}, {TaskWorkStatus.CANCELLED.value}, {TaskWorkStatus.IN_PROGRESS.value}, or {TaskWorkStatus.IN_VALIDATION.value} do not need immediate attention unless the orchestrator discovers information that changes the status of the subtask. Subtasks that are {TaskWorkStatus.BLOCKED.value} will need action from the orchestrator to start or resume execution respectively."
-    STEPS_RESTRICTIONS = "The reasoning process should be written in second person and be around 5-7 steps, though you can add substeps within a step (a/b/c, i/ii/iii, etc.) nested arbitrarily deep as needed."
-    PROCEDURAL_SCRIPTING = "The reasoning steps can refer to the results of previous steps, and it may be effective to build up the orchestrator's mental context step by step, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but in natural language instead of code."
+    # STEPS_RESTRICTIONS = "The reasoning process should be written in second person and be around 5-7 steps, though you can add substeps within a step (a/b/c, i/ii/iii, etc.) nested arbitrarily deep as needed."
+    STEPS_RESTRICTIONS = "The reasoning process should be written in second person, in JSON format, and be around 5-7 overall parts, though they can be nested arbitrarily deep as needed."
+    PROCEDURAL_SCRIPTING = "The reasoning process can refer to the results of previous parts of the process, and it may be effective to build up the orchestrator's mental context step by step, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but in natural language instead of code."
 
 
 REASONING_PROCESS_OUTPUT_INSTRUCTIONS = """
-Provide the reasoning process in the following format:
+Provide the reasoning process in the following JSON format with in this block:
 ```start_of_reasoning_process
-1. {reasoning step 1}
-2. {reasoning step 2}
-3. [... etc.]
+{{reasoning_process}}
 ```end_of_reasoning_process
-You may add comments or thoughts before or after the reasoning process, but the reasoning process block itself must only contain the reasoning steps. Remember, the block must start with "```start_of_reasoning_process" and end with "```end_of_reasoning_process".
+You may add comments or thoughts before or after the reasoning process, but the reasoning process block itself must only contain the reasoning structure. Remember, the block must start with "```start_of_reasoning_process" and end with "```end_of_reasoning_process".
 """.strip()
 
 
@@ -1413,7 +1412,7 @@ class ReasoningGenerator:
         """Generate reasoning for selecting an executor."""
         context = """
         ## MISSION:
-        You are the instructor for an AI task delegation agent. Your purpose is to provide step-by-step guidance for the delegator to think through how to select an appropriate executor for a subtask.
+        You are the instructor for an AI task delegation agent. Your purpose is to provide a guidance structure for the delegator to think through how to select an appropriate executor for a subtask.
 
         ## CONCEPTS:
         {concepts}
@@ -1432,14 +1431,14 @@ class ReasoningGenerator:
         )
         request = """
         ## REQUEST FOR YOU:
-        Provide a step-by-step, robust reasoning process for the delegator to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
+        Provide a nested, robust reasoning structure in JSON format for the delegator to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. This process provides the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
         - Assume that the delegator has access to what's described in DELEGATOR INFORMATION SECTIONS above, but no other information, except for general world knowledge that is available to a standard LLM like GPT-3.
         - The delegator requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "TASK INFORMATION" or "SUCCESS RATE"); however, only use capitalization to refer to specific terms—don't use capitalization as emphasis, as that could be confusing to the delegator.
         - As an initial part of the reasoning, the delegator must figure out whether to lean towards exploration using NEW {EXECUTOR} candidates or exploitation using non-NEW {EXECUTOR} candidates. This of course depends on how good the non-NEW {EXECUTOR} candidates are.
         - The delegator does _not_ have to select _any_ of the candidates, if it deems none of them to be suitable for the task.
         - The delegator must understand the difference between the actual requirements of the TASK and the {CONTEXT} that the TASK is being executed in. {EXECUTOR} candidates only need to be able to fulfill the actual requirements of the TASK itself—the {CONTEXT} is for background information only.
         - {step_restrictions}
-        - The reasoning steps can refer to the results of previous steps, and it may be effective to build up the delegator's mental context step by step, starting from basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but in natural language instead of code.
+        - The reasoning process can refer to the results of previous parts, and it may be effective to build up the delegator's mental context step by step, starting from basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but in natural language instead of code.
         - The final decision of which {EXECUTOR} CANDIDATE to use (or to not use any at all) must be done on the last step only, after considering all the information available from the previous steps.
 
         {output_instructions}
@@ -1624,7 +1623,7 @@ class ReasoningGenerator:
         """Generate reasoning for identifying a new subtask."""
         context = """
         ## MISSION:
-        You are the instructor for an AI task orchestration agent. Your purpose is to provide step-by-step guidance for the agent to think through how to identify the next subtask from the main task description.
+        You are the instructor for an AI task orchestration agent. Your purpose is to provide a nested guidance structure for the agent to think through how to identify the next subtask from the main task description.
 
         {base_info}
 
@@ -1634,7 +1633,7 @@ class ReasoningGenerator:
         """
         request = f"""
         ## REQUEST FOR YOU:
-        Provide a step-by-step, robust reasoning process for the orchestrator to a) understand what MSI is and follow its principles, and b) sequentially process the information in the information sections it has access to so that it can identify a new subtask that is not yet identified. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind before they perform subtask identification. Some things to note:
+        Provide a nsted, robust reasoning structure in JSON format for the orchestrator to a) understand what MSI is and follow its principles, and b) sequentially process the information in the information sections it has access to so that it can identify a new subtask that is not yet identified. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind before they perform subtask identification. Some things to note:
         - {ReasoningNotes.INFORMATION_RESTRICTIONS.value}
         - {ReasoningNotes.TERM_REFERENCES.value}
         - In its current state, the orchestrator is not able to perform any other actions besides subtask identification and the reasoning preceeding it.
@@ -1667,7 +1666,7 @@ class ReasoningGenerator:
         """Generate reasoning for learning after task completion."""
         context = """
         ## MISSION:
-        You are the instructor for an AI task orchestration agent. Your purpose is to provide step-by-step guidance for the agent to think through what it has learned from the completion of a task.
+        You are the instructor for an AI task orchestration agent. Your purpose is to provide a nested guidance structure for the agent to think through what it has learned from the completion of a task.
 
         ## CONCEPTS:
         {orchestrator_concepts}
@@ -1699,7 +1698,7 @@ class ReasoningGenerator:
         )
         request = """
         ## REQUEST FOR YOU:
-        Provide a step-by-step, robust reasoning process for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for figuring out what it has learned. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
+        Provide a nested, robust reasoning structure in JSON format for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for figuring out what it has learned. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
         - {INFORMATION_RESTRICTIONS}
         - {TERM_REFERENCES}
         - The overarching goal is to convey the learnings from the completion of the {MAIN_TASK} to another agent to maximize the chances of the other agent successfully completing other tasks like {MAIN_TASK}.
@@ -1742,7 +1741,7 @@ class ReasoningGenerator:
         """Generate reasoning for updating the main task. Currently unused."""
         context = f"""
         ## MISSION:
-        You are the instructor for an AI task orchestration agent. Your purpose is to provide step-by-step guidance for the agent to think through how to update the main task description based on new information in an event log.
+        You are the instructor for an AI task orchestration agent. Your purpose is to provide a nested guidance structure for the agent to think through how to update the main task description based on new information in an event log.
 
         ## CONCEPTS:
         These are the concepts you should be familiar with:
@@ -1761,7 +1760,7 @@ class ReasoningGenerator:
 
         task = f"""
         ## REQUEST FOR YOU:
-        Provide a step-by-step, robust reasoning process for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for updating the {Concept.MAIN_TASK_INFORMATION.value} and {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} sections to reflect the new information in the {Concept.TASK_MESSAGES.value} that comes after {Concept.LAST_READ_MAIN_TASK_OWNER_MESSAGE.value}. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
+        Provide a nested, robust reasoning structure in JSON for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for updating the {Concept.MAIN_TASK_INFORMATION.value} and {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} sections to reflect the new information in the {Concept.TASK_MESSAGES.value} that comes after {Concept.LAST_READ_MAIN_TASK_OWNER_MESSAGE.value}. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
         - This reasoning process does not make the actual updates to the {Concept.MAIN_TASK_INFORMATION.value} and {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} sections; it only figures out what updates are needed.
         - Both the {Concept.MAIN_TASK_INFORMATION} and {Concept.MAIN_TASK_DEFINITION_OF_DONE} sections may be outdated, hence the need to update them with the latest messages from the {Concept.MAIN_TASK_OWNER.value}.
         - {ReasoningNotes.INFORMATION_RESTRICTIONS.value}
@@ -1847,11 +1846,9 @@ def change_status(task: Task, new_status: TaskWorkStatus, reason: str) -> Event:
 
 
 REASONING_OUTPUT_INSTRUCTIONS = """
-In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
+In your reply, you must include output from _all_ parts of the reasoning process, in this block format:
 ```start_of_reasoning_output
-1. {step_1_output}
-2. {step_2_output}
-3. [... etc.]
+{{reasoning_output}}
 ```end_of_reasoning_output
 """.strip()
 
@@ -2304,17 +2301,17 @@ class Orchestrator:
         request = """
         ## REQUEST FOR YOU:
         Use the following reasoning process to learn from the completion of the {MAIN_TASK}:
-        ```start_of_reasoning_steps
-        {reasoning_steps}
+        ```start_of_reasoning_process
+        {reasoning_process}
 
         Remember to be specific and use exact IDs when referencing {SUBTASK}s and {EXECUTOR}s.
-        ```end_of_reasoning_steps
+        ```end_of_reasoning_process
 
         {reasoning_output_instructions}
         """
         request = dedent_and_strip(request).format(
             MAIN_TASK=Concept.MAIN_TASK.value,
-            reasoning_steps=self.learning_reasoning,
+            reasoning_process=self.learning_reasoning,
             reasoning_output_instructions=REASONING_OUTPUT_INSTRUCTIONS,
             SUBTASK=Concept.SUBTASK.value,
             EXECUTOR=Concept.EXECUTOR.value,
@@ -2512,16 +2509,14 @@ class Orchestrator:
         """Template for action reasoning."""
         template = """
         Use the following reasoning process to decide what to do next:
-        ```start_of_reasoning_steps
+        ```start_of_reasoning_process
         {action_choice_core}
-        ```end_of_reasoning_steps
+        ```end_of_reasoning_process
         **Important:** Remember that for the sake of following a consistent process, the MAIN TASK needs at least one subtask to be identified before it can be completed (usually more). As an orchestrator, you cannot execute any part of the MAIN TASK yourself, including finishing the MAIN TASK.
 
-        In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
+        In your reply, you must include output from _all_ parts of the reasoning process, in this block format:
         ```start_of_action_reasoning_output
-        1. {{step_1_output}}
-        2. {{step_2_output}}
-        3. [... etc.]
+        {{reasoning_output}}
         ```end_of_action_reasoning_output
 
         After this block, you must include the action you have decided on, in this format:
@@ -2823,17 +2818,15 @@ class Orchestrator:
             )
         template = """
         Use the following reasoning process to decide what to do next:
-        ```start_of_reasoning_steps
+        ```start_of_reasoning_process
         {subtask_extraction_core}
-        ```end_of_reasoning_steps
+        ```end_of_reasoning_process
 
-        In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
+        In your reply, you must include output from _all_ parts of the reasoning process, in this block format:
         ```start_of_reasoning_output
-        1. {{step_1_output}}
-        2. {{step_2_output}}
-        3. [... etc.]
+        {{reasoning_output}}
         ```end_of_reasoning_output
-        **Important**: for the sake of following a consistent process, a subtask _must_ be identified, even if the MAIN TASK seems straightforward.
+        **Important**: for the sake of following a consistent process, a subtask _must_ be identified, even if the MAIN TASK seems straightforward. The subtask must be a proper subtask, as in it must be "smaller" than the MAIN TASK.
 
         After this block, you must include the subtask you have identified for its executor. To the executor, the identified subtask becomes its own MAIN TASK, and you are the MAIN TASK OWNER of the subtask. The executor knows nothing about your original MAIN TASK. The subtask must be described in the following format:
         ```start_of_subtask_identification_output
@@ -3261,9 +3254,9 @@ class Orchestrator:
         task = """
         ## REQUEST FOR YOU:
         Use the following reasoning process to determine what must be updated in the {MAIN_TASK_DESCRIPTION} and {MAIN_TASK_DEFINITION_OF_DONE} sections:
-        ```start_of_reasoning_steps
-        {reasoning_steps}
-        ```end_of_reasoning_steps
+        ```start_of_reasoning_process
+        {reasoning_process}
+        ```end_of_reasoning_process
 
         {reasoning_output_instructions}
 
@@ -3286,7 +3279,7 @@ class Orchestrator:
             MAIN_TASK=Concept.MAIN_TASK.value,
             MAIN_TASK_DESCRIPTION=Concept.MAIN_TASK_INFORMATION.value,
             MAIN_TASK_DEFINITION_OF_DONE=Concept.MAIN_TASK_DEFINITION_OF_DONE.value,
-            reasoning_steps=reasoning,
+            reasoning_process=reasoning,
             reasoning_output_instructions=REASONING_OUTPUT_INSTRUCTIONS,
         )
         messages = [
@@ -3808,17 +3801,15 @@ class Delegator:
         request = """
         ## REQUEST FOR YOU:
         Use the following reasoning process to select the best {EXECUTOR} for the task:
-        ```start_of_reasoning_steps
-        {reasoning_steps}
+        ```start_of_reasoning_process
+        {reasoning_process}
         
         Remember that the task cannot be split among multiple {EXECUTOR}s; if no single {EXECUTOR} can complete the task, then the task must remain undelegated. However, some parts of the TASK INFORMATION may be context—the {EXECUTOR} doesn't need to be able to execute any part of the work outside of the primary task.
-        ```end_of_reasoning_steps
+        ```end_of_reasoning_process
 
-        In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
+        In your reply, you must include output from _all_ parts of the reasoning process, in this block format:
         ```start_of_reasoning_output
-        1. {{step_1_output}}
-        2. {{step_2_output}}
-        3. [... etc.]
+        {{reasoning_output}}
         ```end_of_reasoning_output
 
         After this block, you must output your final choice of {EXECUTOR} in this format:
@@ -3834,7 +3825,7 @@ class Delegator:
         request = dedent_and_strip(request).format(
             EXECUTOR=Concept.EXECUTOR.value,
             NONE=NONE,
-            reasoning_steps=executor_selection_reasoning,
+            reasoning_process=executor_selection_reasoning,
         )
         messages = [
             SystemMessage(content=context),
