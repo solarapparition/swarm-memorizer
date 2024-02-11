@@ -1,5 +1,6 @@
 """Structure for swarm agents."""
 
+from os import makedirs
 from textwrap import indent
 from typing import (
     Generator,
@@ -152,6 +153,12 @@ class OrchestratorBlueprint:
 
     def __post_init__(self) -> None:
         self.role = Role.ORCHESTRATOR
+
+    def serialize(self) -> dict[str, Any]:
+        """Serialize the blueprint to a JSON-compatible dictionary."""
+        data = asdict(self)
+        data["role"] = self.role.value
+        return data
 
 
 @dataclass
@@ -2237,8 +2244,8 @@ class Orchestrator:
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
 
     def serialize(self) -> dict[str, Any]:
-        """Serialize the orchestrator to a dict."""
-        return asdict(self.blueprint)
+        """Serialize the orchestrator to a JSON dict."""
+        return self.blueprint.serialize()
 
     def generate_learning_reasoning(self) -> str:
         """Generate reasoning for learning from tasks."""
@@ -2430,9 +2437,15 @@ class Orchestrator:
 
     def save_blueprint(self, update_blueprint: bool = True) -> None:
         """Serialize the orchestrator to YAML."""
-        if update_blueprint:
-            self.blueprint.rank = self.rank
-        # assume that at the point of saving, all executors have been saved and so we can calculate the rank
+        if not update_blueprint:
+            assert (
+                self.blueprint.rank is not None
+            ), "Orchestrator rank must not be None when saving."
+            default_yaml.dump(self.serialize(), self.serialization_location)
+            return
+
+        self.blueprint.rank = self.rank
+        # assume that at the point of saving, all executors have been saved and ranked so we have enough info to calculate the orchestrator's rank
         assert (
             self.blueprint.rank is not None
         ), "Orchestrator rank must not be None when saving."
@@ -2443,16 +2456,8 @@ class Orchestrator:
             self.blueprint.description = generate_agent_description(
                 self.task.information
             )
+        makedirs(self.files_dir, exist_ok=True)
         default_yaml.dump(self.serialize(), self.serialization_location)
-
-        raise NotImplementedError("TODO")
-        # > orchestrator's "accepts" should be based on list of tasks that have succeeded, and failed, ranked by rating
-        # > refer to "knowledge" as things that have been learned from a similar task before
-        # > update MISSION and customize it for the contexts it's being used in
-        # > add knowledge to executor selection # > regenerate logic
-        # > orchestrator need name when saved
-        # > need to save completion time when saving tasks
-        # > only save agent if it’s new
 
     def accepts(self, task: Task) -> bool:
         """Decides whether the orchestrator accepts a task."""
@@ -3516,6 +3521,7 @@ def load_executor(blueprint: Blueprint, task: Task, files_dir: Path) -> Executor
         load_bot = extract_bot_loader(loader_location)
         return load_bot(blueprint, task, files_dir)
     raise NotImplementedError("TODO")
+    # > case for orchestrator
 
 
 class Advisor(Protocol):
@@ -4157,7 +4163,17 @@ class Swarm:
         )
 
 
-# curriculum task 2: trivial compositional task: 3 + 4 * 5  # to test basic end-to-end orchestrator functionality
+# always save successful orchestrator blueprint, to account for additional reasoning being generated > must make sure no other cases of existing values being changed
+# ....
+# > get rid of usage of executor name in prompts to avoid biasing the selection
+# > generate name as part of description generation
+# > orchestrator's "accepts" should be based on list of tasks that have succeeded, and failed, ranked by rating
+# > refer to "knowledge" as things that have been learned from a similar task before
+# > update MISSION and customize it for the contexts it's being used in
+# > add knowledge to executor selection # > regenerate logic
+# > orchestrator need name when saved
+# > need to save completion time when saving tasks
+# > only save agent if it’s new
 # ....
 # > try agent learning algorithm # agent learning paper: https://x.com/rohanpaul_ai/status/1754837097951666434?s=46&t=R6mLA3s_DNKUEwup7QWyCA
 # > use any tool api retriever
