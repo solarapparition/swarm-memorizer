@@ -720,6 +720,8 @@ class TaskData:
     context: str | None = None
     execution_history: ExecutionHistory = field(default_factory=ExecutionHistory)
     output_artifacts: list[Artifact] = field(default_factory=list)
+    start_timestamp: float | None = field(default=None, init=False)
+    end_timestamp: float | None = field(default=None, init=False)
 
     def serialize(self) -> dict[str, Any]:
         """Serialize the task."""
@@ -1025,6 +1027,15 @@ class Task:
         """Information for the context of the task."""
         return self.data.context
 
+    @property
+    def completion_time(self) -> float | None:
+        """How long it took to complete the task."""
+        return (
+            self.data.end_timestamp - self.data.start_timestamp
+            if self.data.start_timestamp and self.data.end_timestamp
+            else None
+        )
+
     def reformat_event_log(
         self,
         event_log: EventLog,
@@ -1108,11 +1119,24 @@ class Task:
         self.executor = executor
         self.add_current_execution_outcome_to_history()
 
+    def start_timer(self) -> None:
+        """Start the task timer."""
+        self.data.start_timestamp = self.data.start_timestamp or time.time()
+
+    def end_timer(self) -> None:
+        """End the task timer."""
+        assert (
+            self.data.start_timestamp
+        ), "Task timer must be started before it can be ended."
+        assert not self.data.end_timestamp, "Task timer must not be ended twice."
+        self.data.end_timestamp = time.time()
+
     def wrap_execution(self, success: bool) -> None:
         """Wrap up execution of the task."""
+        self.end_timer()
         assert self.execution_history and self.executor
-        self.execution_history.last_entry.success = success
         assert self.executor.rank is not None
+        self.execution_history.last_entry.success = success
         self.execution_history.last_entry.executor_rank = self.executor.rank
         self.executor.save_blueprint()
         self.executor = None
@@ -1951,6 +1975,7 @@ def validate_artifact_mentions(
 
 async def execute_and_validate(task: Task) -> ExecutorReport:
     """Execute and validate a task until a stopping point, and update the task's status. This bridges the gap between an executor's `execute` and the usage of the method in an orchestrator."""
+    task.start_timer()
     assert task.executor
     report = await task.executor.execute()
     if not report.task_completed:
@@ -2462,6 +2487,7 @@ class Orchestrator:
     def accepts(self, task: Task) -> bool:
         """Decides whether the orchestrator accepts a task."""
         raise NotImplementedError("TODO")
+        # > orchestrator's "accepts" should be based on list of tasks that have succeeded, and failed, ranked by rating
 
     @property
     def recent_events_size(self) -> int:
@@ -3566,7 +3592,7 @@ class BlueprintSearchResult:
 
     @property
     def completion_time(self) -> float | None:
-        """Completion time of the blueprint given the tasks."""
+        """Average completion time of the blueprint given the tasks."""
         if not self.task_subpool or self.is_new:
             return None
         raise NotImplementedError("TODO")
@@ -4163,17 +4189,12 @@ class Swarm:
         )
 
 
-# always save successful orchestrator blueprint, to account for additional reasoning being generated > must make sure no other cases of existing values being changed
+# need to save completion time when saving tasks
 # ....
-# > get rid of usage of executor name in prompts to avoid biasing the selection
-# > generate name as part of description generation
-# > orchestrator's "accepts" should be based on list of tasks that have succeeded, and failed, ranked by rating
-# > refer to "knowledge" as things that have been learned from a similar task before
-# > update MISSION and customize it for the contexts it's being used in
-# > add knowledge to executor selection # > regenerate logic
-# > orchestrator need name when saved
-# > need to save completion time when saving tasks
-# > only save agent if it’s new
+# get rid of usage of executor name in prompts to avoid biasing the selection
+# refer to "knowledge" as things that have been learned from a similar task before
+# update MISSION and customize it for the contexts it's being used in
+# add knowledge to executor selection > add to reasoning generation
 # ....
 # > try agent learning algorithm # agent learning paper: https://x.com/rohanpaul_ai/status/1754837097951666434?s=46&t=R6mLA3s_DNKUEwup7QWyCA
 # > use any tool api retriever
@@ -4205,6 +4226,7 @@ class Swarm:
 # > add role parametrization for reasoning bullets and consolidate with delegator
 # mvp task: buy something from amazon
 # ---MVP---
+# > generate name as part of description generation
 # > when assigning new executor, need to add event describing the switch # nice to have # not displayed to executor
 # > replace messaging with instructor.patch
 # > factor out validations into separate variable
