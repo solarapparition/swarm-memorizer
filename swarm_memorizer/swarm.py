@@ -154,6 +154,15 @@ class OrchestratorBlueprint:
     def __post_init__(self) -> None:
         self.role = Role.ORCHESTRATOR
 
+    @classmethod
+    def from_serialized_data(cls, data: dict[str, Any]) -> Self:
+        """Deserialize the blueprint from a JSON-compatible dictionary."""
+        data = data.copy()
+        data["id"] = BlueprintId(data["id"])
+        data["reasoning"] = Reasoning(**data["reasoning"])
+        del data["role"]
+        return cls(**data)
+
     def serialize(self) -> dict[str, Any]:
         """Serialize the blueprint to a JSON-compatible dictionary."""
         data = asdict(self)
@@ -1393,7 +1402,7 @@ You may add comments or thoughts before or after the reasoning process, but the 
 class OrchestratorInformationSection(Enum):
     """Information sections available to orchestrators."""
 
-    KNOWLEDGE = "KNOWLEDGE: background knowledge relating to the orchestrator's area of specialization. The information may or may not be relevant to the specific main task, but is provided as support for the orchestrator's decisionmaking."
+    KNOWLEDGE = "KNOWLEDGE: the orchestrator's background knowledge—usually lessons learned from performing task(s) similar to the current task. The information may or may not be relevant to the specific main task, but is provided as support for the orchestrator's decisionmaking."
     MAIN_TASK_DESCRIPTION = f"MAIN TASK DESCRIPTION: a description of information about the main task that the orchestrator has learned so far from the {Concept.MAIN_TASK_OWNER.value}. This may NOT be a complete description of the main task, so the orchestrator must always take into account if there is enough information for performing its actions. Additional information may also be in the {Concept.RECENT_EVENTS_LOG.value}, as messages from the main task owner."
     SUBTASKS = "SUBTASKS: a list of all subtasks that have been identified by the orchestrator so far; for each one, there is a high-level description of what must be done, as well as the subtask's status. This is not an exhaustive list of all required subtasks for the main task; there may be additional subtasks that are required. This list is automatically maintained and updated by a background process."
     RECENT_EVENTS_LOG = f"{Concept.RECENT_EVENTS_LOG.value}: a log of recent events that have occurred during the execution of the task. This can include status updates for subtasks, messages from the main task owner, and the orchestrator's own previous thoughts/decisions."
@@ -2143,11 +2152,6 @@ class Orchestrator:
                 rank = min(rank, self.rank_limit)
         return rank
 
-    # @property
-    # def task_history(self) -> TaskHistory:
-    #     """History of tasks completed by the orchestrator."""
-    #     return self.blueprint.task_history
-
     @property
     def reasoning(self) -> Reasoning:
         """Instructions for the orchestrator for various tasks."""
@@ -2171,7 +2175,7 @@ class Orchestrator:
         You are an advanced task orchestrator that specializes in managing the execution of a MAIN TASK and delegating its SUBTASKS to EXECUTORS that can execute those tasks, while communicating with the MAIN TASK OWNER to gather required information for the task. Your overall purpose is to facilitate task execution by communicating with both the MAIN TASK OWNER and SUBTASK EXECUTORS to complete the MAIN TASK as efficiently as possible.
 
         ## KNOWLEDGE:
-        In addition to the general background knowledge of your language model, you have the following, more specialized knowledge that may be relevant to the task at hand:
+        In addition to the general background knowledge of your language model, you have the following, more specialized knowledge learned from performing task(s) similar to the current one. This knowledge is for reference only, and may or may not be applicable to the current task:
         ```start_of_knowledge
         {{knowledge}}
         ```end_of_knowledge
@@ -2241,7 +2245,7 @@ class Orchestrator:
     @property
     def serialization_location(self) -> Path:
         """Return the location where the orchestrator should be serialized."""
-        return self.files_dir / "blueprint.yml"
+        return self.files_dir / "blueprint.yaml"
 
     @property
     def output_dir(self) -> Path:
@@ -2592,53 +2596,6 @@ class Orchestrator:
         Any additional comments or thoughts can be added before or after the output blocks.
         """
         return dedent_and_strip(template)
-
-    # @property
-    # def default_mode_info_sections(self) -> str:
-    #     """Basic information orchestrators in default state have access to."""
-    #     template = f"""
-    #     - {OrchestratorInformationSection.KNOWLEDGE.value}
-    #     - {OrchestratorInformationSection.MAIN_TASK_DESCRIPTION.value}
-    #     - {OrchestratorInformationSection.SUBTASKS.value}
-    #     - {OrchestratorInformationSection.RECENT_EVENTS_LOG.value}
-    #     """
-    #     return dedent_and_strip(template)
-
-    # @property
-    # def subtask_mode_info_sections(self) -> str:
-    #     """Basic information orchestrators in subtask discussion mode have access to."""
-    #     template = f"""
-    #     - {OrchestratorInformationSection.KNOWLEDGE.value}
-    #     - {OrchestratorInformationSection.MAIN_TASK_DESCRIPTION.value}
-    #     - {OrchestratorInformationSection.SUBTASKS.value}
-    #     - {OrchestratorInformationSection.RECENT_EVENTS_LOG.value}
-    #     - {OrchestratorInformationSection.FOCUSED_SUBTASK.value}
-    #     - {OrchestratorInformationSection.FOCUSED_SUBTASK_FULL_DISCUSSION_LOG.value}
-    #     """
-    #     return dedent_and_strip(template)
-
-    # @property
-    # def info_sections(self) -> str:
-    #     """Basic information orchestrators have access to."""
-    #     if self.focused_subtask:
-    #         return self.subtask_mode_info_sections
-    #     return self.default_mode_info_sections
-
-    # @property
-    # def base_info(self) -> str:
-    #     """Basic information orchestrators have access to."""
-    #     template = f"""
-    #     ## CONCEPTS:
-    #     {{orchestrator_concepts}}
-
-    #     ## {Concept.ORCHESTRATOR_INFORMATION_SECTIONS.value}:
-    #     By default, the orchestrator has access to the following information. Note that all information here is read-only; while identifying new subtasks, the orchestrator cannot modify any of the information here.
-    #     {{orchestrator_information_sections}}
-    #     """
-    #     return dedent_and_strip(template).format(
-    #         orchestrator_concepts=ORCHESTRATOR_CONCEPTS,
-    #         orchestrator_information_sections=self.info_sections,
-    #     )
 
     @property
     def reasoning_generator(self) -> ReasoningGenerator:
@@ -3623,15 +3580,34 @@ class BlueprintSearchResult:
 
     def __str__(self) -> str:
         """String representation of the blueprint search result."""
-        printout = f"""
-        ID: {self.blueprint.id}
-        - DESCRIPTION: {self.blueprint.description}
-        - NEW STATUS: {'NEW' if self.is_new else 'NOT NEW'}
+        # printout = f"""
+        # ID: {self.blueprint.id}
+        # - DESCRIPTION: {self.blueprint.description}
+        # - NEW STATUS: {'NEW' if self.is_new else 'NOT NEW'}
+        # - TASK PERFORMANCE:
+        #   - SUCCESS RATE: {self.success_rate if self.success_rate is not None else 'N/A'}
+        #   - COMPLETION TIME: {self.completion_time if self.completion_time is not None else 'N/A'}
+        # """
+        # return dedent_and_strip(printout)
+        printout = """
+        ID: {blueprint_id}
+        - DESCRIPTION: |-
+        {description}
+        - NEW STATUS: {status}
         - TASK PERFORMANCE:
-          - SUCCESS RATE: {self.success_rate if self.success_rate is not None else 'N/A'}
-          - COMPLETION TIME: {self.completion_time if self.completion_time is not None else 'N/A'}
+            - SUCCESS RATE: {success_rate}
+            - COMPLETION TIME: {completion_time}
         """
-        return dedent_and_strip(printout)
+        description = indent(str(self.blueprint.description), "    ")
+        return dedent_and_strip(printout).format(
+            blueprint_id=self.blueprint.id,
+            description=description,
+            status="NEW" if self.is_new else "NOT NEW",
+            success_rate=self.success_rate if self.success_rate is not None else "N/A",
+            completion_time=(
+                self.completion_time if self.completion_time is not None else "N/A"
+            ),
+        )
 
 
 DelegationSuccessful = NewType("DelegationSuccessful", bool)
@@ -3700,11 +3676,16 @@ def load_blueprint(blueprint_path: Path) -> Blueprint:
         raise ValueError(
             f"Invalid role for blueprint: {blueprint_data['role']}"
         ) from error
-    if role == Role.BOT:
-        blueprint = BotBlueprint.from_serialized_data(blueprint_data)
-        assert blueprint.description, "Blueprint description cannot be empty."
-        return blueprint
-    raise NotImplementedError("TODO")
+
+    # if role == Role.BOT:
+    #     blueprint = BotBlueprint.from_serialized_data(blueprint_data)
+    # # otherwise this is an orchestrator blueprint
+    # else:
+    #     blueprint = OrchestratorBlueprint.from_serialized_data(blueprint_data)
+    BlueprintConstructor = BotBlueprint if role == Role.BOT else OrchestratorBlueprint
+    blueprint = BlueprintConstructor.from_serialized_data(blueprint_data)
+    assert blueprint.description, "Blueprint description cannot be empty."
+    return blueprint
 
 
 def load_blueprints(executors_dir: Path) -> Iterable[Blueprint]:
@@ -4188,10 +4169,10 @@ class Swarm:
         )
 
 
+# rerun to check reusability of existing executors
 # ....
-# refer to "knowledge" as things that have been learned from a similar task before
 # update MISSION and customize it for the contexts it's being used in
-# add knowledge to executor selection > add to reasoning generation
+# add knowledge to executor selection > add to reasoning generation > add step to extract only information about executor candidates
 # ....
 # > try agent learning algorithm # agent learning paper: https://x.com/rohanpaul_ai/status/1754837097951666434?s=46&t=R6mLA3s_DNKUEwup7QWyCA
 # > use any tool api retriever

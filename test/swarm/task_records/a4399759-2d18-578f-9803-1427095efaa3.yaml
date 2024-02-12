@@ -1,22 +1,18 @@
 "description":
   "information": |-  # high-level, single-sentence description of the subtask
-    Calculate 4 * 5.
+    Calculate the result of 4 * 5.
   "definition_of_done": !!null |
   "initial_information": |-  # high-level, single-sentence description of the subtask
-    Calculate 4 * 5.
+    Calculate the result of 4 * 5.
 "owner_id": |-
   5d0a8988-ffff-5ee5-8eed-4de0455c5da6_a2a68ec9-f47c-5de3-be6a-488cc8c994ee
 "rank_limit": !!int |-
   0
-"input_artifacts":
-- "location": |-
-    None
-  "description": |-
-    None
+"input_artifacts": []
 "id": |-
   a4399759-2d18-578f-9803-1427095efaa3
 "name": |-  # high-level, single-sentence description of the subtask
-  Calculate 4 * 5.
+  Calculate the result of 4 * 5.
 "context": |-
   This task is a subtask of the following parent task:
   """
@@ -42,6 +38,6 @@
   "description": |-
     Result of the calculation 4 * 5
 "start_timestamp": !!float |-
-  1707746456.359634
+  1707747184.646113
 "end_timestamp": !!float |-
-  1707746456.3861198
+  1707747214.809899
