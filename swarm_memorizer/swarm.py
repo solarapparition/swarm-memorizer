@@ -1423,7 +1423,7 @@ class SubtaskIdentifcationResult:
 
 EXECUTOR_SELECTION_CONCEPTS = f"""
 These are the concepts you should be familiar with:
-- TASK: a task that must be done. Tasks do _not_ have strict deadlines.
+- TASK: a task that must be done. Tasks do _not_ have strict deadlines, unless otherwise noted.
 - {Concept.CONTEXT.value}: the context in which the TASK is being executed—provides background information that is relevant to the TASK, but not strictly required for its execution.
 - {Concept.EXECUTOR.value}: an agent that is responsible for executing a task.
 - TASK PERFORMANCE: the performance of an executor on tasks similar to the TASK, which is measured by the following metrics:
@@ -3624,8 +3624,7 @@ class BlueprintSearchResult:
     def __str__(self) -> str:
         """String representation of the blueprint search result."""
         printout = f"""
-        NAME: {self.blueprint.name}
-        - ID: {self.blueprint.id}
+        ID: {self.blueprint.id}
         - DESCRIPTION: {self.blueprint.description}
         - NEW STATUS: {'NEW' if self.is_new else 'NOT NEW'}
         - TASK PERFORMANCE:
@@ -4137,7 +4136,7 @@ class Swarm:
 
     @property
     def name(self) -> str:
-        """Name of the agent."""
+        """Name of the swarm."""
         return f"swarm_{self.id}"
 
     async def run(self, message: str) -> Reply:
@@ -4189,9 +4188,7 @@ class Swarm:
         )
 
 
-# need to save completion time when saving tasks
 # ....
-# get rid of usage of executor name in prompts to avoid biasing the selection
 # refer to "knowledge" as things that have been learned from a similar task before
 # update MISSION and customize it for the contexts it's being used in
 # add knowledge to executor selection > add to reasoning generation
