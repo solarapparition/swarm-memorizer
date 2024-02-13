@@ -19,7 +19,7 @@ from swarm_memorizer.swarm import (
     get_choice,
     dedent_and_strip,
     ExecutorReport,
-    as_printable,
+    format_messages,
 )
 from swarm_memorizer.toolkit.models import query_model, precise_model
 from swarm_memorizer.config import autogen_config_list
@@ -42,7 +42,7 @@ class AcceptAdvisor:
         result = query_model(
             model=precise_model,
             messages=self.messages,
-            preamble=as_printable(self.messages),
+            preamble=format_messages(self.messages),
             color=AGENT_COLOR,
             printout=True,
         )

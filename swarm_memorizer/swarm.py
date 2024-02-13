@@ -84,7 +84,7 @@ class Concept(Enum):
     CONTEXT = "CONTEXT"
 
 
-def as_printable(messages: Sequence[BaseMessage]) -> str:
+def format_messages(messages: Sequence[BaseMessage]) -> str:
     """Print LangChain messages."""
     return "\n\n---\n\n".join(
         [f"[{message.type.upper()}]:\n\n{message.content}" for message in messages]  # type: ignore
@@ -1497,7 +1497,7 @@ class ReasoningGenerator:
         return query_and_extract_reasoning(
             messages,
             preamble="Generating reasoning for executor selection...\n"
-            f"{as_printable(messages)}",
+            f"{format_messages(messages)}",
             printout=VERBOSE,
         )
 
@@ -1608,7 +1608,7 @@ class ReasoningGenerator:
         ]
         return query_and_extract_reasoning(
             messages,
-            preamble=f"Generating reasoning for {self.role.value} in {ActionModeName.DEFAULT.value} state...\n{as_printable(messages)}",
+            preamble=f"Generating reasoning for {self.role.value} in {ActionModeName.DEFAULT.value} state...\n{format_messages(messages)}",
             printout=VERBOSE,
         )
 
@@ -1655,7 +1655,7 @@ class ReasoningGenerator:
         ]
         return query_and_extract_reasoning(
             messages,
-            preamble=f"Generating reasoning for {self.role.value} in {ActionModeName.DEFAULT.value} state...\n{as_printable(messages)}",
+            preamble=f"Generating reasoning for {self.role.value} in {ActionModeName.DEFAULT.value} state...\n{format_messages(messages)}",
             printout=VERBOSE,
         )
 
@@ -1698,7 +1698,7 @@ class ReasoningGenerator:
         ]
         return query_and_extract_reasoning(
             messages,
-            preamble=f"Generating subtask extraction reasoning...\n{as_printable(messages)}",
+            preamble=f"Generating subtask extraction reasoning...\n{format_messages(messages)}",
             printout=VERBOSE,
         )
 
@@ -1772,7 +1772,7 @@ class ReasoningGenerator:
                     SystemMessage(content=request),
                 ]
             ),
-            preamble=f"Generating learning reasoning...{as_printable(messages)}",
+            preamble=f"Generating learning reasoning...{format_messages(messages)}",
             printout=VERBOSE,
         )
 
@@ -1820,7 +1820,7 @@ class ReasoningGenerator:
         ]
         return query_and_extract_reasoning(
             messages,
-            preamble=f"Generating reasoning for updating the main task...\n{as_printable(messages)}",
+            preamble=f"Generating reasoning for updating the main task...\n{format_messages(messages)}",
             printout=printout,
         )
 
@@ -1966,7 +1966,7 @@ def validate_artifact_mentions(
     result = query_model(
         model=precise_model,
         messages=messages,
-        preamble=f"Validating artifacts for task {task.id}...\n{as_printable(messages)}",
+        preamble=f"Validating artifacts for task {task.id}...\n{format_messages(messages)}",
         printout=VERBOSE,
         color=AGENT_COLOR,
     )
@@ -2074,7 +2074,7 @@ def generate_agent_description(task_information: str) -> str:
     output = query_model(
         model=precise_model,
         messages=messages,
-        preamble=f"Generating agent description from task description...\n{as_printable(messages)}",
+        preamble=f"Generating agent description from task description...\n{format_messages(messages)}",
         printout=VERBOSE,
         color=AGENT_COLOR,
     )
@@ -2399,7 +2399,7 @@ class Orchestrator:
         output = query_model(
             model=super_creative_model,
             messages=messages,
-            preamble=f"Brainstorming knowledge from completion of {self.name}...\n{as_printable(messages)}",
+            preamble=f"Brainstorming knowledge from completion of {self.name}...\n{format_messages(messages)}",
             color=AGENT_COLOR,
             printout=VERBOSE,
         )
@@ -2456,7 +2456,7 @@ class Orchestrator:
         output = query_model(
             model=super_creative_model,
             messages=messages,
-            preamble=f"Generating knowledge from completion of {self.name}...\n{as_printable(messages)}",
+            preamble=f"Generating knowledge from completion of {self.name}...\n{format_messages(messages)}",
             printout=VERBOSE,
             color=AGENT_COLOR,
         )
@@ -2777,7 +2777,7 @@ class Orchestrator:
         action_choice = query_model(
             model=precise_model,
             messages=messages,
-            preamble=f"Choosing next action...\n{as_printable(messages)}",
+            preamble=f"Choosing next action...\n{format_messages(messages)}",
             color=AGENT_COLOR,
         )
         if not (
@@ -3028,7 +3028,7 @@ class Orchestrator:
         new_subtask = query_model(
             model=precise_model,
             messages=messages,
-            preamble=f"Extracting subtask...\n{as_printable(messages)}",
+            preamble=f"Extracting subtask...\n{format_messages(messages)}",
             color=AGENT_COLOR,
         )
         extracted_results = extract_blocks(
@@ -3309,7 +3309,7 @@ class Orchestrator:
         result = query_model(
             model=precise_model,
             messages=messages,
-            preamble=f"Updating main task description...\n{as_printable(messages)}",
+            preamble=f"Updating main task description...\n{format_messages(messages)}",
             color=AGENT_COLOR,
         )
         extracted_result = extract_blocks(result, "start_of_main_task_info")
@@ -3880,7 +3880,7 @@ class Delegator:
         result = query_model(
             model=precise_model,
             messages=messages,
-            preamble=f"Selecting executor for task...\n{as_printable(messages)}",
+            preamble=f"Selecting executor for task...\n{format_messages(messages)}",
             printout=VERBOSE,
             color=AGENT_COLOR,
         )
@@ -4169,10 +4169,11 @@ class Swarm:
         )
 
 
-# rerun to check reusability of existing executors
+# change as_printable to format_messages
 # ....
 # update MISSION and customize it for the contexts it's being used in
 # add knowledge to executor selection > add to reasoning generation > add step to extract only information about executor candidates
+# rerun to check reusability of existing executors
 # ....
 # > try agent learning algorithm # agent learning paper: https://x.com/rohanpaul_ai/status/1754837097951666434?s=46&t=R6mLA3s_DNKUEwup7QWyCA
 # > use any tool api retriever
