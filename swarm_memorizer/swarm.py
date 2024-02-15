@@ -57,6 +57,7 @@ IdTypeT = TypeVar("IdTypeT", BlueprintId, TaskId, EventId, DelegatorId)
 AGENT_COLOR = Fore.MAGENTA
 VERBOSE = True
 NONE = "None"
+NoneStr = Literal["None"]
 
 
 class Concept(Enum):
@@ -85,7 +86,7 @@ class Concept(Enum):
 
 
 def format_messages(messages: Sequence[BaseMessage]) -> str:
-    """Print LangChain messages."""
+    """Format LangChain messages into something printable."""
     return "\n\n---\n\n".join(
         [f"[{message.type.upper()}]:\n\n{message.content}" for message in messages]  # type: ignore
     )
@@ -138,6 +139,18 @@ class Reasoning:
 
 
 @dataclass
+class OrchestratorKnowledge:
+    """Knowledge for the orchestrator."""
+
+    executor_learnings: str
+    other_learnings: str
+
+    def __str__(self) -> str:
+        """String representation of the orchestrator's knowledge."""
+        return f"{self.executor_learnings}\n{self.other_learnings}"
+
+
+@dataclass
 class OrchestratorBlueprint:
     """A blueprint for an orchestrator."""
 
@@ -146,7 +159,7 @@ class OrchestratorBlueprint:
     description: str | None
     rank: int | None
     reasoning: Reasoning
-    knowledge: str
+    knowledge: OrchestratorKnowledge | None
     recent_events_size: int
     auto_wait: bool
     role: Role = field(init=False)
@@ -1298,7 +1311,7 @@ class ActionModeName(Enum):
 
 
 ORCHESTRATOR_INSTRUCTOR_MISSION = """
-You are the instructor for an AI task orchestration agent. Your purpose is to provide a guidance structure for the agent to think through what it must do next.""".strip()
+You are the instructor for an AI task orchestration agent. Your purpose is to provide a nested reasoning structure for the agent to think through what it must do next.""".strip()
 
 MODULAR_SUBTASK_IDENTIFICATION = """
 "Modular Subtask Identification" (MSI) is a philosophy for identifying a required subtask from a main task that emphasizes two principles:
@@ -1452,18 +1465,19 @@ class ReasoningGenerator:
         """Generate reasoning for selecting an executor."""
         context = """
         ## MISSION:
-        You are the instructor for an AI task delegation agent. Your purpose is to provide a guidance structure for the delegator to think through how to select an appropriate executor for a subtask.
+        You are the instructor for an AI task delegation agent. Your purpose is to provide a reasoning structure for the delegator to think through how to select an appropriate executor for a subtask.
 
         ## CONCEPTS:
         {concepts}
         
         ## DELEGATOR INFORMATION SECTIONS:
         The delegator has access to several sections of information that is relevant to its decisionmaking.
-        - TASK INFORMATION contains a brief description of information about the TASK. This will always include information the TASK requirement itself, but _may_ also contain contextual information for why the task is being executed.
+        - TASK INFORMATION: contains a brief description of information about the TASK. This will always include information the TASK requirement itself, but _may_ also contain contextual information for why the task is being executed.
         - {EXECUTOR} CANDIDATES: a list of executors that can be selected for the task. Each entry for an executor candidate has the following information:
           - DESCRIPTION: a brief description of the executor candidate's capabilities, as well as what it cannot do. This is what the candidate can _theoretically_ do, as opposed to its actual performance.
           - NEW STATUS: whether an executor candidate is a NEW {EXECUTOR} or not.
           - TASK PERFORMANCE: as defined above, including SUCCESS RATE and COMPLETION TIME. This information is only available for non-NEW {EXECUTOR} candidates.
+        - EXECUTOR MEMORY: the memory the delegator has of previous interactions with some {EXECUTOR}s on a similar task. These executors may or may not appear in the current list of {EXECUTOR} candidates.
         """
         context = dedent_and_strip(context).format(
             concepts=EXECUTOR_SELECTION_CONCEPTS,
@@ -1578,6 +1592,12 @@ class ReasoningGenerator:
         In its default state, the orchestrator can perform the following actions:
         {actions}
         """
+        context = dedent_and_strip(context).format(
+            mission=ORCHESTRATOR_INSTRUCTOR_MISSION,
+            base_info=self.base_info(ActionModeName.DEFAULT),
+            ORCHESTRATOR_ACTIONS=Concept.ORCHESTRATOR_ACTIONS.value,
+            actions=self.default_mode_actions,
+        )
         request = f"""
         ## REQUEST FOR YOU:
         {ReasoningNotes.ORCHESTRATOR_OVERVIEW.value}
@@ -1591,20 +1611,12 @@ class ReasoningGenerator:
 
         {{output_instructions}}
         """
+        request = dedent_and_strip(request).format(
+            output_instructions=REASONING_PROCESS_OUTPUT_INSTRUCTIONS,
+        )
         messages = [
-            SystemMessage(
-                content=dedent_and_strip(context).format(
-                    mission=ORCHESTRATOR_INSTRUCTOR_MISSION,
-                    base_info=self.base_info(ActionModeName.DEFAULT),
-                    ORCHESTRATOR_ACTIONS=Concept.ORCHESTRATOR_ACTIONS.value,
-                    actions=self.default_mode_actions,
-                )
-            ),
-            SystemMessage(
-                content=dedent_and_strip(request).format(
-                    output_instructions=REASONING_PROCESS_OUTPUT_INSTRUCTIONS,
-                )
-            ),
+            SystemMessage(content=context),
+            SystemMessage(content=request),
         ]
         return query_and_extract_reasoning(
             messages,
@@ -1624,7 +1636,12 @@ class ReasoningGenerator:
         The orchestrator is currently in a mode where it is discussing its FOCUSED SUBTASK with the SUBTASK EXECUTOR. Currently, the orchestrator can perform the following actions:
         {actions}
         """
-
+        context = dedent_and_strip(context).format(
+            mission=ORCHESTRATOR_INSTRUCTOR_MISSION,
+            base_info=self.base_info(ActionModeName.SUBTASK_DISCUSSION),
+            ORCHESTRATOR_ACTIONS=Concept.ORCHESTRATOR_ACTIONS.value,
+            actions=self.subtask_mode_actions,
+        )
         request = f"""
         ## REQUEST FOR YOU:
         {ReasoningNotes.ORCHESTRATOR_OVERVIEW.value}
@@ -1638,20 +1655,12 @@ class ReasoningGenerator:
         
         {{output_instructions}}
         """
+        request = dedent_and_strip(request).format(
+            output_instructions=REASONING_PROCESS_OUTPUT_INSTRUCTIONS,
+        )
         messages = [
-            SystemMessage(
-                content=dedent_and_strip(context).format(
-                    mission=ORCHESTRATOR_INSTRUCTOR_MISSION,
-                    base_info=self.base_info(ActionModeName.SUBTASK_DISCUSSION),
-                    ORCHESTRATOR_ACTIONS=Concept.ORCHESTRATOR_ACTIONS.value,
-                    actions=self.subtask_mode_actions,
-                )
-            ),
-            SystemMessage(
-                content=dedent_and_strip(request).format(
-                    output_instructions=REASONING_PROCESS_OUTPUT_INSTRUCTIONS,
-                )
-            ),
+            SystemMessage(content=context),
+            SystemMessage(content=request),
         ]
         return query_and_extract_reasoning(
             messages,
@@ -1663,7 +1672,7 @@ class ReasoningGenerator:
         """Generate reasoning for identifying a new subtask."""
         context = """
         ## MISSION:
-        You are the instructor for an AI task orchestration agent. Your purpose is to provide a nested guidance structure for the agent to think through how to identify the next subtask from the main task description.
+        You are the instructor for an AI task orchestration agent. Your purpose is to provide a nested reasoning structure for the agent to think through how to identify the next subtask from the main task description.
 
         {base_info}
 
@@ -1673,7 +1682,7 @@ class ReasoningGenerator:
         """
         request = f"""
         ## REQUEST FOR YOU:
-        Provide a nsted, robust reasoning structure in JSON format for the orchestrator to a) understand what MSI is and follow its principles, and b) sequentially process the information in the information sections it has access to so that it can identify a new subtask that is not yet identified. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind before they perform subtask identification. Some things to note:
+        Provide a nested, robust reasoning structure in JSON format for the orchestrator to a) understand what MSI is and follow its principles, and b) sequentially process the information in the information sections it has access to so that it can identify a new subtask that is not yet identified. This provides the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind before they perform subtask identification. Some things to note:
         - {ReasoningNotes.INFORMATION_RESTRICTIONS.value}
         - {ReasoningNotes.TERM_REFERENCES.value}
         - In its current state, the orchestrator is not able to perform any other actions besides subtask identification and the reasoning preceeding it.
@@ -1706,7 +1715,7 @@ class ReasoningGenerator:
         """Generate reasoning for learning after task completion."""
         context = """
         ## MISSION:
-        You are the instructor for an AI task orchestration agent. Your purpose is to provide a nested guidance structure for the agent to think through what it has learned from the completion of a task.
+        You are the instructor for an AI task orchestration agent. Your purpose is to provide a nested reasoning structure for the agent to think through what it has learned from the completion of a task.
 
         ## CONCEPTS:
         {orchestrator_concepts}
@@ -1738,7 +1747,7 @@ class ReasoningGenerator:
         )
         request = """
         ## REQUEST FOR YOU:
-        Provide a nested, robust reasoning structure in JSON format for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for figuring out what it has learned. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
+        Provide a nested, robust reasoning structure in JSON format for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for figuring out what it has learned. This provides the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
         - {INFORMATION_RESTRICTIONS}
         - {TERM_REFERENCES}
         - The overarching goal is to convey the learnings from the completion of the {MAIN_TASK} to another agent to maximize the chances of the other agent successfully completing other tasks like {MAIN_TASK}.
@@ -1781,7 +1790,7 @@ class ReasoningGenerator:
         """Generate reasoning for updating the main task. Currently unused."""
         context = f"""
         ## MISSION:
-        You are the instructor for an AI task orchestration agent. Your purpose is to provide a nested guidance structure for the agent to think through how to update the main task description based on new information in an event log.
+        You are the instructor for an AI task orchestration agent. Your purpose is to provide a nested reasoning structure for the agent to think through how to update the main task description based on new information in an event log.
 
         ## CONCEPTS:
         These are the concepts you should be familiar with:
@@ -1800,7 +1809,7 @@ class ReasoningGenerator:
 
         task = f"""
         ## REQUEST FOR YOU:
-        Provide a nested, robust reasoning structure in JSON for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for updating the {Concept.MAIN_TASK_INFORMATION.value} and {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} sections to reflect the new information in the {Concept.TASK_MESSAGES.value} that comes after {Concept.LAST_READ_MAIN_TASK_OWNER_MESSAGE.value}. These steps provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
+        Provide a nested, robust reasoning structure in JSON for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for updating the {Concept.MAIN_TASK_INFORMATION.value} and {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} sections to reflect the new information in the {Concept.TASK_MESSAGES.value} that comes after {Concept.LAST_READ_MAIN_TASK_OWNER_MESSAGE.value}. This provides the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
         - This reasoning process does not make the actual updates to the {Concept.MAIN_TASK_INFORMATION.value} and {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} sections; it only figures out what updates are needed.
         - Both the {Concept.MAIN_TASK_INFORMATION} and {Concept.MAIN_TASK_DEFINITION_OF_DONE} sections may be outdated, hence the need to update them with the latest messages from the {Concept.MAIN_TASK_OWNER.value}.
         - {ReasoningNotes.INFORMATION_RESTRICTIONS.value}
@@ -2008,6 +2017,8 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
         if validation_result.artifacts:
             artifacts = validation_result.artifacts
     if failed_validation:
+        raise NotImplementedError("TODO")
+        # > first time failure only requires a message correction
         new_status = TaskWorkStatus.BLOCKED
         reason = "Failed completion validation."
         new_executor = regenerate_task_executor(task.executor)  # MUTATION
@@ -2158,9 +2169,9 @@ class Orchestrator:
         return self.blueprint.reasoning
 
     @property
-    def knowledge(self) -> str:
+    def knowledge(self) -> OrchestratorKnowledge | None:
         """Learnings from past tasks."""
-        return self.blueprint.knowledge or NONE
+        return self.blueprint.knowledge
 
     @property
     def role(self) -> Role:
@@ -2231,7 +2242,7 @@ class Orchestrator:
         """Overall state of the orchestrator."""
         return CoreState(
             id=self.id,
-            knowledge=self.knowledge,
+            knowledge=str(self.knowledge),
             main_task=self.task,
             subtasks=self.task.subtasks,
             template=self.core_template,
@@ -2407,7 +2418,7 @@ class Orchestrator:
         assert output and len(output) == 1, "Exactly one reasoning output is expected."
         return output[0]
 
-    def generate_knowledge(self) -> str:
+    def generate_knowledge(self) -> OrchestratorKnowledge:
         """Generate knowledge for the orchestrator."""
         context = self.knowledge_generation_context
         brainstorming = """
@@ -2424,9 +2435,9 @@ class Orchestrator:
         ## REQUEST FOR YOU:
         Using the brainstorming as a starting point, figure out the lessons you have learned from the completion of the {MAIN_TASK}, using the following guidelines:
         - There should be three main types of lessons recorded (though they may or may not exist for any specific {MAIN_TASK}):
+          - learnings about the {EXECUTOR}s—what they were good at, what they struggled with, and how to communicate with them
           - learnings about the {MAIN_TASK} itself
           - learnings about the individual {SUBTASK}s, including effective identification strategies for new subtasks
-          - learnings about the {EXECUTOR}s—what they were good at, what they struggled with, and how to communicate with them
         - Be empirical and objective, not aspirational; be specific and precise in lessons learned—avoid vague general principles.
         - Avoid referring to specific {ARTIFACT}s generated, as future orchestrators will not have access to those artifacts.
         - When referring to {EXECUTOR}s, use their exact IDs. Future orchestrators may encounter the same {EXECUTOR}s.
@@ -2434,13 +2445,20 @@ class Orchestrator:
         - Avoid using {SUBTASK} IDs, as information about {SUBTASK}s are discarded after this exercise. Instead, refer to {SUBTASK}s by what they involved.
         - Avoiding referring to the {MAIN_TASK} as "{MAIN_TASK}", because future orchestrators may have a different {MAIN_TASK}; instead, refer to what the task involves.
 
-        Output the knowledge you have learned from the completion of the {MAIN_TASK} in this format:
-        ```start_of_learnings_output
-        - {{learning_1}}
-        - {{learning_2}}
+        Output the knowledge you have learned from the completion of the {MAIN_TASK} in _two_ blocks.
+        The first block contains learnings about specific, individual {EXECUTOR}s.
+        ```start_of_executor_learnings_output
+        - {{executor_learning_1}}
+        - {{executor_learning_2}}
         - [... etc.]
-        ```end_of_learnings_output
-        Any other comments or thoughts can be added before or after the output block.
+        ```end_of_executor_learnings_output
+        The second block contains other learnings that aren't specific to an individual {EXECUTOR}.
+        ```start_of_other_learnings_output
+        - {{other_learning_1}}
+        - {{other_learning_2}}
+        - [... etc.]
+        ```end_of_other_learnings_output
+        Any other comments or thoughts can be added before or after the output blocks.
         """
         request = dedent_and_strip(request).format(
             MAIN_TASK=Concept.MAIN_TASK.value,
@@ -2460,9 +2478,20 @@ class Orchestrator:
             printout=VERBOSE,
             color=AGENT_COLOR,
         )
-        output = extract_blocks(output, "start_of_learnings_output")
-        assert output and len(output) == 1, "Exactly one learning output is expected."
-        return output[0]
+        # output = extract_blocks(output, "start_of_learnings_output")
+        # assert output and len(output) == 1, "Exactly one learning output is expected."
+        # return output[0]
+        executor_output = extract_blocks(output, "start_of_executor_learnings_output")
+        assert (
+            executor_output and len(executor_output) == 1
+        ), "Exactly one executor output is expected."
+        other_output = extract_blocks(output, "start_of_other_learnings_output")
+        assert (
+            other_output and len(other_output) == 1
+        ), "Exactly one other output is expected."
+        return OrchestratorKnowledge(
+            executor_learnings=executor_output[0], other_learnings=other_output[0]
+        )
 
     def save_blueprint(self, update_blueprint: bool = True) -> None:
         """Serialize the orchestrator to YAML."""
@@ -2490,8 +2519,10 @@ class Orchestrator:
 
     def accepts(self, task: Task) -> bool:
         """Decides whether the orchestrator accepts a task."""
+
+        breakpoint()
+        # orchestrator's "accepts" should be based on list of tasks that have succeeded, and failed, ranked by rating
         raise NotImplementedError("TODO")
-        # > orchestrator's "accepts" should be based on list of tasks that have succeeded, and failed, ranked by rating
 
     @property
     def recent_events_size(self) -> int:
@@ -2838,8 +2869,8 @@ class Orchestrator:
         template = """
         Use the following reasoning process to decide what to do next:
         ```start_of_reasoning_process
-        Remember, the subtask must not be the same as the MAIN TASK itself, no matter how straightforward the MAIN TASK is.
         {subtask_extraction_core}
+        Remember, the subtask must not be the same as the MAIN TASK itself, no matter how straightforward the MAIN TASK is.
         ```end_of_reasoning_process
 
         In your reply, you must include output from _all_ parts of the reasoning process, in this block format:
@@ -3019,6 +3050,15 @@ class Orchestrator:
             )
         return self.blueprint.reasoning.executor_selection
 
+    @property
+    def executor_memory(self) -> str | None:
+        """Memory for the executor."""
+        return (
+            self.blueprint.knowledge.executor_learnings
+            if self.blueprint.knowledge
+            else None
+        )
+
     def identify_new_subtask(self) -> ActionResult:
         """Identify a new subtask."""
         messages = [
@@ -3079,6 +3119,7 @@ class Orchestrator:
             self.recent_events_size,
             self.auto_wait,
             self.executor_selection_reasoning,
+            self.executor_memory,
         )
         # send relevant artifacts as a message
         assert subtask.executor is not None, "Task executor assignment failed."
@@ -3242,9 +3283,10 @@ class Orchestrator:
         """
         reasoning = dedent_and_strip(reasoning)
 
+        # You are an advanced task orchestrator that specializes in managing the execution of a {Concept.MAIN_TASK.value} and delegating its {Concept.SUBTASK.value} to an {Concept.EXECUTOR.value} that can execute those tasks, while communicating with the {Concept.MAIN_TASK_OWNER.value} to gather required information for the {Concept.MAIN_TASK.value}.
         context = f"""
         ## MISSION:
-        You are an advanced task orchestrator that specializes in managing the execution of a {Concept.MAIN_TASK.value} and delegating its {Concept.SUBTASK.value} to an {Concept.EXECUTOR.value} that can execute those tasks, while communicating with the {Concept.MAIN_TASK_OWNER.value} to gather required information for the {Concept.MAIN_TASK.value}.
+        You are an advanced task orchestrator that specializes in managing the status of a {Concept.MAIN_TASK.value} and coordinating the execution of its {Concept.SUBTASK.value}s.
 
         ### MODE:
         Currently you are NOT communicating with the {Concept.MAIN_TASK_OWNER.value}, but reviewing recent communications with them to update the {Concept.MAIN_TASK_INFORMATION.value} and {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} sections based on new information.
@@ -3497,14 +3539,22 @@ def extract_bot_loader(loader_location: Path) -> ExecutorLoader:
     return getattr(module, "load_bot")
 
 
-def load_executor(blueprint: Blueprint, task: Task, files_dir: Path) -> Executor:
+def load_executor(
+    blueprint: Blueprint, task: Task, files_dir: Path, delegator: "Delegator"
+) -> Executor:
     """Factory function for loading an executor from a blueprint."""
     if blueprint.role == Role.BOT:
         loader_location = files_dir / "loader.py"
         load_bot = extract_bot_loader(loader_location)
         return load_bot(blueprint, task, files_dir)
-    raise NotImplementedError("TODO")
-    # > case for orchestrator
+
+    assert isinstance(blueprint, OrchestratorBlueprint)
+    return Orchestrator(
+        blueprint=blueprint,
+        task=task,
+        files_parent_dir=files_dir.parent,
+        delegator=delegator,
+    )
 
 
 class Advisor(Protocol):
@@ -3638,7 +3688,9 @@ def search_task_records(task_info: str, task_records_dir: Path) -> list[TaskData
         )
         nodes.append(node)
         task_data_list.append(old_task_data)
+    # print(time.time())
     index = VectorStoreIndex(nodes)
+    # print(time.time())
     results = (
         index.as_query_engine(similarity_top_k=1000, response_mode="no_text")
         .query(task_info)
@@ -3735,7 +3787,7 @@ class Delegator:
     task_records_dir: Path
     task_search_rerank_threshold: int
     id_generator: IdGenerator
-    _init_executor_selection_reasoning: str | None = None
+    # _init_executor_selection_reasoning: str | None = None
 
     @cached_property
     def id(self) -> DelegatorId:
@@ -3807,6 +3859,7 @@ class Delegator:
         candidates: list[BlueprintSearchResult],
         task: Task,
         executor_selection_reasoning: str,
+        executor_memory: str | None,
     ) -> BlueprintSearchResult | None:
         """Evaluate candidates for a task."""
         context = """
@@ -3833,6 +3886,12 @@ class Delegator:
         ```start_of_executor_candidates
         {executor_candidates}
         ```end_of_executor_candidates
+
+        ## {EXECUTOR} MEMORY:
+        Here are some memories of previous interactions with {EXECUTOR}s on a similar task that may (or may not) be relevant to the current task:
+        ```start_of_executor_memory
+        {executor_memory}
+        ```end_of_executor_memory
         """
         executor_candidates_printout = "\n".join(
             str(candidate) for candidate in candidates
@@ -3843,6 +3902,7 @@ class Delegator:
             task_information=task.information_with_artifacts,
             context_information=task.context,
             executor_candidates=executor_candidates_printout,
+            executor_memory=executor_memory,
         )
         request = """
         ## REQUEST FOR YOU:
@@ -3902,6 +3962,15 @@ class Delegator:
             ) from error
         return chosen_candidate
 
+    def copy(self) -> Self:
+        """Create a copy of the delegator."""
+        return self.__class__(
+            executors_dir=self.executors_dir,
+            task_records_dir=self.task_records_dir,
+            task_search_rerank_threshold=self.task_search_rerank_threshold,
+            id_generator=self.id_generator,
+        )
+
     def make_executor(
         self, task: Task, recent_events_size: int, auto_await: bool
     ) -> Executor:
@@ -3913,24 +3982,23 @@ class Delegator:
             description=None,
             rank=None,
             reasoning=Reasoning(),
-            knowledge="",
+            knowledge=None,
             recent_events_size=recent_events_size,
             auto_wait=auto_await,
             id=generate_swarm_id(BlueprintId, self.id_generator),
         )
-        delegator = Delegator(
-            executors_dir=self.executors_dir,
-            task_records_dir=self.task_records_dir,
-            task_search_rerank_threshold=self.task_search_rerank_threshold,
-            id_generator=self.id_generator,
-        )
+        # delegator = Delegator(
+        #     executors_dir=self.executors_dir,
+        #     task_records_dir=self.task_records_dir,
+        #     task_search_rerank_threshold=self.task_search_rerank_threshold,
+        #     id_generator=self.id_generator,
+        # )
         return Orchestrator(
             blueprint=blueprint,
             task=task,
             files_parent_dir=self.executors_dir,
-            delegator=delegator,
+            delegator=self.copy(),
         )
-        # TODO: make it so that executor selection reasoning is saved in orchestrator blueprint
 
     def find_top_candidates(
         self,
@@ -3956,6 +4024,7 @@ class Delegator:
         candidates: list[BlueprintSearchResult],
         task: Task,
         executor_selection_reasoning: str,
+        executor_memory: str | None,
     ) -> Generator[BlueprintSearchResult, None, None]:
         """Reorder the candidate list."""
         chosen: set[BlueprintId] = set()
@@ -3967,7 +4036,10 @@ class Delegator:
             ]
             if not (
                 next_candidate := self.choose_next_executor(
-                    available_candidates, task, executor_selection_reasoning
+                    available_candidates,
+                    task,
+                    executor_selection_reasoning,
+                    executor_memory=executor_memory,
                 )
             ):
                 return
@@ -3979,6 +4051,7 @@ class Delegator:
         self,
         task: Task,
         executor_selection_reasoning: str,
+        executor_memory: str | None,
         max_candidates: int = 10,
     ) -> DelegationSuccessful:
         """Find an executor to delegate the task to."""
@@ -3990,10 +4063,16 @@ class Delegator:
 
         candidates = self.find_top_candidates(candidates, max_candidates)
         for candidate in self.reorder_candidate_list(
-            candidates, task, executor_selection_reasoning
+            candidates,
+            task,
+            executor_selection_reasoning,
+            executor_memory=executor_memory,
         ):
             candidate = load_executor(
-                candidate.blueprint, task, self.executors_dir / candidate.blueprint.id
+                candidate.blueprint,
+                task,
+                self.executors_dir / candidate.blueprint.id,
+                delegator=self.copy(),
             )
             task.change_executor(candidate)
             if candidate.accepts(task):
@@ -4009,9 +4088,12 @@ class Delegator:
         recent_events_size: int,
         auto_await: bool,
         executor_selection_reasoning: str,
+        executor_memory: str | None,
     ) -> None:
         """Assign an existing or new executor to a task."""
-        delegation_successful = self.delegate(task, executor_selection_reasoning)
+        delegation_successful = self.delegate(
+            task, executor_selection_reasoning, executor_memory=executor_memory
+        )
         # blueprints represent known capabilities; so, failure means we must create a new executor
         if not delegation_successful:
             task.change_executor(
@@ -4107,7 +4189,7 @@ class Swarm:
             task_records_dir=self.task_records_dir,
             task_search_rerank_threshold=self.task_search_rerank_threshold,
             id_generator=self.id_generator,
-            _init_executor_selection_reasoning=self.executor_selection_reasoning,
+            # _init_executor_selection_reasoning=self.executor_selection_reasoning,
         )
 
     @cached_property
@@ -4138,6 +4220,7 @@ class Swarm:
             self.recent_events_size,
             self.auto_wait,
             self.executor_selection_reasoning,
+            executor_memory=None,
         )
         assert task.executor is not None, "Task executor assignment failed."
         task.work_status = TaskWorkStatus.IN_PROGRESS
@@ -4169,10 +4252,8 @@ class Swarm:
         )
 
 
-# change as_printable to format_messages
 # ....
-# update MISSION and customize it for the contexts it's being used in
-# add knowledge to executor selection > add to reasoning generation > add step to extract only information about executor candidates
+# > rerun to save new executor
 # rerun to check reusability of existing executors
 # ....
 # > try agent learning algorithm # agent learning paper: https://x.com/rohanpaul_ai/status/1754837097951666434?s=46&t=R6mLA3s_DNKUEwup7QWyCA
