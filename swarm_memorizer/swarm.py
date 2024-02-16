@@ -2794,6 +2794,7 @@ class Orchestrator:
     def focused_subtask_discussion(self) -> str:
         """Discussion of the focused subtask."""
         assert self.focused_subtask is not None
+        assert self.focused_subtask.executor
         template = """
         ## FOCUSED SUBTASK:
         You are currently focusing on the following subtask:
@@ -2804,11 +2805,13 @@ class Orchestrator:
         ### FOCUSED SUBTASK FULL DISCUSSION LOG:
         Below is a complete log of the discussion of the FOCUSED SUBTASK so far. Some messages may overlap with the RECENT EVENTS LOG above, but this log has all messages related to the FOCUSED SUBTASK rather than just the most recent.
         ```start_of_subtask_discussion_log
+        Executor Id: {blueprint_id}
         {subtask_discussion}
         ```end_of_subtask_discussion_log
         """
         return dedent_and_strip(template).format(
             subtask_information=self.focused_subtask.as_subtask_printout,
+            blueprint_id=self.focused_subtask.executor.blueprint.id,
             subtask_discussion=self.focused_subtask.reformat_event_log(
                 self.focused_subtask.event_log.messages, pov=Concept.MAIN_TASK_OWNER
             ),
@@ -2870,6 +2873,7 @@ class Orchestrator:
     def action_choice_context(self) -> str:
         """Context for choosing an action."""
         if self.focused_subtask:
+            raise NotImplementedError("TODO: check Executor Id is passed correctly")
             return self.subtask_action_context
         if self.action_mode == ActionModeName.DEFAULT:
             return self.default_action_context
@@ -4362,9 +4366,8 @@ class Swarm:
 
 
 # ....
-# in conversation log with executor, make sure to include executor's blueprint id
-# > add role parametrization for reasoning bullets and consolidate with delegator
-# > factor out reasoning output block # search: "of the reasoning process"
+# factor out reasoning output block # search: "of the reasoning process"
+# add role parametrization for reasoning bullets and consolidate with delegator
 # > (next_curriculum_task)
 # conversation interface wrapper over any function > autogen
 # bot: document oracle > embedchain
