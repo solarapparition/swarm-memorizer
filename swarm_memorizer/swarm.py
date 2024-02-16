@@ -1,5 +1,6 @@
 """Structure for swarm agents."""
 
+import json
 from os import makedirs
 from textwrap import indent
 from typing import (
@@ -24,7 +25,7 @@ import asyncio
 from itertools import chain
 from enum import Enum
 from dataclasses import InitVar, dataclass, asdict, field, fields
-from functools import cached_property
+from functools import cached_property, lru_cache
 from pathlib import Path
 from uuid import UUID
 import importlib.util
@@ -162,10 +163,15 @@ class OrchestratorBlueprint:
     knowledge: OrchestratorKnowledge | None
     recent_events_size: int
     auto_wait: bool
-    role: Role = field(init=False)
+    # role: Role = field(init=False)
 
-    def __post_init__(self) -> None:
-        self.role = Role.ORCHESTRATOR
+    # def __post_init__(self) -> None:
+    #     self.role = Role.ORCHESTRATOR
+
+    @property
+    def role(self) -> Role:
+        """Role of the agent."""
+        return Role.ORCHESTRATOR
 
     @classmethod
     def from_serialized_data(cls, data: dict[str, Any]) -> Self:
@@ -173,6 +179,7 @@ class OrchestratorBlueprint:
         data = data.copy()
         data["id"] = BlueprintId(data["id"])
         data["reasoning"] = Reasoning(**data["reasoning"])
+        data["knowledge"] = OrchestratorKnowledge(**data["knowledge"])
         del data["role"]
         return cls(**data)
 
@@ -660,14 +667,12 @@ class ExecutorReport:
 
 
 class Executor(Protocol):
-    """An agent responsible for executing a task."""
+    """An agent responsible for executing a task. Normally either an orchestrator or a bot."""
 
     @property
     def blueprint(self) -> Blueprint:
         """Blueprint of the executor."""
         raise NotImplementedError
-
-    # blueprint: Blueprint
 
     @property
     def id(self) -> RuntimeId:
@@ -802,7 +807,7 @@ class TaskData:
         return self.execution_history.last_entry.success
 
     @property
-    def all_executor_blueprint_ids(self) -> list[BlueprintId]:
+    def executor_blueprint_ids(self) -> list[BlueprintId]:
         """Ids of all executor blueprints."""
         return [outcome.blueprint_id for outcome in self.execution_history.history]
 
@@ -1870,6 +1875,8 @@ def regenerate_task_executor(executor: Executor) -> Executor:
         return executor
 
     raise NotImplementedError("TODO")
+    # > when regenerating reasoning, subtask identification needs to have its own more granular signal
+    # > when updating reasoning, must make sure to include knowledge
     # > TODO: agent regeneration: if agent fails task, first time is just a message; new version of agent probably should only have its knowledge updated on second fail; on third fail, whole agent is regenerated; on next fail, the next best agent is chosen, and the process repeats again; if the next best agent still can't solve the task, the task is auto-cancelled since it's likely too difficult (manual cancellation by orchestrator is still possible) > when regenerating agent components, include specific information from old agent > if agent is bot, skip update and regeneration and just message/choose next best agent
     # > mutation > update: unify mutation with generation: mutation is same as re-generating each component of agent, including knowledge > blueprint: model parameter # explain that cheaper model costs less but may reduce accuracy > blueprint: novelty parameter: likelihood of choosing unproven subagent > blueprint: temperature parameter > when mutating agent, either update knowledge, or tweak a single parameter > when mutating agent, use component optimization of other best agents (that have actual trajectories) > new mutation has a provisional rating based on the rating of the agent it was mutated from; but doesn't appear in optimization list until it has a trajectory > only mutate when agent fails at some task > add success record to reasoning processes > retrieve previous reasoning for tasks similar to current task
 
@@ -2517,12 +2524,111 @@ class Orchestrator:
         makedirs(self.files_dir, exist_ok=True)
         default_yaml.dump(self.serialize(), self.serialization_location)
 
+    def successful_tasks(
+        self, task_info: str, task_records_dir: Path
+    ) -> list[TaskData]:
+        """List of tasks that have been successfully completed by the orchestrator, related to a particular task."""
+        return [
+            task_data
+            for task_data in search_task_records(
+                task_info, task_records_dir=task_records_dir
+            )
+            if task_data.last_executor_blueprint_id == self.blueprint.id
+            and task_data.execution_successful
+        ]
+
+    def failed_tasks(self, task_info: str, task_records_dir: Path) -> list[TaskData]:
+        """List of tasks that have failed to be completed by the orchestrator, related to a particular task."""
+        return [
+            task_data
+            for task_data in search_task_records(
+                task_info, task_records_dir=task_records_dir
+            )
+            if self.blueprint.id in task_data.executor_blueprint_ids
+            and not task_data.execution_successful
+        ]
+
     def accepts(self, task: Task) -> bool:
         """Decides whether the orchestrator accepts a task."""
-
-        breakpoint()
-        # orchestrator's "accepts" should be based on list of tasks that have succeeded, and failed, ranked by rating
-        raise NotImplementedError("TODO")
+        successful_tasks = self.successful_tasks(
+            task.initial_information, task.task_records_dir
+        )
+        failed_tasks = self.failed_tasks(
+            task.initial_information, task.task_records_dir
+        )
+        context = {
+            "context": "The task history of an agent.",
+            "success_list": [
+                task_data.initial_information for task_data in successful_tasks
+            ],
+            "failure_list": [task.initial_information for task in failed_tasks],
+            "new_task": task.initial_information,
+        }
+        context = dedent_and_strip(json.dumps(context, indent=4))
+        request = """
+        {
+            "system_instruction": "Analyze and predict an agent's capability to perform a new task, based on its history of successes and failures.",
+            "task": "Prediction of success for a new task",
+            "objective": "Utilize historical performance data to assess the likelihood of an agent's success in a new task.",
+            "analysis_steps": [
+                {
+                    "description": "Collect and review the agent's past successful and failed tasks.",
+                    "details": {
+                        "success_tasks": "List of tasks the agent has successfully completed in the past.",
+                        "failure_tasks": "List of tasks the agent has failed to complete in the past."
+                    }
+                },
+                    {
+                        "description": "Analyze the new task in the context of the agent's historical performance.",
+                        "details": {
+                            "task_to_assess": "Detailed description of the new task.",
+                            "comparison_criteria": "Similarity to past tasks, required skills, and task complexity."
+                        }
+                },
+                    {
+                    "description": "Predict the agent's likelihood of success on the new task, based on the analysis.",
+                    "details": {
+                        "evaluation_method": "Assessment of similarities, required skills, and complexity compared to past performances.",
+                        "prediction": "Determination of success likelihood, clearly marked within specified blocks for emphasis."
+                    }
+                }
+            ],
+            "parameters": {
+                "input_data": {
+                    "success_list": "Tasks successfully completed by the agent",
+                    "failure_list": "Tasks the agent has failed at",
+                    "new_task": "The task to be assessed for likelihood of success"
+                },
+                "output_format": {
+                    "analysis_steps_output": "Output of reasoning process for analysis steps",
+                    "final_outcome": "The agent's predicted success, highlighted within answer block."
+                    "final_outcome_enums": ["y", "n"]
+                    "answer_block_delimiters": "Block delimited by ```start_of_prediction_output and ```end_of_prediction_output, containing the prediction."
+                }
+            },
+            "feedback": "Ensure clarity and precision in the analysis steps for effective understanding."
+        }
+        """
+        request = dedent_and_strip(request)
+        messages = [
+            SystemMessage(content=context),
+            SystemMessage(content=request),
+        ]
+        output = query_model(
+            model=precise_model,
+            messages=messages,
+            preamble=f"Deciding whether to accept new task...\n{format_messages(messages)}",
+            printout=VERBOSE,
+            color=AGENT_COLOR,
+        )
+        output = extract_blocks(output, "start_of_prediction_output")
+        assert output and len(output) == 1, "Exactly one prediction output is expected."
+        answer = output[0]
+        assert answer in {
+            "y",
+            "n",
+        }, f"Prediction output must be 'y' or 'n'. Found '{answer}'."
+        return answer == "y"
 
     @property
     def recent_events_size(self) -> int:
@@ -3670,6 +3776,7 @@ def find_similar_tasks(task: Task, task_pool: Iterable[Task]) -> list[Task]:
     raise NotImplementedError("TODO")
 
 
+@lru_cache(maxsize=None)
 def search_task_records(task_info: str, task_records_dir: Path) -> list[TaskData]:
     """Search for similar tasks in the task records."""
     start_time = time.time()
@@ -3759,7 +3866,7 @@ def is_new(
         return True
 
     blueprint_ids = [
-        task_data.all_executor_blueprint_ids for task_data in similar_task_data
+        task_data.executor_blueprint_ids for task_data in similar_task_data
     ]
     num_tasks_containing_blueprint = sum(
         blueprint.id in task_execution_blueprint_ids
@@ -3947,8 +4054,10 @@ class Delegator:
         if not (extracted_result := extract_blocks(result, "start_of_executor_choice")):
             raise ExtractionError("Could not extract executor choice from the result.")
         extracted_result = default_yaml.load(extracted_result[0])
-        blueprint_id = BlueprintId(extracted_result["executor_id"])
-        if blueprint_id == NONE:
+        blueprint_id = BlueprintId(
+            extracted_result["executor_id"]
+        )  # in the prompt, it's "executor_id"
+        if str(blueprint_id) == NONE:
             return
         try:
             chosen_candidate = next(
@@ -4253,39 +4362,32 @@ class Swarm:
 
 
 # ....
-# > rerun to save new executor
-# rerun to check reusability of existing executors
-# ....
-# > try agent learning algorithm # agent learning paper: https://x.com/rohanpaul_ai/status/1754837097951666434?s=46&t=R6mLA3s_DNKUEwup7QWyCA
-# > use any tool api retriever
-# > llm based rerankers https://x.com/rohanpaul_ai/status/1753888043369726137?s=46&t=R6mLA3s_DNKUEwup7QWyCA
-# > bot: webvoyager
-# > when generating reasoning, must make sure to include knowledge
-# > remove name of executor in delegation—to focus attention on description
-# > in conversation log with executor, make sure to include executor's blueprint id
-# > investigate using campfire as backend
-# > test if current bots are being retrieved properly
-# > bot: slack agent: https://python.langchain.com/docs/integrations/toolkits/slack
-# > bot creation: try generating command external agent interface using python fire lib
-# > bot: search: exaai
-# > bot creation: robocorp (langchain thing)
-# > bot: webvoyager
-# > bot: code chain: huggingface.co/papers/2310.08992
-# > upgrade to new embedding model
-# > autonomous goal: learn to do more tasks
-# > bot: autogen web surfer agent
-# > bot: cognosys agent
-# > explore chain-of-code # https://arxiv.org/abs/2312.04474
-# > bot: multion
-# > note: can use # comments in yaml output
-# > factor out reasoning output block # search: "steps of the reasoning process"
-# > (next_curriculum_task)
-# > (add_placeholder_bot) > brainstorm placeholder bots > bot: chat with github repo > embedchain? > bot: tavily > bot: perplexity > utility function writer > generic autogen code executor (does not save code)
-# > need some way to handle execution environment (browser, jupyter notebook, etc.)
-# > bot: function writer (saved as function bots)
+# in conversation log with executor, make sure to include executor's blueprint id
 # > add role parametrization for reasoning bullets and consolidate with delegator
+# > factor out reasoning output block # search: "of the reasoning process"
+# > (next_curriculum_task)
+# conversation interface wrapper over any function > autogen
+# bot: document oracle > embedchain
+# bot: search agent > exaai > tavily > perplexity
+# > bot: generic code executor (does not save code) > autogen
+# bot: web browser > webvoyager > autogen web surfer agent
+# > bot: generalist > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY
+# > bot creation: try generating command external agent interface using python fire lib
+# > bot: function writer (saved as function bots)
 # mvp task: buy something from amazon
 # ---MVP---
+# > bot: alphacodium
+# > bot: chat with github repo
+# > investigate using campfire as backend
+# > upgrade to new embedding model
+# > explore chain-of-code # https://arxiv.org/abs/2312.04474
+# > bot: slack agent: https://python.langchain.com/docs/integrations/toolkits/slack
+# > bot creation: robocorp (langchain thing)
+# > autonomous goal: learn to do more tasks
+# > bot: code chain: https://huggingface.co/papers/2310.08992
+# > llm based rerankers https://x.com/rohanpaul_ai/status/1753888043369726137?s=46&t=R6mLA3s_DNKUEwup7QWyCA
+# > use any tool api retriever
+# > try agent learning algorithm # agent learning paper: https://x.com/rohanpaul_ai/status/1754837097951666434?s=46&t=R6mLA3s_DNKUEwup7QWyCA
 # > generate name as part of description generation
 # > when assigning new executor, need to add event describing the switch # nice to have # not displayed to executor
 # > replace messaging with instructor.patch

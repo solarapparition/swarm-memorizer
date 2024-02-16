@@ -1,9 +1,9 @@
 "description":
-  "information": |-  # high-level, single-sentence description of the subtask
-    Add 3 to the result of the multiplication operation (4 * 5).
+  "information": |-
+    Add the result of 4 * 5 to 3.
   "definition_of_done": !!null |
-  "initial_information": |-  # high-level, single-sentence description of the subtask
-    Add 3 to the result of the multiplication operation (4 * 5).
+  "initial_information": |-
+    Add the result of 4 * 5 to 3.
 "owner_id": |-
   5d0a8988-ffff-5ee5-8eed-4de0455c5da6_a2a68ec9-f47c-5de3-be6a-488cc8c994ee
 "rank_limit": !!int |-
@@ -15,8 +15,13 @@
     Result of the calculation 4 * 5
 "id": |-
   951b687d-13f3-54c8-aae3-04516d935175
-"name": |-  # high-level, single-sentence description of the subtask
-  Add 3 to the result of the multiplication operation (4 * 5).
+"name": |-
+  Add the result of 4 * 5 to 3.
+"context": |-
+  This task is a subtask of the following parent task:
+  """
+  Calculate 3 + 4 * 5.
+  """
 "execution_history":
   "history":
   - "executor_id": |-
@@ -35,4 +40,8 @@
 - "location": |-
     test/swarm/executors/9b9672d4-5cee-5eef-9ad2-661c0946e352/output/sum_20_3.txt
   "description": |-
-    Result of adding 3 to the multiplication of 4 and 5
+    Result of adding the result of 4 * 5 to 3
+"start_timestamp": !!float |-
+  1708016926.017636
+"end_timestamp": !!float |-
+  1708017042.0637498
