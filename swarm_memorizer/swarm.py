@@ -2170,6 +2170,117 @@ def generate_agent_description(task_information: str) -> str:
     return output[0]
 
 
+def find_successful_tasks(
+    blueprint_id: BlueprintId, task_info: str, task_records_dir: Path
+) -> list[TaskData]:
+    """List of tasks that have been successfully completed by the orchestrator, related to a particular task."""
+    return [
+        task_data
+        for task_data in search_task_records(
+            task_info, task_records_dir=task_records_dir
+        )
+        if task_data.last_executor_blueprint_id == blueprint_id
+        and task_data.execution_successful
+    ]
+
+
+def find_failed_tasks(
+    blueprint_id: BlueprintId, task_info: str, task_records_dir: Path
+) -> list[TaskData]:
+    """List of tasks that have failed to be completed by the orchestrator, related to a particular task."""
+    return [
+        task_data
+        for task_data in search_task_records(
+            task_info, task_records_dir=task_records_dir
+        )
+        if blueprint_id in task_data.executor_blueprint_ids
+        and not task_data.execution_successful
+    ]
+
+
+def decide_acceptance(task: Task, executor: Executor) -> bool:
+    """Decides whether the orchestrator accepts a task."""
+    successful_tasks = find_successful_tasks(
+        executor.blueprint.id, task.initial_information, task.task_records_dir
+    )
+    failed_tasks = find_failed_tasks(
+        executor.blueprint.id, task.initial_information, task.task_records_dir
+    )
+    context = {
+        "context": "The task history of an agent.",
+        "success_list": [
+            task_data.initial_information for task_data in successful_tasks
+        ],
+        "failure_list": [task.initial_information for task in failed_tasks],
+        "new_task": task.initial_information,
+    }
+    context = dedent_and_strip(json.dumps(context, indent=4))
+    request = """
+    {
+        "system_instruction": "Analyze and predict an agent's capability to perform a new task, based on its history of successes and failures.",
+        "task": "Prediction of success for a new task",
+        "objective": "Utilize historical performance data to assess the likelihood of an agent's success in a new task.",
+        "analysis_steps": [
+            {
+                "description": "Collect and review the agent's past successful and failed tasks.",
+                "details": {
+                    "success_tasks": "List of tasks the agent has successfully completed in the past.",
+                    "failure_tasks": "List of tasks the agent has failed to complete in the past."
+                }
+            },
+                {
+                    "description": "Analyze the new task in the context of the agent's historical performance.",
+                    "details": {
+                        "task_to_assess": "Detailed description of the new task.",
+                        "comparison_criteria": "Similarity to past tasks, required skills, and task complexity."
+                    }
+            },
+                {
+                "description": "Predict the agent's likelihood of success on the new task, based on the analysis.",
+                "details": {
+                    "evaluation_method": "Assessment of similarities, required skills, and complexity compared to past performances.",
+                    "prediction": "Determination of success likelihood, clearly marked within specified blocks for emphasis."
+                }
+            }
+        ],
+        "parameters": {
+            "input_data": {
+                "success_list": "Tasks successfully completed by the agent",
+                "failure_list": "Tasks the agent has failed at",
+                "new_task": "The task to be assessed for likelihood of success"
+            },
+            "output_format": {
+                "analysis_steps_output": "Output of reasoning process for analysis steps",
+                "final_outcome": "The agent's predicted success, highlighted within answer block."
+                "final_outcome_enums": ["y", "n"]
+                "answer_block_delimiters": "Block delimited by ```start_of_prediction_output and ```end_of_prediction_output, containing the prediction."
+            }
+        },
+        "feedback": "Ensure clarity and precision in the analysis steps for effective understanding."
+    }
+    """
+    request = dedent_and_strip(request)
+    messages = [
+        SystemMessage(content=context),
+        SystemMessage(content=request),
+    ]
+    output = query_model(
+        model=precise_model,
+        messages=messages,
+        preamble=f"Deciding whether to accept new task...\n{format_messages(messages)}",
+        printout=VERBOSE,
+        color=AGENT_COLOR,
+    )
+    output = extract_blocks(output, "start_of_prediction_output")
+    assert output and len(output) == 1, "Exactly one prediction output is expected."
+    answer = output[0]
+    assert answer in {
+        "y",
+        "n",
+    }, f"Prediction output must be 'y' or 'n'. Found '{answer}'."
+    return answer == "y"
+
+
 @dataclass(frozen=True)
 class Orchestrator:
     """A recursively auto-specializing swarm agent."""
@@ -2594,111 +2705,9 @@ class Orchestrator:
         makedirs(self.files_dir, exist_ok=True)
         default_yaml.dump(self.serialize(), self.serialization_location)
 
-    def successful_tasks(
-        self, task_info: str, task_records_dir: Path
-    ) -> list[TaskData]:
-        """List of tasks that have been successfully completed by the orchestrator, related to a particular task."""
-        return [
-            task_data
-            for task_data in search_task_records(
-                task_info, task_records_dir=task_records_dir
-            )
-            if task_data.last_executor_blueprint_id == self.blueprint.id
-            and task_data.execution_successful
-        ]
-
-    def failed_tasks(self, task_info: str, task_records_dir: Path) -> list[TaskData]:
-        """List of tasks that have failed to be completed by the orchestrator, related to a particular task."""
-        return [
-            task_data
-            for task_data in search_task_records(
-                task_info, task_records_dir=task_records_dir
-            )
-            if self.blueprint.id in task_data.executor_blueprint_ids
-            and not task_data.execution_successful
-        ]
-
     def accepts(self, task: Task) -> bool:
         """Decides whether the orchestrator accepts a task."""
-        successful_tasks = self.successful_tasks(
-            task.initial_information, task.task_records_dir
-        )
-        failed_tasks = self.failed_tasks(
-            task.initial_information, task.task_records_dir
-        )
-        context = {
-            "context": "The task history of an agent.",
-            "success_list": [
-                task_data.initial_information for task_data in successful_tasks
-            ],
-            "failure_list": [task.initial_information for task in failed_tasks],
-            "new_task": task.initial_information,
-        }
-        context = dedent_and_strip(json.dumps(context, indent=4))
-        request = """
-        {
-            "system_instruction": "Analyze and predict an agent's capability to perform a new task, based on its history of successes and failures.",
-            "task": "Prediction of success for a new task",
-            "objective": "Utilize historical performance data to assess the likelihood of an agent's success in a new task.",
-            "analysis_steps": [
-                {
-                    "description": "Collect and review the agent's past successful and failed tasks.",
-                    "details": {
-                        "success_tasks": "List of tasks the agent has successfully completed in the past.",
-                        "failure_tasks": "List of tasks the agent has failed to complete in the past."
-                    }
-                },
-                    {
-                        "description": "Analyze the new task in the context of the agent's historical performance.",
-                        "details": {
-                            "task_to_assess": "Detailed description of the new task.",
-                            "comparison_criteria": "Similarity to past tasks, required skills, and task complexity."
-                        }
-                },
-                    {
-                    "description": "Predict the agent's likelihood of success on the new task, based on the analysis.",
-                    "details": {
-                        "evaluation_method": "Assessment of similarities, required skills, and complexity compared to past performances.",
-                        "prediction": "Determination of success likelihood, clearly marked within specified blocks for emphasis."
-                    }
-                }
-            ],
-            "parameters": {
-                "input_data": {
-                    "success_list": "Tasks successfully completed by the agent",
-                    "failure_list": "Tasks the agent has failed at",
-                    "new_task": "The task to be assessed for likelihood of success"
-                },
-                "output_format": {
-                    "analysis_steps_output": "Output of reasoning process for analysis steps",
-                    "final_outcome": "The agent's predicted success, highlighted within answer block."
-                    "final_outcome_enums": ["y", "n"]
-                    "answer_block_delimiters": "Block delimited by ```start_of_prediction_output and ```end_of_prediction_output, containing the prediction."
-                }
-            },
-            "feedback": "Ensure clarity and precision in the analysis steps for effective understanding."
-        }
-        """
-        request = dedent_and_strip(request)
-        messages = [
-            SystemMessage(content=context),
-            SystemMessage(content=request),
-        ]
-        output = query_model(
-            model=precise_model,
-            messages=messages,
-            preamble=f"Deciding whether to accept new task...\n{format_messages(messages)}",
-            printout=VERBOSE,
-            color=AGENT_COLOR,
-        )
-        output = extract_blocks(output, "start_of_prediction_output")
-        assert output and len(output) == 1, "Exactly one prediction output is expected."
-        answer = output[0]
-        assert answer in {
-            "y",
-            "n",
-        }, f"Prediction output must be 'y' or 'n'. Found '{answer}'."
-        return answer == "y"
+        return decide_acceptance(task, self)
 
     @property
     def recent_events_size(self) -> int:
@@ -3718,15 +3727,25 @@ class BotRunner(Protocol):
         raise NotImplementedError
 
 
+class Acceptor(Protocol):
+    """Decides whether an executor accepts a task."""
+
+    def __call__(self, task: "Task", executor: Executor) -> bool:
+        """Decide whether an executor accepts a task."""
+        raise NotImplementedError
+
+
 class BotCoreLoader(Protocol):
     """A loader of an executor."""
 
-    def __call__(self, blueprint: Blueprint, task: Task, files_dir: Path) -> BotRunner:
+    def __call__(
+        self, blueprint: Blueprint, task: Task, files_dir: Path
+    ) -> tuple[BotRunner, Acceptor | None]:
         """Load an executor."""
         raise NotImplementedError
 
 
-def extract_bot_loader(loader_location: Path) -> BotCoreLoader:
+def extract_bot_core_loader(loader_location: Path) -> BotCoreLoader:
     """Extract a bot loader from a loader file."""
     assert loader_location.exists(), f"Loader not found: {loader_location}"
     module_name = loader_location.stem
@@ -3747,6 +3766,21 @@ class Bot:
     task: Task
     files_parent_dir: Path
     runner: BotRunner
+    acceptor: Acceptor = decide_acceptance
+
+    @classmethod
+    def from_core(
+        cls,
+        blueprint: Blueprint,
+        task: Task,
+        files_parent_dir: Path,
+        core: tuple[BotRunner, Acceptor | None],
+    ) -> Self:
+        """Create a bot from a core."""
+        runner, acceptor = core
+        if not acceptor:
+            return cls(blueprint, task, files_parent_dir, runner)
+        return cls(blueprint, task, files_parent_dir, runner, acceptor)
 
     @property
     def id(self) -> RuntimeId:
@@ -3777,13 +3811,13 @@ def load_executor(
     """Factory function for loading an executor from a blueprint."""
     if blueprint.role == Role.BOT:
         loader_location = files_dir / "loader.py"
-        load_bot = extract_bot_loader(loader_location)
-        bot_runner = load_bot(blueprint, task, files_dir)
-        return Bot(
+        load_bot_core = extract_bot_core_loader(loader_location)
+        bot_core = load_bot_core(blueprint, task, files_dir)
+        return Bot.from_core(
             blueprint=blueprint,
             task=task,
             files_parent_dir=files_dir.parent,
-            runner=bot_runner,
+            core=bot_core,
         )
 
     assert isinstance(blueprint, OrchestratorBlueprint)
@@ -4498,8 +4532,8 @@ class Swarm:
         )
 
 
+# factor out accepts
 # ....
-# > factor out accepts
 # > (next_curriculum_task)
 # bot: document oracle > embedchain
 # bot: search agent > exaai > tavily > perplexity
