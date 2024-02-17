@@ -84,6 +84,8 @@ class Concept(Enum):
     OBJECTIVE_POV = "OBJECTIVE POV"
     ARTIFACT = "ARTIFACT"
     CONTEXT = "CONTEXT"
+    DELEGATOR = "DELEGATOR"
+    DELEGATOR_INFORMATION_SECTIONS = "DELEGATOR INFORMATION SECTIONS"
 
 
 def format_messages(messages: Sequence[BaseMessage]) -> str:
@@ -1393,23 +1395,68 @@ class ActionResult:
     task_completed: bool
 
 
-class ReasoningNotes(Enum):
-    """Notes for action reasoning."""
+class ReasoningGenerationNotes(Enum):
+    """Template notes for reasoning generation."""
 
-    ORCHESTRATOR_OVERVIEW = "Provide a nested, robust reasoning structure in JSON format for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:"
+    OVERVIEW = "Provide a nested, robust reasoning structure in JSON format for the {role} to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:"
+    INFORMATION_RESTRICTIONS = "Assume that the {role} has access to what's described in {INFORMATION_SECTIONS} above, but no other information, except for general world knowledge that is available to a standard LLM like GPT-3."
+    TERM_REFERENCES = """The {role} requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "{example_section_1}" or "{example_section_2}"); however, only use capitalization to refer to specific terms—don't use capitalization as emphasis, as that could be confusing to the {role}."""
+    STEPS_RESTRICTIONS = "The reasoning process should be written in second person, in JSON format, and be around 5-7 overall parts, though they can be nested arbitrarily deep as needed."
+    PROCEDURAL_SCRIPTING = "The reasoning process can refer to the results of previous parts of the process, and it may be effective to build up the {role}'s mental context step by step, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but in natural language instead of code."
+
+
+class OrchestratorReasoningGenerationNotes(Enum):
+    """Notes for orchestrator reasoning generation."""
+
+    OVERVIEW = ReasoningGenerationNotes.OVERVIEW.value.format(
+        role=Concept.ORCHESTRATOR.value
+    )
     ACTION_RESTRICTIONS = f"The final action that the orchestrator decides on MUST be one of the {Concept.ORCHESTRATOR_ACTIONS.value} described above. The orchestrator cannot perform any other actions."
     TASK_COMPLETION_RESTRICTIONS = f"No matter how simple the {Concept.MAIN_TASK.value} is, it can only be done by being split into subtasks before it can be reported as complete. The orchestrator can only report the {Concept.MAIN_TASK.value} as complete if {Concept.ARTIFACT.value}s have been generated from the completion of subtasks."
     FOCUSED_SUBTASK_RESTRICTIONS = f"The orchestrator cannot directly change the {Concept.FOCUSED_SUBTASK.value}. To focus on a different subtask, it must first use the {ActionName.PAUSE_SUBTASK_DISCUSSION.value} action first. Overall, the orchestrator should be focused on helping the EXECUTOR of the {Concept.FOCUSED_SUBTASK.value}, and will need strong reason to change its focus."
-    INFORMATION_RESTRICTIONS = f"Assume that the orchestrator has access to what's described in {Concept.ORCHESTRATOR_INFORMATION_SECTIONS.value} above, but no other information, except for general world knowledge that is available to a standard LLM like GPT-3."
-    TERM_REFERENCES = """The orchestrator requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "MAIN TASK" or "KNOWLEDGE section"); however, only use capitalization to refer to specific terms—don't use capitalization as emphasis, as that could be confusing to the orchestrator."""
+    INFORMATION_RESTRICTIONS = (
+        ReasoningGenerationNotes.INFORMATION_RESTRICTIONS.value.format(
+            role=Concept.ORCHESTRATOR.value,
+            INFORMATION_SECTIONS=Concept.ORCHESTRATOR_INFORMATION_SECTIONS.value,
+        )
+    )
+    TERM_REFERENCES = ReasoningGenerationNotes.TERM_REFERENCES.value.format(
+        role=Concept.ORCHESTRATOR.value,
+        example_section_1=Concept.MAIN_TASK.value,
+        example_section_2="KNOWLEDGE section",
+    )
     SUBTASK_STATUS_INFO = f"Typically, subtasks that are {TaskWorkStatus.COMPLETED.value}, {TaskWorkStatus.CANCELLED.value}, {TaskWorkStatus.IN_PROGRESS.value}, or {TaskWorkStatus.IN_VALIDATION.value} do not need immediate attention unless the orchestrator discovers information that changes the status of the subtask. Subtasks that are {TaskWorkStatus.BLOCKED.value} will need action from the orchestrator to start or resume execution respectively."
-    # STEPS_RESTRICTIONS = "The reasoning process should be written in second person and be around 5-7 steps, though you can add substeps within a step (a/b/c, i/ii/iii, etc.) nested arbitrarily deep as needed."
-    STEPS_RESTRICTIONS = "The reasoning process should be written in second person, in JSON format, and be around 5-7 overall parts, though they can be nested arbitrarily deep as needed."
-    PROCEDURAL_SCRIPTING = "The reasoning process can refer to the results of previous parts of the process, and it may be effective to build up the orchestrator's mental context step by step, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but in natural language instead of code."
+    STEPS_RESTRICTIONS = ReasoningGenerationNotes.STEPS_RESTRICTIONS.value
+    PROCEDURAL_SCRIPTING = ReasoningGenerationNotes.PROCEDURAL_SCRIPTING.value.format(
+        role=Concept.ORCHESTRATOR.value
+    )
+
+
+class DelegatorReasoningGenerationNotes(Enum):
+    """Notes for delegator reasoning generation."""
+
+    OVERVIEW = ReasoningGenerationNotes.OVERVIEW.value.format(
+        role=Concept.DELEGATOR.value
+    )
+    INFORMATION_RESTRICTIONS = (
+        ReasoningGenerationNotes.INFORMATION_RESTRICTIONS.value.format(
+            role=Concept.DELEGATOR.value,
+            INFORMATION_SECTIONS=Concept.DELEGATOR_INFORMATION_SECTIONS.value,
+        )
+    )
+    TERM_REFERENCES = ReasoningGenerationNotes.TERM_REFERENCES.value.format(
+        role=Concept.DELEGATOR.value,
+        example_section_1="TASK INFORMATION",
+        example_section_2="SUCCESS RATE",
+    )
+    STEPS_RESTRICTIONS = ReasoningGenerationNotes.STEPS_RESTRICTIONS.value
+    PROCEDURAL_SCRIPTING = ReasoningGenerationNotes.PROCEDURAL_SCRIPTING.value.format(
+        role=Concept.DELEGATOR.value
+    )
 
 
 REASONING_PROCESS_OUTPUT_INSTRUCTIONS = """
-Provide the reasoning process in the following JSON format with in this block:
+Provide the reasoning process in the following JSON format in this block:
 ```start_of_reasoning_process
 {{reasoning_process}}
 ```end_of_reasoning_process
@@ -1490,28 +1537,35 @@ class ReasoningGenerator:
         )
         request = """
         ## REQUEST FOR YOU:
-        Provide a nested, robust reasoning structure in JSON format for the delegator to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. This process provides the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
-        - Assume that the delegator has access to what's described in DELEGATOR INFORMATION SECTIONS above, but no other information, except for general world knowledge that is available to a standard LLM like GPT-3.
-        - The delegator requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "TASK INFORMATION" or "SUCCESS RATE"); however, only use capitalization to refer to specific terms—don't use capitalization as emphasis, as that could be confusing to the delegator.
+        {OVERVIEW}
+        - {INFORMATION_RESTRICTIONS}
+        - {TERM_REFERENCES}
         - As an initial part of the reasoning, the delegator must figure out whether to lean towards exploration using NEW {EXECUTOR} candidates or exploitation using non-NEW {EXECUTOR} candidates. This of course depends on how good the non-NEW {EXECUTOR} candidates are.
-        - The delegator does _not_ have to select _any_ of the candidates, if it deems none of them to be suitable for the task.
-        - The delegator must understand the difference between the actual requirements of the TASK and the {CONTEXT} that the TASK is being executed in. {EXECUTOR} candidates only need to be able to fulfill the actual requirements of the TASK itself—the {CONTEXT} is for background information only.
-        - {step_restrictions}
-        - The reasoning process can refer to the results of previous parts, and it may be effective to build up the delegator's mental context step by step, starting from basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but in natural language instead of code.
+        - The {DELEGATOR} does _not_ have to select _any_ of the candidates, if it deems none of them to be suitable for the task.
+        - The {DELEGATOR} must understand the difference between the actual requirements of the TASK and the {CONTEXT} that the TASK is being executed in. {EXECUTOR} candidates only need to be able to fulfill the actual requirements of the TASK itself—the {CONTEXT} is for background information only.
+        - {STEPS_RESTRICTIONS}
+        - {PROCEDURAL_SCRIPTING}
         - The final decision of which {EXECUTOR} CANDIDATE to use (or to not use any at all) must be done on the last step only, after considering all the information available from the previous steps.
 
         {output_instructions}
         """
+        request = (
+            dedent_and_strip(request)
+            .replace("{output_instructions}", REASONING_PROCESS_OUTPUT_INSTRUCTIONS)
+            .format(
+                DELEGATOR=Concept.DELEGATOR.value,
+                OVERVIEW=DelegatorReasoningGenerationNotes.OVERVIEW.value,
+                INFORMATION_RESTRICTIONS=DelegatorReasoningGenerationNotes.INFORMATION_RESTRICTIONS.value,
+                TERM_REFERENCES=DelegatorReasoningGenerationNotes.TERM_REFERENCES.value,
+                EXECUTOR=Concept.EXECUTOR.value,
+                CONTEXT=Concept.CONTEXT.value,
+                STEPS_RESTRICTIONS=DelegatorReasoningGenerationNotes.STEPS_RESTRICTIONS.value,
+                PROCEDURAL_SCRIPTING=DelegatorReasoningGenerationNotes.PROCEDURAL_SCRIPTING.value,
+            )
+        )
         messages = [
             SystemMessage(content=context),
-            SystemMessage(
-                content=dedent_and_strip(request).format(
-                    EXECUTOR=Concept.EXECUTOR.value,
-                    CONTEXT=Concept.CONTEXT.value,
-                    output_instructions=REASONING_PROCESS_OUTPUT_INSTRUCTIONS,
-                    step_restrictions=ReasoningNotes.STEPS_RESTRICTIONS.value,
-                )
-            ),
+            SystemMessage(content=request),
         ]
         return query_and_extract_reasoning(
             messages,
@@ -1605,19 +1659,21 @@ class ReasoningGenerator:
         )
         request = f"""
         ## REQUEST FOR YOU:
-        {ReasoningNotes.ORCHESTRATOR_OVERVIEW.value}
-        - {ReasoningNotes.ACTION_RESTRICTIONS.value}
-        - {ReasoningNotes.TASK_COMPLETION_RESTRICTIONS.value}
-        - {ReasoningNotes.INFORMATION_RESTRICTIONS.value}
-        - {ReasoningNotes.TERM_REFERENCES.value}
-        - {ReasoningNotes.SUBTASK_STATUS_INFO.value}
-        - {ReasoningNotes.STEPS_RESTRICTIONS.value}
-        - {ReasoningNotes.PROCEDURAL_SCRIPTING.value}
+        {OrchestratorReasoningGenerationNotes.OVERVIEW.value}
+        - {OrchestratorReasoningGenerationNotes.ACTION_RESTRICTIONS.value}
+        - {OrchestratorReasoningGenerationNotes.TASK_COMPLETION_RESTRICTIONS.value}
+        - {OrchestratorReasoningGenerationNotes.INFORMATION_RESTRICTIONS.value}
+        - {OrchestratorReasoningGenerationNotes.TERM_REFERENCES.value}
+        - {OrchestratorReasoningGenerationNotes.SUBTASK_STATUS_INFO.value}
+        - {OrchestratorReasoningGenerationNotes.STEPS_RESTRICTIONS.value}
+        - {OrchestratorReasoningGenerationNotes.PROCEDURAL_SCRIPTING.value}
 
         {{output_instructions}}
         """
         request = dedent_and_strip(request).format(
-            output_instructions=REASONING_PROCESS_OUTPUT_INSTRUCTIONS,
+            output_instructions=REASONING_PROCESS_OUTPUT_INSTRUCTIONS.replace(
+                "{{", "{"
+            ).replace("}}", "}")
         )
         messages = [
             SystemMessage(content=context),
@@ -1649,19 +1705,21 @@ class ReasoningGenerator:
         )
         request = f"""
         ## REQUEST FOR YOU:
-        {ReasoningNotes.ORCHESTRATOR_OVERVIEW.value}
-        - {ReasoningNotes.ACTION_RESTRICTIONS.value}
-        - {ReasoningNotes.INFORMATION_RESTRICTIONS.value}
-        - {ReasoningNotes.TERM_REFERENCES.value}
-        - {ReasoningNotes.SUBTASK_STATUS_INFO.value}
-        - {ReasoningNotes.FOCUSED_SUBTASK_RESTRICTIONS.value}
-        - {ReasoningNotes.STEPS_RESTRICTIONS.value}
-        - {ReasoningNotes.PROCEDURAL_SCRIPTING.value}
+        {OrchestratorReasoningGenerationNotes.OVERVIEW.value}
+        - {OrchestratorReasoningGenerationNotes.ACTION_RESTRICTIONS.value}
+        - {OrchestratorReasoningGenerationNotes.INFORMATION_RESTRICTIONS.value}
+        - {OrchestratorReasoningGenerationNotes.TERM_REFERENCES.value}
+        - {OrchestratorReasoningGenerationNotes.SUBTASK_STATUS_INFO.value}
+        - {OrchestratorReasoningGenerationNotes.FOCUSED_SUBTASK_RESTRICTIONS.value}
+        - {OrchestratorReasoningGenerationNotes.STEPS_RESTRICTIONS.value}
+        - {OrchestratorReasoningGenerationNotes.PROCEDURAL_SCRIPTING.value}
         
         {{output_instructions}}
         """
         request = dedent_and_strip(request).format(
-            output_instructions=REASONING_PROCESS_OUTPUT_INSTRUCTIONS,
+            output_instructions=REASONING_PROCESS_OUTPUT_INSTRUCTIONS.replace(
+                "{{", "{"
+            ).replace("}}", "}")
         )
         messages = [
             SystemMessage(content=context),
@@ -1688,13 +1746,14 @@ class ReasoningGenerator:
         request = f"""
         ## REQUEST FOR YOU:
         Provide a nested, robust reasoning structure in JSON format for the orchestrator to a) understand what MSI is and follow its principles, and b) sequentially process the information in the information sections it has access to so that it can identify a new subtask that is not yet identified. This provides the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind before they perform subtask identification. Some things to note:
-        - {ReasoningNotes.INFORMATION_RESTRICTIONS.value}
-        - {ReasoningNotes.TERM_REFERENCES.value}
+        - {OrchestratorReasoningGenerationNotes.INFORMATION_RESTRICTIONS.value}
+        - {OrchestratorReasoningGenerationNotes.TERM_REFERENCES.value}
         - In its current state, the orchestrator is not able to perform any other actions besides subtask identification and the reasoning preceeding it.
         - The {Concept.SUBTASK.value} must be smaller than the {Concept.MAIN_TASK.value}, even if the {Concept.MAIN_TASK.value} seems straightforward.
-        - {ReasoningNotes.STEPS_RESTRICTIONS.value}
-        - {ReasoningNotes.PROCEDURAL_SCRIPTING.value}
+        - {OrchestratorReasoningGenerationNotes.STEPS_RESTRICTIONS.value}
+        - {OrchestratorReasoningGenerationNotes.PROCEDURAL_SCRIPTING.value}
         - The orchestrator should only perform the subtask identification on the _last_ step, after it has considered _all_ the information it needs. No other actions need to be performed after subtask identification.
+
         {{output_instructions}}
         """
         messages = [
@@ -1706,7 +1765,9 @@ class ReasoningGenerator:
             ),
             SystemMessage(
                 content=dedent_and_strip(request).format(
-                    output_instructions=REASONING_PROCESS_OUTPUT_INSTRUCTIONS
+                    output_instructions=REASONING_PROCESS_OUTPUT_INSTRUCTIONS.replace(
+                        "{{", "{"
+                    ).replace("}}", "}")
                 )
             ),
         ]
@@ -1768,16 +1829,19 @@ class ReasoningGenerator:
 
         {output_instructions}
         """
-        request = dedent_and_strip(request).format(
-            INFORMATION_RESTRICTIONS=ReasoningNotes.INFORMATION_RESTRICTIONS.value,
-            TERM_REFERENCES=ReasoningNotes.TERM_REFERENCES.value,
-            MAIN_TASK=Concept.MAIN_TASK.value,
-            ORCHESTRATOR_INFORMATION_SECTIONS=Concept.ORCHESTRATOR_INFORMATION_SECTIONS.value,
-            EXECUTOR=Concept.EXECUTOR.value,
-            STEPS_RESTRICTIONS=ReasoningNotes.STEPS_RESTRICTIONS.value,
-            PROCEDURAL_SCRIPTING=ReasoningNotes.PROCEDURAL_SCRIPTING.value,
-            output_instructions=REASONING_PROCESS_OUTPUT_INSTRUCTIONS,
-            SUBTASK=Concept.SUBTASK.value,
+        request = (
+            dedent_and_strip(request)
+            .replace("{output_instructions}", REASONING_PROCESS_OUTPUT_INSTRUCTIONS)
+            .format(
+                INFORMATION_RESTRICTIONS=OrchestratorReasoningGenerationNotes.INFORMATION_RESTRICTIONS.value,
+                TERM_REFERENCES=OrchestratorReasoningGenerationNotes.TERM_REFERENCES.value,
+                MAIN_TASK=Concept.MAIN_TASK.value,
+                ORCHESTRATOR_INFORMATION_SECTIONS=Concept.ORCHESTRATOR_INFORMATION_SECTIONS.value,
+                EXECUTOR=Concept.EXECUTOR.value,
+                STEPS_RESTRICTIONS=OrchestratorReasoningGenerationNotes.STEPS_RESTRICTIONS.value,
+                PROCEDURAL_SCRIPTING=OrchestratorReasoningGenerationNotes.PROCEDURAL_SCRIPTING.value,
+                SUBTASK=Concept.SUBTASK.value,
+            )
         )
         return query_and_extract_reasoning(
             (
@@ -1817,10 +1881,10 @@ class ReasoningGenerator:
         Provide a nested, robust reasoning structure in JSON for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for updating the {Concept.MAIN_TASK_INFORMATION.value} and {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} sections to reflect the new information in the {Concept.TASK_MESSAGES.value} that comes after {Concept.LAST_READ_MAIN_TASK_OWNER_MESSAGE.value}. This provides the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
         - This reasoning process does not make the actual updates to the {Concept.MAIN_TASK_INFORMATION.value} and {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} sections; it only figures out what updates are needed.
         - Both the {Concept.MAIN_TASK_INFORMATION} and {Concept.MAIN_TASK_DEFINITION_OF_DONE} sections may be outdated, hence the need to update them with the latest messages from the {Concept.MAIN_TASK_OWNER.value}.
-        - {ReasoningNotes.INFORMATION_RESTRICTIONS.value}
+        - {OrchestratorReasoningGenerationNotes.INFORMATION_RESTRICTIONS.value}
         - The orchestrator requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "{Concept.MAIN_TASK.value}" or "{Concept.TASK_MESSAGES.value} section"); however, don't use capitalization as emphasis for any other terms.
-        - {ReasoningNotes.STEPS_RESTRICTIONS.value}
-        - {ReasoningNotes.PROCEDURAL_SCRIPTING.value}
+        - {OrchestratorReasoningGenerationNotes.STEPS_RESTRICTIONS.value}
+        - {OrchestratorReasoningGenerationNotes.PROCEDURAL_SCRIPTING.value}
 
         {{output_instructions}}
         """
@@ -1828,7 +1892,9 @@ class ReasoningGenerator:
             SystemMessage(content=dedent_and_strip(context)),
             SystemMessage(
                 content=dedent_and_strip(task).format(
-                    output_instructions=REASONING_PROCESS_OUTPUT_INSTRUCTIONS
+                    output_instructions=REASONING_PROCESS_OUTPUT_INSTRUCTIONS.replace(
+                        "{{", "{"
+                    ).replace("}}", "}")
                 )
             ),
         ]
@@ -1875,6 +1941,7 @@ def regenerate_task_executor(executor: Executor) -> Executor:
         return executor
 
     raise NotImplementedError("TODO")
+    # > lazy regeneration: set flag on specific parts of reasoning that need to be regenerated, and only regenerate those parts when needed
     # > when regenerating reasoning, subtask identification needs to have its own more granular signal
     # > when updating reasoning, must make sure to include knowledge
     # > TODO: agent regeneration: if agent fails task, first time is just a message; new version of agent probably should only have its knowledge updated on second fail; on third fail, whole agent is regenerated; on next fail, the next best agent is chosen, and the process repeats again; if the next best agent still can't solve the task, the task is auto-cancelled since it's likely too difficult (manual cancellation by orchestrator is still possible) > when regenerating agent components, include specific information from old agent > if agent is bot, skip update and regeneration and just message/choose next best agent
@@ -2403,12 +2470,15 @@ class Orchestrator:
 
         {reasoning_output_instructions}
         """
-        request = dedent_and_strip(request).format(
-            MAIN_TASK=Concept.MAIN_TASK.value,
-            reasoning_process=self.learning_reasoning,
-            reasoning_output_instructions=REASONING_OUTPUT_INSTRUCTIONS,
-            SUBTASK=Concept.SUBTASK.value,
-            EXECUTOR=Concept.EXECUTOR.value,
+        request = (
+            dedent_and_strip(request)
+            .replace("{reasoning_output_instructions}", REASONING_OUTPUT_INSTRUCTIONS)
+            .format(
+                MAIN_TASK=Concept.MAIN_TASK.value,
+                reasoning_process=self.learning_reasoning,
+                SUBTASK=Concept.SUBTASK.value,
+                EXECUTOR=Concept.EXECUTOR.value,
+            )
         )
         messages = [
             SystemMessage(content=context),
@@ -2717,10 +2787,7 @@ class Orchestrator:
         ```end_of_reasoning_process
         **Important:** Remember that for the sake of following a consistent process, the MAIN TASK needs at least one subtask to be identified before it can be completed (usually more). As an orchestrator, you cannot execute any part of the MAIN TASK yourself, including finishing the MAIN TASK.
 
-        In your reply, you must include output from _all_ parts of the reasoning process, in this block format:
-        ```start_of_action_reasoning_output
-        {{reasoning_output}}
-        ```end_of_action_reasoning_output
+        {reasoning_output_instructions}
 
         After this block, you must include the action you have decided on, in this format:
         ```start_of_action_choice_output
@@ -2732,7 +2799,13 @@ class Orchestrator:
         `action_choice` must be one of the {ORCHESTRATOR_ACTIONS} listed above, in the same format.
         Any additional comments or thoughts can be added before or after the output blocks.
         """
-        return dedent_and_strip(template)
+        # In your reply, you must include output from _all_ parts of the reasoning process, in this block format:
+        # ```start_of_action_reasoning_output
+        # {{reasoning_output}}
+        # ```end_of_action_reasoning_output
+        return dedent_and_strip(template).replace(
+            "{reasoning_output_instructions}", REASONING_OUTPUT_INSTRUCTIONS
+        )
 
     @property
     def reasoning_generator(self) -> ReasoningGenerator:
@@ -2983,10 +3056,8 @@ class Orchestrator:
         Remember, the subtask must not be the same as the MAIN TASK itself, no matter how straightforward the MAIN TASK is.
         ```end_of_reasoning_process
 
-        In your reply, you must include output from _all_ parts of the reasoning process, in this block format:
-        ```start_of_reasoning_output
-        {{reasoning_output}}
-        ```end_of_reasoning_output
+        {reasoning_output_instructions}
+
         **Important**: for the sake of following a consistent process, a subtask _must_ be identified, even if the MAIN TASK seems straightforward.
 
         After this block, you must include the subtask you have identified for its executor. To the executor, the identified subtask becomes its own MAIN TASK, and you are the MAIN TASK OWNER of the subtask. The executor knows nothing about your original MAIN TASK. The subtask must be described in the following format:
@@ -3004,8 +3075,16 @@ class Orchestrator:
         ```end_of_subtask_identification_output
         Remember, the subtask should only include information from the MAIN TASK that is relevant to the executor; additional context may confuse the executor as to what is in scope.
         """
-        return dedent_and_strip(template).format(
-            subtask_extraction_core=self.blueprint.reasoning.subtask_extraction
+        # In your reply, you must include output from _all_ parts of the reasoning process, in this block format:
+        # ```start_of_reasoning_output
+        # {{reasoning_output}}
+        # ```end_of_reasoning_output
+        return (
+            dedent_and_strip(template)
+            .replace("{reasoning_output_instructions}", REASONING_OUTPUT_INSTRUCTIONS)
+            .format(
+                subtask_extraction_core=self.blueprint.reasoning.subtask_extraction,
+            )
         )
 
     @property
@@ -3447,12 +3526,15 @@ class Orchestrator:
         NO NEW INFORMATION
         ```end_of_main_task_info
         """
-        task = dedent_and_strip(task).format(
-            MAIN_TASK=Concept.MAIN_TASK.value,
-            MAIN_TASK_DESCRIPTION=Concept.MAIN_TASK_INFORMATION.value,
-            MAIN_TASK_DEFINITION_OF_DONE=Concept.MAIN_TASK_DEFINITION_OF_DONE.value,
-            reasoning_process=reasoning,
-            reasoning_output_instructions=REASONING_OUTPUT_INSTRUCTIONS,
+        task = (
+            dedent_and_strip(task)
+            .replace("{reasoning_output_instructions}", REASONING_OUTPUT_INSTRUCTIONS)
+            .format(
+                MAIN_TASK=Concept.MAIN_TASK.value,
+                MAIN_TASK_DESCRIPTION=Concept.MAIN_TASK_INFORMATION.value,
+                MAIN_TASK_DEFINITION_OF_DONE=Concept.MAIN_TASK_DEFINITION_OF_DONE.value,
+                reasoning_process=reasoning,
+            )
         )
         messages = [
             SystemMessage(content=context),
@@ -4024,10 +4106,7 @@ class Delegator:
         Remember that the task cannot be split among multiple {EXECUTOR}s; if no single {EXECUTOR} can complete the task, then the task must remain undelegated. However, some parts of the TASK INFORMATION may be context—the {EXECUTOR} doesn't need to be able to execute any part of the work outside of the primary task.
         ```end_of_reasoning_process
 
-        In your reply, you must include output from _all_ parts of the reasoning process, in this block format:
-        ```start_of_reasoning_output
-        {{reasoning_output}}
-        ```end_of_reasoning_output
+        {reasoning_output_instructions}
 
         After this block, you must output your final choice of {EXECUTOR} in this format:
         ```start_of_executor_choice
@@ -4039,10 +4118,18 @@ class Delegator:
         {{executor_id}} can be `{NONE}` if you decide that no {EXECUTOR} is capable of performing the entire task end-to-end.
         Any additional comments or thoughts can be added before or after the output blocks.
         """
-        request = dedent_and_strip(request).format(
-            EXECUTOR=Concept.EXECUTOR.value,
-            NONE=NONE,
-            reasoning_process=executor_selection_reasoning,
+        # In your reply, you must include output from _all_ parts of the reasoning process, in this block format:
+        # ```start_of_reasoning_output
+        # {{reasoning_output}}
+        # ```end_of_reasoning_output
+        request = (
+            dedent_and_strip(request)
+            .replace("{reasoning_output_instructions}", REASONING_OUTPUT_INSTRUCTIONS)
+            .format(
+                EXECUTOR=Concept.EXECUTOR.value,
+                NONE=NONE,
+                reasoning_process=executor_selection_reasoning,
+            )
         )
         messages = [
             SystemMessage(content=context),
@@ -4365,11 +4452,9 @@ class Swarm:
         )
 
 
+# bot conversation interface wrapper > no llm functionality > decouple bot interface from loader functionality
 # ....
-# factor out reasoning output block # search: "of the reasoning process"
-# add role parametrization for reasoning bullets and consolidate with delegator
 # > (next_curriculum_task)
-# conversation interface wrapper over any function > autogen
 # bot: document oracle > embedchain
 # bot: search agent > exaai > tavily > perplexity
 # > bot: generic code executor (does not save code) > autogen
