@@ -695,7 +695,7 @@ class Executor(Protocol):
         raise NotImplementedError
 
     async def execute(self) -> ExecutorReport:
-        """Execute the task. Adds a message to the task's event log if provided, and adds own message to the event log at the end of execution."""
+        """Execute the task. Adds own message to the event log at the end of execution."""
         raise NotImplementedError
 
 
@@ -1179,7 +1179,7 @@ class Task:
         task_records_dir: Path,
     ) -> Self:
         """Deserialize the task."""
-        raise NotImplementedError("TODO")
+        raise NotImplementedError
         # TODO: this may never be needed
         unchanged_fields = {"id", "description", "owner_id", "rank_limit", "name"}
         modified_fields = {"validator", "work_status"}
@@ -2955,7 +2955,9 @@ class Orchestrator:
     def action_choice_context(self) -> str:
         """Context for choosing an action."""
         if self.focused_subtask:
-            raise NotImplementedError("TODO: check Executor Id is passed correctly")
+            raise NotImplementedError(
+                "TODO: check Executor Id is passed correctly (print out subtask_action_context)"
+            )
             return self.subtask_action_context
         if self.action_mode == ActionModeName.DEFAULT:
             return self.default_action_context
@@ -3785,23 +3787,23 @@ class Bot:
     @property
     def id(self) -> RuntimeId:
         """Runtime id of the bot."""
-        raise NotImplementedError("TODO")
+        return RuntimeId(f"{self.blueprint.id}_{self.task.id}")
 
     @property
     def rank(self) -> int:
         """Rank of the bot."""
         return 0
 
-    def accepts(self, task: "Task") -> bool:
+    def accepts(self, task: Task) -> bool:
         """Decides whether the bot accepts a task."""
-        raise NotImplementedError("TODO")
+        return self.acceptor(task, self)
 
     def save_blueprint(self) -> None:
-        """Save the bot blueprint."""
-        raise NotImplementedError("TODO")
+        """Bots have pre-configured blueprints so this does nothing."""
+        return
 
     async def execute(self) -> ExecutorReport:
-        """Execute the task. Adds a message to the task's event log if provided, and adds own message to the event log at the end of execution."""
+        """Execute the task. Adds own message to the event log at the end of execution."""
         raise NotImplementedError("TODO")
 
 
@@ -3902,15 +3904,6 @@ class BlueprintSearchResult:
 
     def __str__(self) -> str:
         """String representation of the blueprint search result."""
-        # printout = f"""
-        # ID: {self.blueprint.id}
-        # - DESCRIPTION: {self.blueprint.description}
-        # - NEW STATUS: {'NEW' if self.is_new else 'NOT NEW'}
-        # - TASK PERFORMANCE:
-        #   - SUCCESS RATE: {self.success_rate if self.success_rate is not None else 'N/A'}
-        #   - COMPLETION TIME: {self.completion_time if self.completion_time is not None else 'N/A'}
-        # """
-        # return dedent_and_strip(printout)
         printout = """
         ID: {blueprint_id}
         - DESCRIPTION: |-
@@ -3977,7 +3970,7 @@ def search_task_records(task_info: str, task_records_dir: Path) -> list[TaskData
     ]
     if time.time() - start_time > 10:
         raise NotImplementedError("TODO")
-        # > TODO: need more efficient system to retrieve tasks
+        # > TODO: need more efficient system to retrieve tasks; probably save `index`
 
     return [task_data for task_data in task_data_list if str(task_data.id) in results]
 
@@ -4532,16 +4525,16 @@ class Swarm:
         )
 
 
-# factor out accepts
+# > curriculum task: create a mock timestamp generator that advances by 1 second each time it is called
 # ....
 # > (next_curriculum_task)
-# bot: document oracle > embedchain
 # bot: search agent > exaai > tavily > perplexity
 # > bot: generic code executor (does not save code) > autogen
 # bot: web browser > webvoyager > autogen web surfer agent
 # > bot: generalist > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY
 # > bot creation: try generating command external agent interface using python fire lib
 # > bot: function writer (saved as function bots)
+# > bot: document oracle > embedchain > gemini pro 1.5
 # mvp task: buy something from amazon
 # ---MVP---
 # > bot: alphacodium
