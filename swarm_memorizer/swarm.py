@@ -691,7 +691,7 @@ class Executor(Protocol):
         raise NotImplementedError
 
     def save_blueprint(self) -> None:
-        """Save the executor."""
+        """Save the executor blueprint."""
         raise NotImplementedError
 
     async def execute(self) -> ExecutorReport:
@@ -3710,15 +3710,23 @@ class Reply:
         return await self.continue_func(message)
 
 
-class ExecutorLoader(Protocol):
+class BotRunner(Protocol):
+    """Core of a bot."""
+
+    def __call__(self, message: str) -> str:
+        """Reply to a message."""
+        raise NotImplementedError
+
+
+class BotCoreLoader(Protocol):
     """A loader of an executor."""
 
-    def __call__(self, blueprint: Blueprint, task: Task, files_dir: Path) -> Executor:
+    def __call__(self, blueprint: Blueprint, task: Task, files_dir: Path) -> BotRunner:
         """Load an executor."""
         raise NotImplementedError
 
 
-def extract_bot_loader(loader_location: Path) -> ExecutorLoader:
+def extract_bot_loader(loader_location: Path) -> BotCoreLoader:
     """Extract a bot loader from a loader file."""
     assert loader_location.exists(), f"Loader not found: {loader_location}"
     module_name = loader_location.stem
@@ -3731,6 +3739,38 @@ def extract_bot_loader(loader_location: Path) -> ExecutorLoader:
     return getattr(module, "load_bot")
 
 
+@dataclass(frozen=True)
+class Bot:
+    """Bot wrapper around a runner."""
+
+    blueprint: Blueprint
+    task: Task
+    files_parent_dir: Path
+    runner: BotRunner
+
+    @property
+    def id(self) -> RuntimeId:
+        """Runtime id of the bot."""
+        raise NotImplementedError("TODO")
+
+    @property
+    def rank(self) -> int:
+        """Rank of the bot."""
+        return 0
+
+    def accepts(self, task: "Task") -> bool:
+        """Decides whether the bot accepts a task."""
+        raise NotImplementedError("TODO")
+
+    def save_blueprint(self) -> None:
+        """Save the bot blueprint."""
+        raise NotImplementedError("TODO")
+
+    async def execute(self) -> ExecutorReport:
+        """Execute the task. Adds a message to the task's event log if provided, and adds own message to the event log at the end of execution."""
+        raise NotImplementedError("TODO")
+
+
 def load_executor(
     blueprint: Blueprint, task: Task, files_dir: Path, delegator: "Delegator"
 ) -> Executor:
@@ -3738,7 +3778,13 @@ def load_executor(
     if blueprint.role == Role.BOT:
         loader_location = files_dir / "loader.py"
         load_bot = extract_bot_loader(loader_location)
-        return load_bot(blueprint, task, files_dir)
+        bot_runner = load_bot(blueprint, task, files_dir)
+        return Bot(
+            blueprint=blueprint,
+            task=task,
+            files_parent_dir=files_dir.parent,
+            runner=bot_runner,
+        )
 
     assert isinstance(blueprint, OrchestratorBlueprint)
     return Orchestrator(
@@ -4452,8 +4498,8 @@ class Swarm:
         )
 
 
-# bot conversation interface wrapper > no llm functionality > decouple bot interface from loader functionality
 # ....
+# > factor out accepts
 # > (next_curriculum_task)
 # bot: document oracle > embedchain
 # bot: search agent > exaai > tavily > perplexity
