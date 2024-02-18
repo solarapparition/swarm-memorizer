@@ -1,0 +1,11 @@
+"id": |-
+  9ce1f37a-a7d6-4442-92be-481d9c0c8aca
+"name": |-
+  Simple Python Script Writer
+"description": |-
+  A bot that can write a simple Python script to a text file.
+  - It can only write scripts using base Python packages. For example, it will not be able to use `pandas` or `requests`.
+  - It can only write scripts that are simple enough that they are unlikely to require any testing.
+  - It can't run the scripts, just write them.
+"role": |-
+  bot

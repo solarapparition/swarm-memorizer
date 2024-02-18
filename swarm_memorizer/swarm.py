@@ -4525,17 +4525,17 @@ class Swarm:
         )
 
 
-# > curriculum task: create a mock timestamp generator that advances by 1 second each time it is called
+# curriculum task: create a mock timestamp generator that advances by 1 second each time it is called
+# ....
+# bot: script writer (saved as bots)
 # ....
 # > (next_curriculum_task)
-# bot: search agent > exaai > tavily > perplexity
+# > bot: search agent > exaai > tavily > perplexity
 # > bot: generic code executor (does not save code) > autogen
-# bot: web browser > webvoyager > autogen web surfer agent
-# > bot: generalist > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY
+# > bot: web browser > webvoyager > autogen web surfer agent
+# > bot: generalist > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY > open interpreter
 # > bot creation: try generating command external agent interface using python fire lib
-# > bot: function writer (saved as function bots)
 # > bot: document oracle > embedchain > gemini pro 1.5
-# mvp task: buy something from amazon
 # ---MVP---
 # > bot: alphacodium
 # > bot: chat with github repo
@@ -4643,12 +4643,17 @@ async def test_curriculum_task_2() -> None:
     await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df5")
 
 
+async def test_curriculum_task_3() -> None:
+    """Curriculum task 1."""
+    task = curriculum_test_tasks[2]
+    await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df6")
+
+
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
     # asyncio.run(test_orchestrator())
-    # asyncio.run(test_curriculum_task_1())
-    asyncio.run(test_curriculum_task_2())
+    asyncio.run(test_curriculum_task_3())
 
 
 if __name__ == "__main__":
