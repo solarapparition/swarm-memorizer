@@ -1,0 +1,47 @@
+"description":
+  "information": |-
+    Add the result of 4 * 5 to 3.
+  "definition_of_done": !!null |
+  "initial_information": |-
+    Add the result of 4 * 5 to 3.
+"owner_id": |-
+  5d0a8988-ffff-5ee5-8eed-4de0455c5da6_a2a68ec9-f47c-5de3-be6a-488cc8c994ee
+"rank_limit": !!int |-
+  0
+"input_artifacts":
+- "location": |-
+    test/swarm/executors/9b9672d4-5cee-5eef-9ad2-661c0946e353/output/mult_4_5.txt
+  "description": |-
+    Result of the calculation 4 * 5
+"id": |-
+  951b687d-13f3-54c8-aae3-04516d935175
+"name": |-
+  Add the result of 4 * 5 to 3.
+"context": |-
+  This task is a subtask of the following parent task:
+  """
+  Calculate 3 + 4 * 5.
+  """
+"execution_history":
+  "history":
+  - "executor_id": |-
+      9b9672d4-5cee-5eef-9ad2-661c0946e352_951b687d-13f3-54c8-aae3-04516d935175
+    "blueprint_id": |-
+      9b9672d4-5cee-5eef-9ad2-661c0946e352
+    "executor_rank": !!int |-
+      0
+    "validator_id": |-
+      Human
+    "validator_name": |-
+      Human
+    "success": !!bool |-
+      true
+"output_artifacts":
+- "location": |-
+    test/swarm/executors/9b9672d4-5cee-5eef-9ad2-661c0946e352/output/sum_20_3.txt
+  "description": |-
+    Result of adding the result of 4 * 5 to 3
+"start_timestamp": !!float |-
+  1708094148.500584
+"end_timestamp": !!float |-
+  1708094148.538374
