@@ -3737,13 +3737,16 @@ class Acceptor(Protocol):
         raise NotImplementedError
 
 
+BotCore = tuple[BotRunner, Acceptor | None]
+
+
 class BotCoreLoader(Protocol):
-    """A loader of an executor."""
+    """A loader of the core of a bot."""
 
     def __call__(
         self, blueprint: Blueprint, task: Task, files_dir: Path
-    ) -> tuple[BotRunner, Acceptor | None]:
-        """Load an executor."""
+    ) -> BotCore:
+        """Load the core of a bot."""
         raise NotImplementedError
 
 
@@ -3776,7 +3779,7 @@ class Bot:
         blueprint: Blueprint,
         task: Task,
         files_parent_dir: Path,
-        core: tuple[BotRunner, Acceptor | None],
+        core: BotCore,
     ) -> Self:
         """Create a bot from a core."""
         runner, acceptor = core
@@ -4525,6 +4528,10 @@ class Swarm:
         )
 
 
+# separate out versions of test swarms so each curriculum task can be run in isolation
+# ....
+# > rerun existing curriculum tasks # should break
+# > instead of having swarm directly delegate, create a dummy orchestrator > if task succeeded without any issue, then no need to save this orchestrator > if task needed orchestration, then save dummy orchestrator as a real one
 # curriculum task: create a mock timestamp generator that advances by 1 second each time it is called
 # ....
 # bot: script writer (saved as bots)
@@ -4600,7 +4607,7 @@ async def run_test_task(task: str, id_namespace: str) -> None:
     with shelve.open(".data/cache/human_reply", writeback=True) as cache:
         human_tester = Human(_reply_cache=cache)
         swarm = Swarm(
-            files_dir=Path("test/swarm"),
+            files_dir=Path(f"test/swarms/{id_namespace}"),
             validator=human_tester,
             id_generator=DefaultIdGenerator(namespace=UUID(id_namespace), seed="test"),
         )
@@ -4653,7 +4660,7 @@ def test() -> None:
     """Run tests."""
     configure_langchain_cache()
     # asyncio.run(test_orchestrator())
-    asyncio.run(test_curriculum_task_3())
+    asyncio.run(test_curriculum_task_1())
 
 
 if __name__ == "__main__":
