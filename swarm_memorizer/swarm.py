@@ -18,6 +18,7 @@ from typing import (
     TypeVar,
     Callable,
     Coroutine,
+    runtime_checkable,
 )
 import sys
 import shelve
@@ -668,6 +669,7 @@ class ExecutorReport:
     new_parent_events: list[Event] = field(default_factory=list)
 
 
+@runtime_checkable
 class Executor(Protocol):
     """An agent responsible for executing a task. Normally either an orchestrator or a bot."""
 
@@ -3737,15 +3739,13 @@ class Acceptor(Protocol):
         raise NotImplementedError
 
 
-BotCore = tuple[BotRunner, Acceptor | None]
+BotCore = tuple[BotRunner, Acceptor | None] | Executor
 
 
 class BotCoreLoader(Protocol):
     """A loader of the core of a bot."""
 
-    def __call__(
-        self, blueprint: Blueprint, task: Task, files_dir: Path
-    ) -> BotCore:
+    def __call__(self, blueprint: Blueprint, task: Task, files_dir: Path) -> BotCore:
         """Load the core of a bot."""
         raise NotImplementedError
 
@@ -3782,6 +3782,7 @@ class Bot:
         core: BotCore,
     ) -> Self:
         """Create a bot from a core."""
+        assert not isinstance(core, Executor)
         runner, acceptor = core
         if not acceptor:
             return cls(blueprint, task, files_parent_dir, runner)
@@ -3818,6 +3819,9 @@ def load_executor(
         loader_location = files_dir / "loader.py"
         load_bot_core = extract_bot_core_loader(loader_location)
         bot_core = load_bot_core(blueprint, task, files_dir)
+        if isinstance(bot_core, Executor):
+            return bot_core
+
         return Bot.from_core(
             blueprint=blueprint,
             task=task,
@@ -4659,7 +4663,6 @@ async def test_curriculum_task_3() -> None:
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    # asyncio.run(test_orchestrator())
     asyncio.run(test_curriculum_task_1())
 
 
