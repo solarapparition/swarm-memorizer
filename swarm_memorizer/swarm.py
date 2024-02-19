@@ -2476,7 +2476,9 @@ class Orchestrator:
     @property
     def files_dir(self) -> Path:
         """Directory for files related to the orchestrator."""
-        return make_if_not_exist(self.files_parent_dir / self.blueprint.id / self.id)
+        return make_if_not_exist(
+            self.files_parent_dir / self.blueprint.id / self.task.id
+        )
 
     @property
     def serialization_location(self) -> Path:
@@ -4618,11 +4620,12 @@ class Swarm:
         )
 
 
-# may want to make each files_dir under the id of the task to avoid conflicts
 # ....
-# > check that all instances runtime id is actually runtime id and not something else
+# create bot
+# next_curriculum_task: find the first 100 prime numbers
+# ....
 # > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
-# > bot: generic code-based executor (does not save code) > autogen
+# bot: generic code-based executor (does not save code) > open interpreter
 # bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
 # bot: script writer: update script writer to save output as script runner for that script
 # bot: search agent > exaai > tavily > perplexity
@@ -4707,6 +4710,7 @@ curriculum_test_tasks = [
     "Write 'Hello, World!' to a file.",
     "Calculate 3 + 4 * 5.",
     "Create a mock timestamp generator that advances by 1 second each time it is called.",
+    "Find the first 100 prime numbers.",
     # "Create a mock timestamp generator that advances by 1 second each time it is called, and run it 5 times.",
     # > basic coding task case: 20 lines or less of base python > coding bot will be equipped with function it wrote
     # > basic search task case: search for basic info about a concept
@@ -4743,10 +4747,16 @@ async def test_curriculum_task_3() -> None:
     await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df6")
 
 
+async def test_curriculum_task_4() -> None:
+    """Curriculum task 1."""
+    task = curriculum_test_tasks[3]
+    await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df7")
+
+
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(test_curriculum_task_3())
+    asyncio.run(test_curriculum_task_4())
 
 
 if __name__ == "__main__":
