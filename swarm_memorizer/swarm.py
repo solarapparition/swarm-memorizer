@@ -1,7 +1,6 @@
 """Structure for swarm agents."""
 
 import json
-from os import makedirs
 from textwrap import indent
 from typing import (
     Generator,
@@ -2309,6 +2308,13 @@ def decide_acceptance(task: Task, executor: Executor) -> bool:
     return answer == "y"
 
 
+def make_if_not_exist(path: Path) -> Path:
+    """Make a directory if it does not exist, and returns the directory."""
+    if not path.exists():
+        path.mkdir(parents=True)
+    return path
+
+
 @dataclass(frozen=True)
 class Orchestrator:
     """A recursively auto-specializing swarm agent."""
@@ -2470,22 +2476,23 @@ class Orchestrator:
     @property
     def files_dir(self) -> Path:
         """Directory for files related to the orchestrator."""
-        return self.files_parent_dir / self.blueprint.id
+        return make_if_not_exist(self.files_parent_dir / self.blueprint.id)
 
     @property
     def serialization_location(self) -> Path:
         """Return the location where the orchestrator should be serialized."""
         return self.files_dir / "blueprint.yaml"
 
+
     @property
     def output_dir(self) -> Path:
         """Output directory of the orchestrator."""
-        return self.files_dir / "output"
+        return make_if_not_exist(self.files_dir / "output")
 
     @property
     def workspace_dir(self) -> Path:
         """Workspace directory of the orchestrator."""
-        return self.files_dir / "workspace"
+        return make_if_not_exist(self.files_dir / "workspace")
 
     @property
     def name(self) -> str:
@@ -2736,7 +2743,6 @@ class Orchestrator:
             self.blueprint.description = generate_agent_description(
                 self.task.information
             )
-        makedirs(self.files_dir, exist_ok=True)
         default_yaml.dump(self.serialize(), self.serialization_location)
 
     def accepts(self, task: Task) -> bool:
@@ -3877,12 +3883,12 @@ class Bot:
     @property
     def files_dir(self) -> Path:
         """Directory for the bot."""
-        return self.files_parent_dir / self.blueprint.id
+        return make_if_not_exist(self.files_parent_dir / self.blueprint.id)
 
     @property
     def output_dir(self) -> Path:
         """Output directory for the bot."""
-        return self.files_dir / "output"
+        return make_if_not_exist(self.files_dir / "output")
 
     async def execute(self) -> ExecutorReport:
         """Execute the task. Adds own message to the event log at the end of execution."""
@@ -4488,16 +4494,18 @@ class Swarm:
     @property
     def cache_dir(self) -> Path:
         """Directory for the LLM cache."""
-        if not (cache_dir := self.files_dir / ".cache").exists():
-            cache_dir.mkdir(parents=True, exist_ok=True)
-        return cache_dir
+        # if not (cache_dir := self.files_dir / ".cache").exists():
+        #     cache_dir.mkdir(parents=True, exist_ok=True)
+        # return cache_dir
+        return make_if_not_exist(self.files_dir / ".cache")
 
     @property
     def executors_dir(self):
         """Directory for executors."""
-        if not (executors_dir := self.files_dir / "executors").exists():
-            executors_dir.mkdir(parents=True, exist_ok=True)
-        return executors_dir
+        # if not (executors_dir := self.files_dir / "executors").exists():
+        #     executors_dir.mkdir(parents=True, exist_ok=True)
+        # return executors_dir
+        return make_if_not_exist(self.files_dir / "executors")
 
     @property
     def task_records_dir(self):
