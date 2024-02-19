@@ -24,48 +24,77 @@ from swarm_memorizer.swarm import (
 )
 from swarm_memorizer.toolkit.models import query_model, precise_model
 from swarm_memorizer.config import autogen_config_list
+from swarm_memorizer.toolkit.text import extract_and_unpack
 
 AGENT_COLOR = Fore.GREEN
 
 
-def run_function_writer(
+def generate_messages(
     task_description: TaskDescription,
     message_history: Sequence[HumanMessage | AIMessage],
-) -> BotReply:
-    """Run the function writer."""
+) -> Sequence[HumanMessage | AIMessage]:
+    """Generate messages for the model."""
+    return [
+        HumanMessage(content=str(task_description)),
+        *message_history,
+    ]
+
+
+def generate_script(
+    task_description: TaskDescription,
+    message_history: Sequence[HumanMessage | AIMessage],
+) -> str:
+    """Generate a simple Python script."""
     request = """
     ## REQUEST
     Use the following reasoning process to respond to the user:
     {
         "system_instruction": "Create a simple Python function based on user requirements, ensuring clarity and effectiveness.",
-        "task": "Write a simple Python function for a specific user-defined programming task.",
+        "task": "Execute reasoning process to write a simple Python function for a specific user-defined programming task.",
         "objective": [
             "Functions must only use base Python packages.",
             "The function should be straightforward to execute without needing testing.",
             "Refuse any tasks that are complex or require external packages."
         ],
-        "steps": [
+        "reasoning_process": [
             "Assess the complexity and requirements of the user-defined task.",
-            "Draft a function if the task is simple and requires only base Python packages.",
-            "Ask for clarifications if the task description is ambiguous.",
-            "Refuse the task if it requires external packages or is too complex."
+            {
+                "action_determination": [
+                {
+                    "if": "The task is simple and requires only base Python packages",
+                    "then": "Draft a function that meets the task requirements."
+                },
+                {
+                    "if": "The task description is ambiguous",
+                    "then": "Ask for clarifications."
+                },
+                {
+                    "if": "The task requires external packages or is too complex",
+                    "then": "Refuse the task."
+                },
+                ]
+            }
         ],
         "parameters": {
             "user_defined_task": "The task as described by the user.",
             "discussion": "Discussion with the user to clarify the task requirements."
         },
         "output": {
-            "options": {
+            "format": {
+                "reasoning_output": {
+                    "block_delimiters": "The reasoning output is wrapped in ```start_of_reasoning_output and ```end_of_reasoning_output blocks.",
+                    "output_scope": "All parts of the reasoning process must be included in the output."
+                }
+                "main_output": {
+                    "block_delimiters": "The function or message itself is wrapped in ```{start_of_main_output} and ```{end_of_main_output} blocks. Must only contain the function or message.",
+                    "usage_examples": "Any usage examples must be commented out to avoid accidental execution."
+                    "additional_comments": "Any additional comments must be outside of the main output block."
+                },
+            }
+            "main_output_options": {
                 "function": "A Python function that meets the task requirements or a message explaining why the task cannot be fulfilled.",
                 "clarification_needed": "A message asking for more details if the user's requirements are unclear.",
                 "refusal": "A message explaining why the task cannot be fulfilled."
-            }
-            "format": {
-                "main_output": {
-                    block_delimiters: "The function or message itself is wrapped in ```start_of_main_output and ```end_of_main_output blocks. Must only contain the function or message.",
-                    usage_examples: "Any usage examples must be part of the function's docstring."
-                },
-                "additional_comments": "Any additional comments must be outside of the main output block."
             }
         },
         "feedback": {
@@ -74,10 +103,17 @@ def run_function_writer(
         }
     }
     """
-    request = dedent_and_strip(request)
+    start_delimiter = "start_of_main_output"
+    end_delimiter = "end_of_main_output"
+    request = (
+        dedent_and_strip(request)
+        .replace("{start_of_main_output}", start_delimiter)
+        .replace("{end_of_main_output}", end_delimiter)
+    )
     messages = [
-        HumanMessage(content=str(task_description)),
-        *message_history,
+        *generate_messages(
+            task_description=task_description, message_history=message_history
+        ),
         SystemMessage(content=request),
     ]
     result = query_model(
@@ -86,6 +122,77 @@ def run_function_writer(
         preamble=f"Running Script Writer...\n{format_messages(messages)}",
         printout=True,
         color=AGENT_COLOR,
+    )
+    return extract_and_unpack(
+        text=result, start_block_type=start_delimiter, end_block_type=end_delimiter
+    )
+
+
+def determine_task_completion(
+    task_description: TaskDescription,
+    message_history: Sequence[HumanMessage | AIMessage],
+    task_result: str,
+) -> bool:
+    """Determine if the task was completed."""
+    request = """
+    ## REQUEST
+    For saving a record of this request, please output the following:
+    - "y" if you have generated a Python function based on the user's requirements.
+    - "n" otherwise
+
+    Output the answer in the following block:
+    ```start_of_y_or_n_output
+    {y_or_n}
+    ```end_of_y_or_n_output
+    """
+    request = dedent_and_strip(request)
+    messages = [
+        *generate_messages(
+            task_description=task_description, message_history=message_history
+        ),
+        AIMessage(content=task_result),
+        SystemMessage(content=request),
+    ]
+    result = query_model(
+        model=precise_model,
+        messages=messages,
+        preamble=f"Checking task completion...\n{format_messages(messages)}",
+        printout=True,
+        color=AGENT_COLOR,
+    )
+    task_completed = extract_and_unpack(
+        text=result,
+        start_block_type="start_of_y_or_n_output",
+        end_block_type="end_of_y_or_n_output",
+    )
+    assert task_completed in {
+        "y",
+        "n",
+    }, f"Invalid task completion: {task_completed}. Must be 'y' or 'n'."
+    return task_completed == "y"
+
+
+def run_function_writer(
+    task_description: TaskDescription,
+    message_history: Sequence[HumanMessage | AIMessage],
+) -> BotReply:
+    """Run the function writer."""
+    result = generate_script(task_description, message_history)
+    task_completed = determine_task_completion(
+        task_description, message_history, result
+    )
+
+    breakpoint()
+    # extract artifacts
+    # generate reply
+    breakpoint()
+    report = ExecutorReport(
+        reply=reply,
+        task_completed=task_completed,
+    )
+    return BotReply(
+        report=report,
+        artifacts=artifacts,
     )
 
     breakpoint()

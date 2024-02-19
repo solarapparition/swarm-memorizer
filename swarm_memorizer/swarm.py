@@ -4603,7 +4603,7 @@ class Swarm:
 # ....
 # curriculum task: create a mock timestamp generator that advances by 1 second each time it is called
 # ....
-# > (next_curriculum_task)
+# > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
 # > bot: search agent > exaai > tavily > perplexity
 # > bot: generic code executor (does not save code) > autogen
 # > bot: web browser > webvoyager > autogen web surfer agent

@@ -78,3 +78,11 @@ def unpack_block(
     )
     (block,) = extracted_result
     return block
+
+
+def extract_and_unpack(
+    text: str, start_block_type: str, end_block_type: str = ""
+) -> str:
+    """Extract and unpack a block."""
+    extracted_result = extract_blocks(text, start_block_type, end_block_type)
+    return unpack_block(text, extracted_result, start_block_type, end_block_type)
