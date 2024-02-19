@@ -9,6 +9,7 @@ from colorama import Fore
 from langchain.schema import SystemMessage, BaseMessage, AIMessage, HumanMessage
 
 from swarm_memorizer.swarm import (
+    Artifact,
     Blueprint,
     BotReply,
     EventLog,
@@ -172,20 +173,35 @@ def determine_task_completion(
     return task_completed == "y"
 
 
+def save_artifact(result: str, output_dir: Path) -> Path:
+    """Save the artifact."""
+    output_location = output_dir / "script.py"
+    output_location.write_text(result, encoding="utf-8")
+    return output_location
+
+
 def run_function_writer(
     task_description: TaskDescription,
     message_history: Sequence[HumanMessage | AIMessage],
+    output_dir: Path,
 ) -> BotReply:
     """Run the function writer."""
     result = generate_script(task_description, message_history)
     task_completed = determine_task_completion(
         task_description, message_history, result
     )
-
-    breakpoint()
-    # extract artifacts
-    # generate reply
-    breakpoint()
+    if task_completed:
+        output_location = save_artifact(result, output_dir)
+        reply = "Function has been successfully written."
+        artifacts = [
+            Artifact(
+                location=str(output_location),
+                description=f"Python function written for the following task: {task_description}",
+            )
+        ]
+    else:
+        reply = result
+        artifacts = []
     report = ExecutorReport(
         reply=reply,
         task_completed=task_completed,
@@ -194,13 +210,6 @@ def run_function_writer(
         report=report,
         artifacts=artifacts,
     )
-
-    breakpoint()
-    raise NotImplementedError("TODO")
-    # > function bot: convert function to script using python fire lib
-    # > function bot: use fire lib help function
-    # > function bot: when calling, try to determine missing arguments first; if any are missing, ask for them
-    # > move this into the main package as a core bot
 
 
 def load_bot(blueprint: Blueprint, task: Task, files_dir: Path) -> BotCore:

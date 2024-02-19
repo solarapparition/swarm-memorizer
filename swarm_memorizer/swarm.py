@@ -3770,6 +3770,7 @@ class BotRunner(Protocol):
         self,
         task_description: TaskDescription,
         message_history: Sequence[HumanMessage | AIMessage],
+        output_dir: Path,
     ) -> BotReply:
         """Reply to a message."""
         raise NotImplementedError
@@ -3873,10 +3874,21 @@ class Bot:
             ), "Last message must be from the task owner"
         return message_history
 
+    @property
+    def files_dir(self) -> Path:
+        """Directory for the bot."""
+        return self.files_parent_dir / self.blueprint.id
+
+    @property
+    def output_dir(self) -> Path:
+        """Output directory for the bot."""
+        return self.files_dir / "output"
+
     async def execute(self) -> ExecutorReport:
         """Execute the task. Adds own message to the event log at the end of execution."""
-        bot_reply = self.runner(self.task.description, self.message_history)
-        breakpoint()
+        bot_reply = self.runner(
+            self.task.description, self.message_history, output_dir=self.output_dir
+        )
         reply_message = """
         {reply}
 
@@ -3888,12 +3900,10 @@ class Bot:
             artifacts=artifacts_printout(bot_reply.artifacts),
         )
         self.task.event_log.add(self.task.execution_reply_message(reply=reply_message))
-
-        # send messages to runner
-        breakpoint()
-        # message back needs to also contain artifacts
-        # adapt existing code from previous bots
-        raise NotImplementedError("TODO")
+        return ExecutorReport(
+            reply=reply_message,
+            task_completed=bot_reply.report.task_completed,
+        )
 
 
 def load_executor(
@@ -4599,15 +4609,20 @@ class Swarm:
         )
 
 
-# bot: script writer (saved as bots)
 # ....
-# curriculum task: create a mock timestamp generator that advances by 1 second each time it is called
-# ....
+# > bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment
+# > bot: script writer: update script writer to save output as script runner for that script
+# > may want to make each files_dir under the id of the task to avoid conflicts
+# > function bot: convert function to script using python fire lib
+# > function bot: use fire lib help function
+# > function bot: when calling, try to determine missing arguments first; if any are missing, ask for them
+# > move function writer into the main package as a core bot
+# > move makedirs to when directory property is called - sign that it's about to be used
 # > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
 # > bot: search agent > exaai > tavily > perplexity
 # > bot: generic code executor (does not save code) > autogen
 # > bot: web browser > webvoyager > autogen web surfer agent
-# > bot: generalist > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY > open interpreter
+# > bot: generalist > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY > open interpreter > self-operating computer
 # > bot creation: try generating command external agent interface using python fire lib
 # > bot: document oracle > embedchain > gemini pro 1.5
 # ---MVP---
