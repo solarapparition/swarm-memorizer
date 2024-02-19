@@ -1,11 +1,43 @@
 """Extract blocks from text."""
 
+from dataclasses import dataclass
 import re
-from textwrap import dedent
+from textwrap import dedent, indent
 
 
+def dedent_and_strip(text: str) -> str:
+    """Dedent and strip text."""
+    return dedent(text).strip()
+
+
+@dataclass(frozen=True)
 class ExtractionError(Exception):
     """Raised when an extraction fails."""
+
+    problem: str
+    text: str | None = None
+    start_block_type: str | None = None
+    end_block_type: str | None = None
+
+    @property
+    def message(self) -> str:
+        """Get the error message."""
+        template = """
+        Failed to extract a block:
+        - Start block type: {start_block_type}
+        - End block type: {end_block_type}
+        - Problem: {problem}
+        - Text:
+        {text}
+        """
+        text = indent(str(self.text or "N/A"), "  ")
+        output = template.format(
+            start_block_type=self.start_block_type or "N/A",
+            end_block_type=self.end_block_type or "N/A",
+            problem=self.problem or "N/A",
+            text=text,
+        )
+        return dedent_and_strip(output)
 
 
 def extract_block(text: str, block_type: str) -> str | None:
@@ -16,26 +48,33 @@ def extract_block(text: str, block_type: str) -> str | None:
         )
     )
     match = re.search(pattern, text, re.DOTALL)
-    if not match:
-        return None
-    extracted_string = match.group(1).strip()
-    return extracted_string
+    return match[1].strip() if match else None
 
 
-def extract_blocks(text: str, block_type: str) -> list[str] | None:
+def extract_blocks(
+    text: str, start_block_type: str, end_block_type: str = ""
+) -> list[str] | None:
     """Extracts specially formatted blocks of text from the LLM's output. `block_type` corresponds to a label for a markdown code block such as `yaml` or `python`."""
-    pattern = (
-        r"```{block_type}\n(.*?)```".format(  # pylint:disable=consider-using-f-string
-            block_type=block_type
-        )
+    pattern = r"```{start_block_type}\n(.*?)```{end_block_type}".format(  # pylint:disable=consider-using-f-string
+        start_block_type=start_block_type,
+        end_block_type=end_block_type,
     )
     matches = re.findall(pattern, text, re.DOTALL)
-    if not matches:
-        return None
-    extracted_strings = [match.strip() for match in matches]
-    return extracted_strings
+    return [match.strip() for match in matches] if matches else None
 
 
-def dedent_and_strip(text: str) -> str:
-    """Dedent and strip text."""
-    return dedent(text).strip()
+def unpack_block(
+    text: str,
+    extracted_result: list[str] | None,
+    start_block_type: str,
+    end_block_type: str,
+) -> str:
+    """Validate and unpack the extracted block."""
+    assert extracted_result and len(extracted_result) == 1, ExtractionError(
+        text=text,
+        start_block_type=start_block_type,
+        end_block_type=end_block_type,
+        problem="Expected exactly one block.",
+    )
+    (block,) = extracted_result
+    return block

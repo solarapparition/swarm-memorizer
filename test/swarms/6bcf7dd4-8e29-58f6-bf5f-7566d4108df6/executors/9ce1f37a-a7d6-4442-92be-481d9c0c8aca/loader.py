@@ -88,9 +88,11 @@ def run_function_writer(
         color=AGENT_COLOR,
     )
 
-    # generate this using system message generator
     breakpoint()
     raise NotImplementedError("TODO")
+    # > function bot: convert function to script using python fire lib
+    # > function bot: use fire lib help function
+    # > function bot: when calling, try to determine missing arguments first; if any are missing, ask for them
     # > move this into the main package as a core bot
 
 
