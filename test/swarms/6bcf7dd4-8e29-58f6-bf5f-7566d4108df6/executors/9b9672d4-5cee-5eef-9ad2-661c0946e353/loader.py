@@ -1,4 +1,4 @@
-"""Loader for human fallback executor."""
+"""Loader for multiplier."""
 
 import json
 from dataclasses import dataclass, field

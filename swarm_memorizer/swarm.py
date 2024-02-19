@@ -34,7 +34,7 @@ import time
 
 from ruamel.yaml import YAML, YAMLError
 from colorama import Fore
-from langchain.schema import SystemMessage, BaseMessage, AIMessage
+from langchain.schema import SystemMessage, BaseMessage, AIMessage, HumanMessage
 from llama_index import VectorStoreIndex
 from llama_index.schema import TextNode
 
@@ -1959,9 +1959,6 @@ def redelegate_task_executor(executor: Executor) -> Executor:
     """Redelegate a task's executor."""
 
     raise NotImplementedError("TODO")
-    # > redelegate to next best executor
-    # > probably needs to be moved to delegator class
-    # > discard existing work—it's probably more confusing than useful
     # > lazy regeneration: set flag on specific parts of reasoning that need to be regenerated, and only regenerate those parts when needed # avoids removing parts of reasoning that aren't related to the task
     # > when regenerating reasoning, subtask identification needs to have its own more granular signal
     # > when updating reasoning, must make sure to include knowledge
@@ -2235,6 +2232,7 @@ def decide_acceptance(task: Task, executor: Executor) -> bool:
             task_data.initial_information for task_data in successful_tasks
         ],
         "failure_list": [task.initial_information for task in failed_tasks],
+        "description": executor.blueprint.description,
         "new_task": task.initial_information,
     }
     context = dedent_and_strip(json.dumps(context, indent=4))
@@ -2242,7 +2240,7 @@ def decide_acceptance(task: Task, executor: Executor) -> bool:
     {
         "system_instruction": "Analyze and predict an agent's capability to perform a new task, based on its history of successes and failures.",
         "task": "Prediction of success for a new task",
-        "objective": "Utilize historical performance data to assess the likelihood of an agent's success in a new task.",
+        "objective": "Utilize agent description and historical performance data to assess the likelihood of an agent's success in a new task.",
         "analysis_steps": [
             {
                 "description": "Collect and review the agent's past successful and failed tasks.",
@@ -2251,14 +2249,20 @@ def decide_acceptance(task: Task, executor: Executor) -> bool:
                     "failure_tasks": "List of tasks the agent has failed to complete in the past."
                 }
             },
-                {
-                    "description": "Analyze the new task in the context of the agent's historical performance.",
-                    "details": {
-                        "task_to_assess": "Detailed description of the new task.",
-                        "comparison_criteria": "Similarity to past tasks, required skills, and task complexity."
-                    }
+            {
+                "description": "Analyze the new task in the context of the agent's historical performance.",
+                "details": {
+                    "task_to_assess": "Detailed description of the new task.",
+                    "comparison_criteria": "Similarity to past tasks, required skills, and task complexity."
+                }
             },
-                {
+            {
+                "description": "Validate that the task falls within the agent's theoretical capabilities, based on its description.",
+                "details": {
+                    "agent_description": "Description of the agent's theoretical capabilities and limitations."
+                }
+            },
+            {
                 "description": "Predict the agent's likelihood of success on the new task, based on the analysis.",
                 "details": {
                     "evaluation_method": "Assessment of similarities, required skills, and complexity compared to past performances.",
@@ -2270,6 +2274,7 @@ def decide_acceptance(task: Task, executor: Executor) -> bool:
             "input_data": {
                 "success_list": "Tasks successfully completed by the agent",
                 "failure_list": "Tasks the agent has failed at",
+                "description": "Description of the agent's capabilities and limitations",
                 "new_task": "The task to be assessed for likelihood of success"
             },
             "output_format": {
@@ -3750,10 +3755,21 @@ class Reply:
         return await self.continue_func(message)
 
 
+@dataclass(frozen=True)
+class BotReply:
+    """Required reply format from bot runners."""
+
+    report: ExecutorReport
+    artifacts: list[Artifact]
+
+
 class BotRunner(Protocol):
     """Core of a bot."""
 
-    def __call__(self, message: str) -> str:
+    def __call__(
+        self, task_description: TaskDescription,
+        message_history: Sequence[HumanMessage | AIMessage]
+    ) -> BotReply:
         """Reply to a message."""
         raise NotImplementedError
 
@@ -3766,13 +3782,15 @@ class Acceptor(Protocol):
         raise NotImplementedError
 
 
-BotCore = tuple[BotRunner, Acceptor | None] | Executor
+BotCore = tuple[BotRunner, Acceptor | None]
 
 
 class BotCoreLoader(Protocol):
     """A loader of the core of a bot."""
 
-    def __call__(self, blueprint: Blueprint, task: Task, files_dir: Path) -> BotCore:
+    def __call__(
+        self, blueprint: Blueprint, task: Task, files_dir: Path
+    ) -> BotCore | Executor:
         """Load the core of a bot."""
         raise NotImplementedError
 
@@ -3833,8 +3851,41 @@ class Bot:
         """Bots have pre-configured blueprints so this does nothing."""
         return
 
+    @property
+    def message_history(self) -> list[HumanMessage | AIMessage]:
+        """Messages from the discussion log."""
+        task_messages = self.task.event_log.messages
+
+        def to_bot_message(event: Event) -> HumanMessage | AIMessage:
+            """Convert an event to a message."""
+            assert isinstance(event.data, Message)
+            assert event.data.sender in {self.id, self.task.owner_id}
+            message_constructor = AIMessage if event.data.sender == self.id else HumanMessage
+            return message_constructor(content=event.data.content)
+        return [to_bot_message(event) for event in task_messages]
+
+
+
     async def execute(self) -> ExecutorReport:
         """Execute the task. Adds own message to the event log at the end of execution."""
+        bot_reply = self.runner(self.task.description, self.message_history)
+        breakpoint()
+        reply_message = """
+        {reply}
+
+        Artifacts:
+        {artifacts}
+        """
+        reply_message = dedent_and_strip(reply_message).format(
+            reply=bot_reply.report.reply,
+            artifacts=artifacts_printout(bot_reply.artifacts),
+        )
+        self.task.event_log.add(self.task.execution_reply_message(reply=reply_message))
+
+        # send messages to runner
+        breakpoint()
+        # message back needs to also contain artifacts
+        # adapt existing code from previous bots
         raise NotImplementedError("TODO")
 
 
@@ -3845,17 +3896,15 @@ def load_executor(
     if blueprint.role == Role.BOT:
         loader_location = files_dir / "loader.py"
         load_bot_core = extract_bot_core_loader(loader_location)
-        bot_core = load_bot_core(blueprint, task, files_dir)
-        if isinstance(bot_core, Executor):
-            return bot_core
-
+        bot_core_or_executor = load_bot_core(blueprint, task, files_dir)
+        if isinstance(bot_core_or_executor, Executor):
+            return bot_core_or_executor
         return Bot.from_core(
             blueprint=blueprint,
             task=task,
             files_parent_dir=files_dir.parent,
-            core=bot_core,
+            core=bot_core_or_executor,
         )
-
     assert isinstance(blueprint, OrchestratorBlueprint)
     return Orchestrator(
         blueprint=blueprint,
@@ -4029,11 +4078,6 @@ def load_blueprint(blueprint_path: Path) -> Blueprint:
             f"Invalid role for blueprint: {blueprint_data['role']}"
         ) from error
 
-    # if role == Role.BOT:
-    #     blueprint = BotBlueprint.from_serialized_data(blueprint_data)
-    # # otherwise this is an orchestrator blueprint
-    # else:
-    #     blueprint = OrchestratorBlueprint.from_serialized_data(blueprint_data)
     BlueprintConstructor = BotBlueprint if role == Role.BOT else OrchestratorBlueprint
     blueprint = BlueprintConstructor.from_serialized_data(blueprint_data)
     assert blueprint.description, "Blueprint description cannot be empty."
@@ -4047,7 +4091,6 @@ def load_blueprints(executors_dir: Path) -> Iterable[Blueprint]:
         for executor_dir in executors_dir.iterdir()
         if executor_dir.is_dir()
     )
-
     return (load_blueprint(executor_dir / "blueprint.yaml") for executor_dir in dirs)
 
 
@@ -4225,10 +4268,6 @@ class Delegator:
         {{executor_id}} can be `{NONE}` if you decide that no {EXECUTOR} is capable of performing the entire task end-to-end.
         Any additional comments or thoughts can be added before or after the output blocks.
         """
-        # In your reply, you must include output from _all_ parts of the reasoning process, in this block format:
-        # ```start_of_reasoning_output
-        # {{reasoning_output}}
-        # ```end_of_reasoning_output
         request = (
             dedent_and_strip(request)
             .replace("{reasoning_output_instructions}", REASONING_OUTPUT_INSTRUCTIONS)
@@ -4553,11 +4592,9 @@ class Swarm:
         )
 
 
-# ....
-# > add message history to bot runner input
-# curriculum task: create a mock timestamp generator that advances by 1 second each time it is called
-# ....
 # bot: script writer (saved as bots)
+# ....
+# curriculum task: create a mock timestamp generator that advances by 1 second each time it is called
 # ....
 # > (next_curriculum_task)
 # > bot: search agent > exaai > tavily > perplexity
@@ -4682,7 +4719,7 @@ async def test_curriculum_task_3() -> None:
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(test_curriculum_task_2())
+    asyncio.run(test_curriculum_task_3())
 
 
 if __name__ == "__main__":
