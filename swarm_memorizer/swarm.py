@@ -3774,9 +3774,9 @@ class BotRunner(Protocol):
 
     def __call__(
         self,
-        # task_description: TaskDescription,
+        task_description: TaskDescription,
         message_history: Sequence[HumanMessage | AIMessage],
-        # output_dir: Path,
+        output_dir: Path,
     ) -> BotReply:
         """Reply to a message."""
         raise NotImplementedError
@@ -3892,10 +3892,9 @@ class Bot:
 
     async def execute(self) -> ExecutorReport:
         """Execute the task. Adds own message to the event log at the end of execution."""
-        # bot_reply = self.runner(
-        #     self.task.description, self.message_history, output_dir=self.output_dir
-        # )
-        bot_reply = self.runner(message_history=self.message_history)
+        bot_reply = self.runner(
+            self.task.description, self.message_history, output_dir=self.output_dir
+        )
         reply_message = """
         {reply}
 
@@ -4618,9 +4617,8 @@ class Swarm:
         )
 
 
-# move function writer into the main package as a core bot
+# move makedirs to when directory property is called - sign that it's about to be used
 # ....
-# > move makedirs to when directory property is called - sign that it's about to be used
 # may want to make each files_dir under the id of the task to avoid conflicts
 # > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
 # > bot: generic code-based executor (does not save code) > autogen
