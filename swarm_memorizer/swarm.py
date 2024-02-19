@@ -2476,13 +2476,12 @@ class Orchestrator:
     @property
     def files_dir(self) -> Path:
         """Directory for files related to the orchestrator."""
-        return make_if_not_exist(self.files_parent_dir / self.blueprint.id)
+        return make_if_not_exist(self.files_parent_dir / self.blueprint.id / self.id)
 
     @property
     def serialization_location(self) -> Path:
         """Return the location where the orchestrator should be serialized."""
         return self.files_dir / "blueprint.yaml"
-
 
     @property
     def output_dir(self) -> Path:
@@ -3883,7 +3882,9 @@ class Bot:
     @property
     def files_dir(self) -> Path:
         """Directory for the bot."""
-        return make_if_not_exist(self.files_parent_dir / self.blueprint.id)
+        return make_if_not_exist(
+            self.files_parent_dir / self.blueprint.id / self.task.id
+        )
 
     @property
     def output_dir(self) -> Path:
@@ -4617,9 +4618,9 @@ class Swarm:
         )
 
 
-# move makedirs to when directory property is called - sign that it's about to be used
-# ....
 # may want to make each files_dir under the id of the task to avoid conflicts
+# ....
+# > check that all instances runtime id is actually runtime id and not something else
 # > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
 # > bot: generic code-based executor (does not save code) > autogen
 # bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
