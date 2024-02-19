@@ -28,23 +28,25 @@ from swarm_memorizer.config import autogen_config_list
 AGENT_COLOR = Fore.GREEN
 
 
-def run_script_writer(
+def run_function_writer(
     task_description: TaskDescription,
-    message_history: Sequence[HumanMessage | AIMessage]
+    message_history: Sequence[HumanMessage | AIMessage],
 ) -> BotReply:
-    """Run the script writer."""
-    instructions = """
+    """Run the function writer."""
+    request = """
+    ## REQUEST
+    Use the following reasoning process to respond to the user:
     {
-        "system_instruction": "Create a simple Python script based on user requirements, ensuring clarity and effectiveness.",
-        "task": "Write a simple Python script for a specific user-defined programming task.",
+        "system_instruction": "Create a simple Python function based on user requirements, ensuring clarity and effectiveness.",
+        "task": "Write a simple Python function for a specific user-defined programming task.",
         "objective": [
-            "Scripts must only use base Python packages.",
-            "The script should be straightforward to execute without needing testing.",
+            "Functions must only use base Python packages.",
+            "The function should be straightforward to execute without needing testing.",
             "Refuse any tasks that are complex or require external packages."
         ],
         "steps": [
             "Assess the complexity and requirements of the user-defined task.",
-            "Draft a script if the task is simple and requires only base Python packages.",
+            "Draft a function if the task is simple and requires only base Python packages.",
             "Ask for clarifications if the task description is ambiguous.",
             "Refuse the task if it requires external packages or is too complex."
         ],
@@ -54,13 +56,16 @@ def run_script_writer(
         },
         "output": {
             "options": {
-                "script": "A Python script that meets the task requirements or a message explaining why the task cannot be fulfilled.",
+                "function": "A Python function that meets the task requirements or a message explaining why the task cannot be fulfilled.",
                 "clarification_needed": "A message asking for more details if the user's requirements are unclear.",
                 "refusal": "A message explaining why the task cannot be fulfilled."
             }
             "format": {
-                "main_output": "The script or message itself is wrapped in ```start_of_main_output and ```end_of_main_output blocks.",
-                "external_comments": "Any additional comments must be outside of the main output block."
+                "main_output": {
+                    block_delimiters: "The function or message itself is wrapped in ```start_of_main_output and ```end_of_main_output blocks. Must only contain the function or message.",
+                    usage_examples: "Any usage examples must be part of the function's docstring."
+                },
+                "additional_comments": "Any additional comments must be outside of the main output block."
             }
         },
         "feedback": {
@@ -69,7 +74,19 @@ def run_script_writer(
         }
     }
     """
-
+    request = dedent_and_strip(request)
+    messages = [
+        HumanMessage(content=str(task_description)),
+        *message_history,
+        SystemMessage(content=request),
+    ]
+    result = query_model(
+        model=precise_model,
+        messages=messages,
+        preamble=f"Running Script Writer...\n{format_messages(messages)}",
+        printout=True,
+        color=AGENT_COLOR,
+    )
 
     # generate this using system message generator
     breakpoint()
@@ -79,4 +96,4 @@ def run_script_writer(
 
 def load_bot(blueprint: Blueprint, task: Task, files_dir: Path) -> BotCore:
     """Load the bot core."""
-    return run_script_writer, None
+    return run_function_writer, None

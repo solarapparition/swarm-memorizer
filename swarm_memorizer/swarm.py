@@ -3767,8 +3767,9 @@ class BotRunner(Protocol):
     """Core of a bot."""
 
     def __call__(
-        self, task_description: TaskDescription,
-        message_history: Sequence[HumanMessage | AIMessage]
+        self,
+        task_description: TaskDescription,
+        message_history: Sequence[HumanMessage | AIMessage],
     ) -> BotReply:
         """Reply to a message."""
         raise NotImplementedError
@@ -3860,11 +3861,17 @@ class Bot:
             """Convert an event to a message."""
             assert isinstance(event.data, Message)
             assert event.data.sender in {self.id, self.task.owner_id}
-            message_constructor = AIMessage if event.data.sender == self.id else HumanMessage
+            message_constructor = (
+                AIMessage if event.data.sender == self.id else HumanMessage
+            )
             return message_constructor(content=event.data.content)
-        return [to_bot_message(event) for event in task_messages]
 
-
+        message_history = [to_bot_message(event) for event in task_messages]
+        if message_history:
+            assert isinstance(
+                message_history[-1], HumanMessage
+            ), "Last message must be from the task owner"
+        return message_history
 
     async def execute(self) -> ExecutorReport:
         """Execute the task. Adds own message to the event log at the end of execution."""
