@@ -3768,9 +3768,9 @@ class BotRunner(Protocol):
 
     def __call__(
         self,
-        task_description: TaskDescription,
+        # task_description: TaskDescription,
         message_history: Sequence[HumanMessage | AIMessage],
-        output_dir: Path,
+        # output_dir: Path,
     ) -> BotReply:
         """Reply to a message."""
         raise NotImplementedError
@@ -3886,9 +3886,10 @@ class Bot:
 
     async def execute(self) -> ExecutorReport:
         """Execute the task. Adds own message to the event log at the end of execution."""
-        bot_reply = self.runner(
-            self.task.description, self.message_history, output_dir=self.output_dir
-        )
+        # bot_reply = self.runner(
+        #     self.task.description, self.message_history, output_dir=self.output_dir
+        # )
+        bot_reply = self.runner(message_history=self.message_history)
         reply_message = """
         {reply}
 
@@ -4609,22 +4610,19 @@ class Swarm:
         )
 
 
+# move function writer into the main package as a core bot
 # ....
-# > bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment
-# > bot: script writer: update script writer to save output as script runner for that script
-# > may want to make each files_dir under the id of the task to avoid conflicts
-# > function bot: convert function to script using python fire lib
-# > function bot: use fire lib help function
-# > function bot: when calling, try to determine missing arguments first; if any are missing, ask for them
-# > move function writer into the main package as a core bot
 # > move makedirs to when directory property is called - sign that it's about to be used
+# may want to make each files_dir under the id of the task to avoid conflicts
 # > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
-# > bot: search agent > exaai > tavily > perplexity
-# > bot: generic code executor (does not save code) > autogen
+# > bot: generic code-based executor (does not save code) > autogen
+# bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
+# bot: script writer: update script writer to save output as script runner for that script
+# bot: search agent > exaai > tavily > perplexity
+# bot: api conversion bot # given an api page, convert to a bot for the api > bot creation: try generating command external agent interface using python fire lib
 # > bot: web browser > webvoyager > autogen web surfer agent
-# > bot: generalist > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY > open interpreter > self-operating computer
-# > bot creation: try generating command external agent interface using python fire lib
-# > bot: document oracle > embedchain > gemini pro 1.5
+# bot: document oracle > embedchain > gemini pro 1.5
+# bot: generalist > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY > open interpreter > self-operating computer
 # ---MVP---
 # > bot: alphacodium
 # > bot: chat with github repo
