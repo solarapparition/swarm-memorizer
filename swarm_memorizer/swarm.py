@@ -39,7 +39,12 @@ from llama_index.schema import TextNode
 
 from .config import configure_langchain_cache
 from .toolkit.models import super_creative_model, precise_model, query_model
-from .toolkit.text import ExtractionError, extract_and_unpack, extract_blocks, dedent_and_strip
+from .toolkit.text import (
+    ExtractionError,
+    extract_and_unpack,
+    extract_blocks,
+    dedent_and_strip,
+)
 from .toolkit.yaml_tools import as_yaml_str, default_yaml
 from .toolkit.id_generation import (
     utc_timestamp,
@@ -3922,14 +3927,18 @@ class Bot:
     @property
     def formatted_message_history(self) -> str | None:
         """Formatted message history."""
+
         def sender(message: AIMessage | HumanMessage) -> str:
             """Sender of the message."""
             return "You" if isinstance(message, AIMessage) else "Task Owner"
 
-        return "\n".join(
-            f"{sender(message)}: {message.content}" # type: ignore
-            for message in self.message_history
-        ) or None
+        return (
+            "\n".join(
+                f"{sender(message)}: {message.content}"  # type: ignore
+                for message in self.message_history
+            )
+            or None
+        )
 
     @property
     def files_dir(self) -> Path:
@@ -3992,7 +4001,11 @@ class Bot:
         ```end_of_task_messages
         """
         reply = f"You: {bot_reply.report.reply}"
-        task_messages = "\n".join([self.formatted_message_history, reply] if self.formatted_message_history else [reply])
+        task_messages = "\n".join(
+            [self.formatted_message_history, reply]
+            if self.formatted_message_history
+            else [reply]
+        )
         context = dedent_and_strip(context).format(
             task_information=self.task.description,
             task_messages=task_messages,
@@ -4021,17 +4034,23 @@ class Bot:
             preamble=f"Checking bot completion status...\n{format_messages(messages)}",
             color=AGENT_COLOR,
         )
-        extracted = extract_and_unpack(result, "start_of_in_progress_status", "end_of_in_progress_status")
+        extracted = extract_and_unpack(
+            result, "start_of_in_progress_status", "end_of_in_progress_status"
+        )
         extracted = default_yaml.load(extracted)
         in_progress = extracted["in_progress"]
-        assert isinstance(in_progress, bool), f"Expected bool for `in_progress`, got: {in_progress}"
+        assert isinstance(
+            in_progress, bool
+        ), f"Expected bool for `in_progress`, got: {in_progress}"
         return not in_progress
 
-    def generate_artifacts(self, bot_reply: BotReply) -> list[Artifact]:
+    def generate_artifact(self, bot_reply: BotReply) -> Artifact:
         """Generate artifacts."""
 
-
-
+        # > determine if artifact has already been created; if so, exit
+        # > determine whether artifact is needed; if not, exit
+        # > generate artifacts if needed
+        # > create the artifacts
         raise NotImplementedError("TODO")
 
     async def execute(self) -> ExecutorReport:
@@ -4045,15 +4064,18 @@ class Bot:
             else self.generate_completion_status(bot_reply)
         )
         bot_reply.report.task_completed = task_completed
-
-        if (
-            task_completed
-            and not self.reports_artifacts
-            and not bot_reply.artifacts
-            and (generated_artifacts := self.generate_artifacts(bot_reply))
-        ):
-            breakpoint()
-            bot_reply.artifacts = generated_artifacts
+        generated_artifact = (
+            self.generate_artifact(bot_reply)
+            if (
+                task_completed
+                and not self.reports_artifacts
+                and not bot_reply.artifacts
+            )
+            else None
+        )
+        breakpoint()
+        if generated_artifact:
+            bot_reply.artifacts = [generated_artifact]
             bot_reply.report.reply = "Task completed. See artifacts below for details."
 
         # add bot evaluation of whether bot is waiting for input from task owner, or whether it believes that the task is complete
