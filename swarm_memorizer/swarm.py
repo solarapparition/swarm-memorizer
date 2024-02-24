@@ -39,7 +39,7 @@ from llama_index.schema import TextNode
 
 from .config import configure_langchain_cache
 from .toolkit.models import super_creative_model, precise_model, query_model
-from .toolkit.text import ExtractionError, extract_blocks, dedent_and_strip
+from .toolkit.text import ExtractionError, extract_and_unpack, extract_blocks, dedent_and_strip
 from .toolkit.yaml_tools import as_yaml_str, default_yaml
 from .toolkit.id_generation import (
     utc_timestamp,
@@ -54,6 +54,7 @@ RuntimeId = NewType("RuntimeId", str)
 TaskHistory = list[TaskId]
 IdGenerator = Callable[[], UUID]
 IdTypeT = TypeVar("IdTypeT", BlueprintId, TaskId, EventId, DelegatorId)
+ConversationHistory = Sequence[HumanMessage | AIMessage]
 
 AGENT_COLOR = Fore.MAGENTA
 VERBOSE = True
@@ -199,7 +200,8 @@ class BotBlueprint:
     id: BlueprintId
     name: str
     description: str | None
-    kwargs: dict[str, Any] = field(default_factory=dict)
+    reports_completion: bool | None = None
+    reports_artifacts: bool | None = None
 
     @property
     def role(self) -> Role:
@@ -225,8 +227,26 @@ class BotBlueprint:
             name=data["name"],
             description=data["description"],
             id=BlueprintId(data["id"]),
-            kwargs=data.get("kwargs", {}),
+            reports_completion=data.get("reports_completion"),
+            reports_artifacts=data.get("reports_artifacts"),
         )
+
+        # blueprint_id = BlueprintId(data["id"])
+        # reports_completion = data.get("reports_completion")
+        # assert (
+        #     reports_completion is not None
+        # ), f"Please provide a value for reports_completion for blueprint {blueprint_id}."
+        # reports_artifacts = data.get("reports_artifacts")
+        # assert (
+        #     reports_artifacts is not None
+        # ), f"Please provide a value for reports_artifacts for blueprint {blueprint_id}."
+        # return cls(
+        #     name=data["name"],
+        #     description=data["description"],
+        #     id=blueprint_id,
+        #     reports_completion=reports_completion or False,
+        #     reports_artifacts=reports_artifacts or False,
+        # )
 
 
 Blueprint = BotBlueprint | OrchestratorBlueprint
@@ -1139,6 +1159,10 @@ class Task:
             id=generate_swarm_id(EventId, self.id_generator),
         )
 
+    def add_execution_reply(self, reply: str) -> None:
+        """Add an execution reply to the event log."""
+        self.event_log.add(self.execution_reply_message(reply=reply))
+
     @property
     def serialization_location(self) -> Path:
         """Location for serializing the task."""
@@ -2024,6 +2048,10 @@ def validate_artifact_mentions(
         task_description=task.description,
         task_discussion=task.discussion(),
     )
+
+    breakpoint()
+    # > add step to check whether artifact is actually needed; should be at the end
+
     request = """
     ## REQUEST FOR YOU:
     Use the following reasoning process to validate that the executor has given sufficient information to locate the artifacts for the task:
@@ -3762,7 +3790,7 @@ class Reply:
         return await self.continue_func(message)
 
 
-@dataclass(frozen=True)
+@dataclass
 class BotReply:
     """Required reply format from bot runners."""
 
@@ -3776,7 +3804,7 @@ class BotRunner(Protocol):
     def __call__(
         self,
         task_description: TaskDescription,
-        message_history: Sequence[HumanMessage | AIMessage],
+        message_history: ConversationHistory,
         output_dir: Path,
     ) -> BotReply:
         """Reply to a message."""
@@ -3821,7 +3849,7 @@ def extract_bot_core_loader(loader_location: Path) -> BotCoreLoader:
 class Bot:
     """Bot wrapper around a runner."""
 
-    blueprint: Blueprint
+    blueprint: BotBlueprint
     task: Task
     files_parent_dir: Path
     runner: BotRunner
@@ -3830,7 +3858,7 @@ class Bot:
     @classmethod
     def from_core(
         cls,
-        blueprint: Blueprint,
+        blueprint: BotBlueprint,
         task: Task,
         files_parent_dir: Path,
         core: BotCore,
@@ -3852,6 +3880,16 @@ class Bot:
         """Rank of the bot."""
         return 0
 
+    @property
+    def reports_artifacts(self) -> bool | None:
+        """Whether the bot is supposed to report its artifacts without prompting, either through its message or programmatically. A value of None means that we do not know if the bot reports artifacts or not."""
+        return self.blueprint.reports_artifacts
+
+    @property
+    def reports_completion_programmatically(self) -> bool | None:
+        """Whether the bot is supposed to programmatically report whether its task has been completed without prompting. A value of None means that we do not know if the bot programmatically reports completion or not."""
+        return self.blueprint.reports_completion
+
     def accepts(self, task: Task) -> bool:
         """Decides whether the bot accepts a task."""
         return self.acceptor(task, self)
@@ -3861,7 +3899,7 @@ class Bot:
         return
 
     @property
-    def message_history(self) -> list[HumanMessage | AIMessage]:
+    def message_history(self) -> ConversationHistory:
         """Messages from the discussion log."""
         task_messages = self.task.event_log.messages
 
@@ -3882,6 +3920,18 @@ class Bot:
         return message_history
 
     @property
+    def formatted_message_history(self) -> str | None:
+        """Formatted message history."""
+        def sender(message: AIMessage | HumanMessage) -> str:
+            """Sender of the message."""
+            return "You" if isinstance(message, AIMessage) else "Task Owner"
+
+        return "\n".join(
+            f"{sender(message)}: {message.content}" # type: ignore
+            for message in self.message_history
+        ) or None
+
+    @property
     def files_dir(self) -> Path:
         """Directory for the bot."""
         return make_if_not_exist(
@@ -3893,26 +3943,124 @@ class Bot:
         """Output directory for the bot."""
         return make_if_not_exist(self.files_dir / "output")
 
-    async def execute(self) -> ExecutorReport:
-        """Execute the task. Adds own message to the event log at the end of execution."""
-        bot_reply = self.runner(
-            self.task.description, self.message_history, output_dir=self.output_dir
-        )
-        reply_message = """
+    @staticmethod
+    def format_reply_message(bot_reply: BotReply) -> str:
+        """Format the reply message."""
+        reply_message_with_artifacts = """
         {reply}
 
         Artifacts:
         {artifacts}
         """
-        reply_message = dedent_and_strip(reply_message).format(
-            reply=bot_reply.report.reply,
-            artifacts=artifacts_printout(bot_reply.artifacts),
+        return (
+            dedent_and_strip(reply_message_with_artifacts).format(
+                reply=bot_reply.report.reply,
+                artifacts=artifacts_printout(bot_reply.artifacts),
+            )
+            if bot_reply.artifacts
+            else bot_reply.report.reply
         )
-        self.task.event_log.add(self.task.execution_reply_message(reply=reply_message))
+
+    def finish_execution(self, bot_reply: BotReply) -> ExecutorReport:
+        """Finish the execution. Adds own message to the event log."""
+        reply_message = self.format_reply_message(bot_reply)
+        self.task.add_execution_reply(reply=reply_message)
         return ExecutorReport(
             reply=reply_message,
             task_completed=bot_reply.report.task_completed,
         )
+
+    def generate_completion_status(self, bot_reply: BotReply) -> bool:
+        """Examine whether the bot has completed the task."""
+        if bot_reply.artifacts:
+            return True
+
+        context = """
+        # MISSION:
+        You are an executor for a task, and you are checking whether you are still in the middle of executing a task or not.
+
+        ## TASK INFORMATION:
+        Here is the information about the task:
+        ```start_of_task_info
+        {task_information}
+        ```end_of_task_info
+
+        ## TASK MESSAGES:
+        Here are the messages with the task owner:
+        ```start_of_task_messages
+        {task_messages}
+        ```end_of_task_messages
+        """
+        reply = f"You: {bot_reply.report.reply}"
+        task_messages = "\n".join([self.formatted_message_history, reply] if self.formatted_message_history else [reply])
+        context = dedent_and_strip(context).format(
+            task_information=self.task.description,
+            task_messages=task_messages,
+        )
+        request = """
+        ## REQUEST FOR YOU:
+        Based on the information above, determine if you are still in the midst of executing the task or not. Post your output in the following format:
+
+        ```start_of_in_progress_status
+        comment: |-
+          {{comment}}
+        in_progress: !!bool |-
+          {{in_progress}}
+        ```end_of_in_progress_status
+        {{in_progress}} must be either `true` or `false`.
+        """
+        request = dedent_and_strip(request)
+        messages = [
+            SystemMessage(content=context),
+            SystemMessage(content=request),
+        ]
+        result = query_model(
+            model=precise_model,
+            messages=messages,
+            printout=True,
+            preamble=f"Checking bot completion status...\n{format_messages(messages)}",
+            color=AGENT_COLOR,
+        )
+        extracted = extract_and_unpack(result, "start_of_in_progress_status", "end_of_in_progress_status")
+        extracted = default_yaml.load(extracted)
+        in_progress = extracted["in_progress"]
+        assert isinstance(in_progress, bool), f"Expected bool for `in_progress`, got: {in_progress}"
+        return not in_progress
+
+    def generate_artifacts(self, bot_reply: BotReply) -> list[Artifact]:
+        """Generate artifacts."""
+
+
+
+        raise NotImplementedError("TODO")
+
+    async def execute(self) -> ExecutorReport:
+        """Execute the task. Adds own message to the event log at the end of execution."""
+        bot_reply = self.runner(
+            self.task.description, self.message_history, output_dir=self.output_dir
+        )
+        task_completed = (
+            bot_reply.report.task_completed
+            if self.reports_completion_programmatically
+            else self.generate_completion_status(bot_reply)
+        )
+        bot_reply.report.task_completed = task_completed
+
+        if (
+            task_completed
+            and not self.reports_artifacts
+            and not bot_reply.artifacts
+            and (generated_artifacts := self.generate_artifacts(bot_reply))
+        ):
+            breakpoint()
+            bot_reply.artifacts = generated_artifacts
+            bot_reply.report.reply = "Task completed. See artifacts below for details."
+
+        # add bot evaluation of whether bot is waiting for input from task owner, or whether it believes that the task is complete
+        # have bot generate artifact if needed
+        breakpoint()
+        return self.finish_execution(bot_reply)
+        # > add ability for new conversational history # don't remember what this is
 
 
 def load_executor(
@@ -3920,6 +4068,7 @@ def load_executor(
 ) -> Executor:
     """Factory function for loading an executor from a blueprint."""
     if blueprint.role == Role.BOT:
+        assert isinstance(blueprint, BotBlueprint)
         loader_location = files_dir / "loader.py"
         load_bot_core = extract_bot_core_loader(loader_location)
         bot_core_or_executor = load_bot_core(blueprint, task, files_dir)
@@ -4557,7 +4706,6 @@ class Swarm:
             task_records_dir=self.task_records_dir,
             task_search_rerank_threshold=self.task_search_rerank_threshold,
             id_generator=self.id_generator,
-            # _init_executor_selection_reasoning=self.executor_selection_reasoning,
         )
 
     @cached_property
@@ -4620,12 +4768,15 @@ class Swarm:
         )
 
 
-# ....
-# create bot
 # next_curriculum_task: find the first 100 prime numbers
 # ....
-# > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
+# > create aranea-prime swarm and add all existing bots to it
+# > factor out swarm memorizer before mvp
 # bot: generic code-based executor (does not save code) > open interpreter
+# ....
+# > bot: add pure, offline language model assistants > gpt-4 > gemini
+# > create entry point to system > python fire
+# > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
 # bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
 # bot: script writer: update script writer to save output as script runner for that script
 # bot: search agent > exaai > tavily > perplexity
@@ -4634,6 +4785,7 @@ class Swarm:
 # bot: document oracle > embedchain > gemini pro 1.5
 # bot: generalist > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY > open interpreter > self-operating computer
 # ---MVP---
+# > main system dynamically populate hierarchical identity tree using memories
 # > bot: alphacodium
 # > bot: chat with github repo
 # > investigate using campfire as backend
