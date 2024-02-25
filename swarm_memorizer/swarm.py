@@ -126,7 +126,7 @@ class ValidationResult:
 
     valid: bool
     feedback: str
-    artifacts: list[Artifact] = field(default_factory=list)
+    # artifacts: list[Artifact] = field(default_factory=list)
 
 
 class Role(Enum):
@@ -205,8 +205,6 @@ class BotBlueprint:
     id: BlueprintId
     name: str
     description: str | None
-    reports_completion: bool | None = None
-    reports_artifacts: bool | None = None
 
     @property
     def role(self) -> Role:
@@ -232,8 +230,6 @@ class BotBlueprint:
             name=data["name"],
             description=data["description"],
             id=BlueprintId(data["id"]),
-            reports_completion=data.get("reports_completion"),
-            reports_artifacts=data.get("reports_artifacts"),
         )
 
         # blueprint_id = BlueprintId(data["id"])
@@ -688,9 +684,11 @@ class ExecutorReport:
     """Report from an executor."""
 
     reply: str
-    task_completed: bool
+    task_completed: bool | None = None
     validation: ValidationResult | None = None
     new_parent_events: list[Event] = field(default_factory=list)
+    artifacts: list[Artifact] | None = None
+    """Artifacts produced by the executor. `None` means that the executor does not report whether any artifacts are produced, while an empty list means that the executor explicitly reported that no artifacts were produced."""
 
 
 @runtime_checkable
@@ -1964,7 +1962,7 @@ class OrchestratorState:
 
 def validate_task_completion(task: Task, report: ExecutorReport) -> ValidationResult:
     """Validate a task."""
-    assert report.task_completed, "Task must be completed to be validated."
+    assert report.task_completed is True, "Task must be completed to be validated."
     context = """
     The following task is being executed by a task executor:
     ```start_of_task_specification
@@ -2121,6 +2119,7 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
     task.start_timer()
     assert task.executor
     report = await task.executor.execute()
+    assert isinstance(report.task_completed, bool), "Task completion must be determined after execution."
     if not report.task_completed:
         status_update_event = change_status(
             task, TaskWorkStatus.BLOCKED, "Task is blocked until reply to message."
@@ -2131,34 +2130,62 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
     validation_status_event = change_status(  # MUTATION
         task, TaskWorkStatus.IN_VALIDATION, "Validation has begun for task."
     )
-    validations = [validate_artifact_mentions, validate_task_completion]
-    failed_validation = None
-    artifacts = None
-    for validation in validations:
-        validation_result = validation(task, report)
-        if not validation_result.valid:
-            failed_validation = validation_result
-            break
-        if validation_result.artifacts:
-            artifacts = validation_result.artifacts
-    if failed_validation and task.validation_failures:
+    validation_result = validate_task_completion(task, report)
+    if not validation_result.valid and task.validation_failures:
         new_executor = redelegate_task_executor(task.executor)
-        task.change_executor(new_executor)  # MUTATION
-    if failed_validation:
+        raise NotImplementedError("TODO")
+        # task.reset_progress()
+        # task.change_executor(new_executor)  # MUTATION
+    if not validation_result.valid:
         new_status = TaskWorkStatus.BLOCKED
         reason = "Failed completion validation."
-        validation_result = failed_validation
         task.add_validation_failure()  # MUTATION
         report.task_completed = False  # MUTATION
     else:
-        assert artifacts, "Artifact(s) must be present if validation succeeded."
+        if report.artifacts is None:
+            report.artifacts = generate_artifacts(task, report)
+
+        
+
+
+
+        # generate artifacts
+        breakpoint()
+        # > add concept of in-memory artifact to account for artifacts small enough to be stored in memory
+        # > instead of artifact summary/description, use artifact "content", which could be either a description or the actual content of the artifact if it's in memory
+
+        assert report.artifacts, "Artifact(s) must be present when wrapping up execution."
         new_status = TaskWorkStatus.COMPLETED
         reason = "Validated as complete."
-        task.output_artifacts = artifacts  # MUTATION
+        task.output_artifacts = report.artifacts  # MUTATION
         task.wrap_execution(success=True)  # MUTATION
         validation_result = ValidationResult(
-            valid=True, feedback="", artifacts=artifacts
+            valid=True, feedback=""
         )
+    breakpoint()
+    # > move artifacts to report instead of validation
+
+    # generated_artifact = (
+    #     self.generate_artifact(bot_reply)
+    #     if (
+    #         task_completed
+    #         and not self.reports_artifacts
+    #         and not bot_reply.artifacts
+    #     )
+    #     else None
+    # )
+    # breakpoint()
+    # if generated_artifact:
+    #     bot_reply.artifacts = [generated_artifact]
+    #     bot_reply.report.reply = "Task completed. See artifacts below for details."
+
+    # # add bot evaluation of whether bot is waiting for input from task owner, or whether it believes that the task is complete
+    # # have bot generate artifact if needed
+    # breakpoint()
+    # return self.finish_execution(bot_reply)
+    # > retest previous curriculum items
+    # > separate out modules
+
     validation_result_event = Event(
         data=TaskValidation(
             validator_id=task.validator.id,
@@ -3632,7 +3659,7 @@ class Orchestrator:
         return (
             TaskDescription(
                 information=extracted_result["main_task_information"],
-                definition_of_done=as_yaml_str(
+                definition_of_done=format_as_yaml_str(
                     extracted_result["main_task_definition_of_done"], YAML()
                 ),
             ),
@@ -3780,12 +3807,12 @@ class Reply:
         return await self.continue_func(message)
 
 
-@dataclass
-class BotReply:
-    """Required reply format from bot runners."""
+# @dataclass
+# class BotReply:
+#     """Required reply format from bot runners."""
 
-    report: ExecutorReport
-    artifacts: list[Artifact]
+#     report: ExecutorReport
+#     artifacts: list[Artifact]
 
 
 class BotRunner(Protocol):
@@ -3796,7 +3823,7 @@ class BotRunner(Protocol):
         task_description: TaskDescription,
         message_history: ConversationHistory,
         output_dir: Path,
-    ) -> BotReply:
+    ) -> ExecutorReport:
         """Reply to a message."""
         raise NotImplementedError
 
@@ -3870,16 +3897,6 @@ class Bot:
         """Rank of the bot."""
         return 0
 
-    @property
-    def reports_artifacts(self) -> bool | None:
-        """Whether the bot is supposed to report its artifacts without prompting, either through its message or programmatically. A value of None means that we do not know if the bot reports artifacts or not."""
-        return self.blueprint.reports_artifacts
-
-    @property
-    def reports_completion_programmatically(self) -> bool | None:
-        """Whether the bot is supposed to programmatically report whether its task has been completed without prompting. A value of None means that we do not know if the bot programmatically reports completion or not."""
-        return self.blueprint.reports_completion
-
     def accepts(self, task: Task) -> bool:
         """Decides whether the bot accepts a task."""
         return self.acceptor(task, self)
@@ -3938,7 +3955,7 @@ class Bot:
         return make_if_not_exist(self.files_dir / "output")
 
     @staticmethod
-    def format_reply_message(bot_reply: BotReply) -> str:
+    def format_reply_message(report: ExecutorReport) -> str:
         """Format the reply message."""
         reply_message_with_artifacts = """
         {reply}
@@ -3948,34 +3965,25 @@ class Bot:
         """
         return (
             dedent_and_strip(reply_message_with_artifacts).format(
-                reply=bot_reply.report.reply,
-                artifacts=artifacts_printout(bot_reply.artifacts),
+                reply=report.reply,
+                artifacts=artifacts_printout(report.artifacts),
             )
-            if bot_reply.artifacts
-            else bot_reply.report.reply
+            if report.artifacts
+            else report.reply
         )
 
-    def finish_execution(self, bot_reply: BotReply) -> ExecutorReport:
-        """Finish the execution. Adds own message to the event log."""
-        reply_message = self.format_reply_message(bot_reply)
-        self.task.add_execution_reply(reply=reply_message)
-        return ExecutorReport(
-            reply=reply_message,
-            task_completed=bot_reply.report.task_completed,
-        )
-
-    def task_messages(self, bot_reply: BotReply) -> str:
+    def task_messages(self, report: ExecutorReport) -> str:
         """Get the task messages. Assume that `bot_reply` hasn't been added to the task's messages yet."""
-        reply = f"You: {bot_reply.report.reply}"
+        reply = f"You: {report.reply}"
         return "\n".join(
             [self.formatted_message_history, reply]
             if self.formatted_message_history
             else [reply]
         )
 
-    def generate_completion_status(self, bot_reply: BotReply) -> bool:
+    def generate_completion_status(self, report: ExecutorReport) -> bool:
         """Examine whether the bot has completed the task."""
-        if bot_reply.artifacts:
+        if report.artifacts:
             return True
 
         context = """
@@ -3996,7 +4004,7 @@ class Bot:
         """
         context = dedent_and_strip(context).format(
             task_information=self.task.description,
-            task_messages=self.task_messages(bot_reply),
+            task_messages=self.task_messages(report),
         )
         request = """
         ## REQUEST FOR YOU:
@@ -4032,16 +4040,10 @@ class Bot:
         ), f"Expected bool for `in_progress`, got: {in_progress}"
         return not in_progress
 
-    def generate_artifact(self, bot_reply: BotReply) -> Artifact:
+    def generate_artifact(self, bot_reply: Any) -> Artifact:
         """Generate artifacts."""
 
         breakpoint()
-        # > pull common functionality (such as task completion checking) into execute_and_validate
-        # > need to revamp artifact system > artifact generation must be done in execute_and_validate > separate from regular validation > artifact generation happens after validation, to avoid wasting time
-        # > add concept of in-memory artifact to account for artifacts small enough to be stored in memory
-        # > instead of artifact summary/description, use artifact "content", which could be either a description or the actual content of the artifact if it's in memory
-        # > separate out modules
-        # > retest previous curriculum items
 
         context = """
         ## MISSION:
@@ -4129,34 +4131,16 @@ class Bot:
 
     async def execute(self) -> ExecutorReport:
         """Execute the task. Adds own message to the event log at the end of execution."""
-        bot_reply = self.runner(
+        report = self.runner(
             self.task.description, self.message_history, output_dir=self.output_dir
         )
-        task_completed = (
-            bot_reply.report.task_completed
-            if self.reports_completion_programmatically
-            else self.generate_completion_status(bot_reply)
+        report.task_completed = (
+            report.task_completed
+            if isinstance(report.task_completed, bool)
+            else self.generate_completion_status(report)
         )
-        bot_reply.report.task_completed = task_completed
-        generated_artifact = (
-            self.generate_artifact(bot_reply)
-            if (
-                task_completed
-                and not self.reports_artifacts
-                and not bot_reply.artifacts
-            )
-            else None
-        )
-        breakpoint()
-        if generated_artifact:
-            bot_reply.artifacts = [generated_artifact]
-            bot_reply.report.reply = "Task completed. See artifacts below for details."
-
-        # add bot evaluation of whether bot is waiting for input from task owner, or whether it believes that the task is complete
-        # have bot generate artifact if needed
-        breakpoint()
-        return self.finish_execution(bot_reply)
-
+        self.task.add_execution_reply(self.format_reply_message(report))
+        return report
 
 def load_executor(
     blueprint: Blueprint, task: Task, files_dir: Path, delegator: "Delegator"
