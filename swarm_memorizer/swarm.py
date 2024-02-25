@@ -45,7 +45,7 @@ from .toolkit.text import (
     extract_blocks,
     dedent_and_strip,
 )
-from .toolkit.yaml_tools import as_yaml_str, default_yaml
+from .toolkit.yaml_tools import format_as_yaml_str, default_yaml
 from .toolkit.id_generation import (
     utc_timestamp,
     IdGenerator as DefaultIdGenerator,
@@ -1176,7 +1176,7 @@ class Task:
     def save(self) -> None:
         """Save the task."""
         serialized_data = self.data.serialize()
-        self.serialization_location.write_text(as_yaml_str(serialized_data))
+        self.serialization_location.write_text(format_as_yaml_str(serialized_data))
 
     def add_current_execution_outcome_to_history(self) -> None:
         """Add an execution outcome to the task."""
@@ -1445,10 +1445,10 @@ class ActionResult:
 class ReasoningGenerationNotes(Enum):
     """Template notes for reasoning generation."""
 
-    OVERVIEW = "Provide a nested, robust reasoning structure in JSON format for the {role} to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:"
+    OVERVIEW = "Provide a nested, robust reasoning structure in YAML format for the {role} to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:"
     INFORMATION_RESTRICTIONS = "Assume that the {role} has access to what's described in {INFORMATION_SECTIONS} above, but no other information, except for general world knowledge that is available to a standard LLM like GPT-3."
     TERM_REFERENCES = """The {role} requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "{example_section_1}" or "{example_section_2}"); however, only use capitalization to refer to specific terms—don't use capitalization as emphasis, as that could be confusing to the {role}."""
-    STEPS_RESTRICTIONS = "The reasoning process should be written in second person, in JSON format, and be around 5-7 overall parts, though they can be nested arbitrarily deep as needed."
+    STEPS_RESTRICTIONS = "The reasoning process should be written in second person, in YAML format, and be around 5-7 overall parts, though they can be nested arbitrarily deep as needed."
     PROCEDURAL_SCRIPTING = "The reasoning process can refer to the results of previous parts of the process, and it may be effective to build up the {role}'s mental context step by step, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but in natural language instead of code."
 
 
@@ -1503,7 +1503,7 @@ class DelegatorReasoningGenerationNotes(Enum):
 
 
 REASONING_PROCESS_OUTPUT_INSTRUCTIONS = """
-Provide the reasoning process in the following JSON format in this block:
+Provide the reasoning process in the following YAML format in this block:
 ```start_of_reasoning_process
 {{reasoning_process}}
 ```end_of_reasoning_process
@@ -1794,7 +1794,7 @@ class ReasoningGenerator:
         """
         request = f"""
         ## REQUEST FOR YOU:
-        Provide a nested, robust reasoning structure in JSON format for the orchestrator to a) understand what MSI is and follow its principles, and b) sequentially process the information in the information sections it has access to so that it can identify a new subtask that is not yet identified. This provides the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind before they perform subtask identification. Some things to note:
+        Provide a nested, robust reasoning structure in YAML format for the orchestrator to a) understand what MSI is and follow its principles, and b) sequentially process the information in the information sections it has access to so that it can identify a new subtask that is not yet identified. This provides the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind before they perform subtask identification. Some things to note:
         - {OrchestratorReasoningGenerationNotes.INFORMATION_RESTRICTIONS.value}
         - {OrchestratorReasoningGenerationNotes.TERM_REFERENCES.value}
         - In its current state, the orchestrator is not able to perform any other actions besides subtask identification and the reasoning preceeding it.
@@ -1862,7 +1862,7 @@ class ReasoningGenerator:
         )
         request = """
         ## REQUEST FOR YOU:
-        Provide a nested, robust reasoning structure in JSON format for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for figuring out what it has learned. This provides the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
+        Provide a nested, robust reasoning structure in YAML format for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for figuring out what it has learned. This provides the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
         - {INFORMATION_RESTRICTIONS}
         - {TERM_REFERENCES}
         - The overarching goal is to convey the learnings from the completion of the {MAIN_TASK} to another agent to maximize the chances of the other agent successfully completing other tasks like {MAIN_TASK}.
@@ -1927,7 +1927,7 @@ class ReasoningGenerator:
 
         task = f"""
         ## REQUEST FOR YOU:
-        Provide a nested, robust reasoning structure in JSON for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for updating the {Concept.MAIN_TASK_INFORMATION.value} and {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} sections to reflect the new information in the {Concept.TASK_MESSAGES.value} that comes after {Concept.LAST_READ_MAIN_TASK_OWNER_MESSAGE.value}. This provides the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
+        Provide a nested, robust reasoning structure in YAML format for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for updating the {Concept.MAIN_TASK_INFORMATION.value} and {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} sections to reflect the new information in the {Concept.TASK_MESSAGES.value} that comes after {Concept.LAST_READ_MAIN_TASK_OWNER_MESSAGE.value}. This provides the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
         - This reasoning process does not make the actual updates to the {Concept.MAIN_TASK_INFORMATION.value} and {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} sections; it only figures out what updates are needed.
         - Both the {Concept.MAIN_TASK_INFORMATION} and {Concept.MAIN_TASK_DEFINITION_OF_DONE} sections may be outdated, hence the need to update them with the latest messages from the {Concept.MAIN_TASK_OWNER.value}.
         - {OrchestratorReasoningGenerationNotes.INFORMATION_RESTRICTIONS.value}
@@ -2267,57 +2267,42 @@ def decide_acceptance(task: Task, executor: Executor) -> bool:
         "description": executor.blueprint.description,
         "new_task": task.initial_information,
     }
-    context = dedent_and_strip(json.dumps(context, indent=4))
+    # context = dedent_and_strip(json.dumps(context, indent=4))
+    context = dedent_and_strip(format_as_yaml_str(context))
     request = """
-    {
-        "system_instruction": "Analyze and predict an agent's capability to perform a new task, based on its history of successes and failures.",
-        "task": "Prediction of success for a new task",
-        "objective": "Utilize agent description and historical performance data to assess the likelihood of an agent's success in a new task.",
-        "analysis_steps": [
-            {
-                "description": "Collect and review the agent's past successful and failed tasks.",
-                "details": {
-                    "success_tasks": "List of tasks the agent has successfully completed in the past.",
-                    "failure_tasks": "List of tasks the agent has failed to complete in the past."
-                }
-            },
-            {
-                "description": "Analyze the new task in the context of the agent's historical performance.",
-                "details": {
-                    "task_to_assess": "Detailed description of the new task.",
-                    "comparison_criteria": "Similarity to past tasks, required skills, and task complexity."
-                }
-            },
-            {
-                "description": "Validate that the task falls within the agent's theoretical capabilities, based on its description.",
-                "details": {
-                    "agent_description": "Description of the agent's theoretical capabilities and limitations."
-                }
-            },
-            {
-                "description": "Predict the agent's likelihood of success on the new task, based on the analysis.",
-                "details": {
-                    "evaluation_method": "Assessment of similarities, required skills, and complexity compared to past performances.",
-                    "prediction": "Determination of success likelihood, clearly marked within specified blocks for emphasis."
-                }
-            }
-        ],
-        "parameters": {
-            "input_data": {
-                "success_list": "Tasks successfully completed by the agent",
-                "failure_list": "Tasks the agent has failed at",
-                "description": "Description of the agent's capabilities and limitations",
-                "new_task": "The task to be assessed for likelihood of success"
-            },
-            "output_format": {
-                "analysis_steps_output": "Output of reasoning process for analysis steps",
-                "final_outcome": "The agent's predicted success, highlighted within answer block."
-                "final_outcome_enums": ["y", "n"]
-                "answer_block_delimiters": "Block delimited by ```start_of_prediction_output and ```end_of_prediction_output, containing the prediction."
-            }
-        },
-        "feedback": "Ensure clarity and precision in the analysis steps for effective understanding."
-    }
+    system_instruction: Analyze and predict an agent's capability to perform a new task, based on its history of successes and failures.
+    task: Prediction of success for a new task
+    objective: Utilize agent description and historical performance data to assess the likelihood of an agent's success in a new task.
+    analysis_steps:
+    - description: Collect and review the agent's past successful and failed tasks.
+      details:
+        failure_tasks: List of tasks the agent has failed to complete in the past.
+        success_tasks: List of tasks the agent has successfully completed in the past.
+    - description: Analyze the new task in the context of the agent's historical performance.
+      details:
+        comparison_criteria: Similarity to past tasks, required skills, and task complexity.
+        task_to_assess: Detailed description of the new task.
+    - description: Validate that the task falls within the agent's theoretical capabilities, based on its description.
+      details:
+        agent_description: Description of the agent's theoretical capabilities and limitations.
+    - description: Predict the agent's likelihood of success on the new task, based on the analysis.
+      details:
+        evaluation_method: Assessment of similarities, required skills, and complexity compared to past performances.
+        prediction: Determination of success likelihood, clearly marked within specified blocks for emphasis.
+    parameters:
+      input_data:
+        description: Description of the agent's capabilities and limitations
+        failure_list: Tasks the agent has failed at
+        new_task: The task to be assessed for likelihood of success
+        success_list: Tasks successfully completed by the agent
+      output_format:
+        analysis_steps_output: Output of reasoning process for analysis steps
+        answer_block_delimiters: Block delimited by ```start_of_prediction_output and ```end_of_prediction_output, containing the prediction.
+        final_outcome: The agent's predicted success, highlighted within answer block.
+        final_outcome_enums:
+        - y
+        - n
+    feedback: Ensure clarity and precision in the analysis steps for effective understanding.
     """
     request = dedent_and_strip(request)
     messages = [
@@ -3979,6 +3964,15 @@ class Bot:
             task_completed=bot_reply.report.task_completed,
         )
 
+    def task_messages(self, bot_reply: BotReply) -> str:
+        """Get the task messages. Assume that `bot_reply` hasn't been added to the task's messages yet."""
+        reply = f"You: {bot_reply.report.reply}"
+        return "\n".join(
+            [self.formatted_message_history, reply]
+            if self.formatted_message_history
+            else [reply]
+        )
+
     def generate_completion_status(self, bot_reply: BotReply) -> bool:
         """Examine whether the bot has completed the task."""
         if bot_reply.artifacts:
@@ -4000,15 +3994,9 @@ class Bot:
         {task_messages}
         ```end_of_task_messages
         """
-        reply = f"You: {bot_reply.report.reply}"
-        task_messages = "\n".join(
-            [self.formatted_message_history, reply]
-            if self.formatted_message_history
-            else [reply]
-        )
         context = dedent_and_strip(context).format(
             task_information=self.task.description,
-            task_messages=task_messages,
+            task_messages=self.task_messages(bot_reply),
         )
         request = """
         ## REQUEST FOR YOU:
@@ -4047,10 +4035,96 @@ class Bot:
     def generate_artifact(self, bot_reply: BotReply) -> Artifact:
         """Generate artifacts."""
 
-        # > determine if artifact has already been created; if so, exit
-        # > determine whether artifact is needed; if not, exit
-        # > generate artifacts if needed
-        # > create the artifacts
+        breakpoint()
+        # > pull common functionality (such as task completion checking) into execute_and_validate
+        # > need to revamp artifact system > artifact generation must be done in execute_and_validate > separate from regular validation > artifact generation happens after validation, to avoid wasting time
+        # > add concept of in-memory artifact to account for artifacts small enough to be stored in memory
+        # > instead of artifact summary/description, use artifact "content", which could be either a description or the actual content of the artifact if it's in memory
+        # > separate out modules
+        # > retest previous curriculum items
+
+        context = """
+        ## MISSION:
+        You are an executor for a task, and you have just completed a task. You are now figuring out what {ARTIFACT}(s) must be generated for the task, and then writing the specifications for those {ARTIFACT}(s).
+
+        ## CONCEPTS:
+        These are the concepts you should be familiar with:
+        - {MAIN_TASK_OWNER}: the agent that owns the task and is responsible for providing information to the executor to help it execute the task.
+        - {ARTIFACT}: the output of a task, in the form of a file, message, or a resource like a webpage.
+        - {ARTIFACT} LOCATION: the location where the {ARTIFACT} is stored, such as a file path or a URI. {ARTIFACT}s can also be "in-memory" if they are simple enough to not need a separate resource to be stored in.
+
+        ## TASK SPECIFICATION:
+        Here is the task specification:
+        ```start_of_task_specification
+        {task_description}
+        ```end_of_task_specification
+
+        ## TASK CONVERSATION:
+        Here is the conversation for the task:
+        ```start_of_task_conversation
+        {task_discussion}
+        ```end_of_task_conversation
+        """
+        context = dedent_and_strip(context).format(
+            ARTIFACT=Concept.ARTIFACT.value,
+            MAIN_TASK_OWNER=Concept.MAIN_TASK_OWNER.value,
+            EXECUTOR=Concept.EXECUTOR.value,
+            task_description=self.task.description,
+            task_discussion=self.task_messages(bot_reply),
+        )
+        request = """
+        ## REQUEST FOR YOU:
+        Use the following reasoning process to determine what kind of {ARTIFACT}(s) you need to generate for the task.
+
+        ```start_of_reasoning_steps
+        1. Review the TASK SPECIFICATION and the TASK CONVERSATION to determine what kind of {ARTIFACT}s the task explicitly requires. If this is clear, then you can skip the rest of the reasoning steps and go straight to the output block.
+        2. If task does not explicitly define what {ARTIFACT}(s) are required, then check if the output of the task is something simple. We define a "simple" output as something that can be easily communicated in a sentence or two.
+
+
+
+
+
+
+
+        
+        # ....
+        4. Generate the {ARTIFACT}(s) as output(s) for your task:
+        - Most {ARTIFACT}(s) you generate will be files.
+        - When generating file {ARTIFACT}(s), save them to {output_dir}.
+        - File {ARTIFACT}(s) should be named in a way that is clear and descriptive of their contents, with extensions that make it clear what type of file they are.
+
+        # ....
+        # determine whether artifact is needed; if not, exit
+        # create the artifacts
+
+        You do _not_ need to validate whether the ARTIFACT(s) exists or not, just that the EXECUTOR was specific enough in their communications to allow someone to attempt to locate the ARTIFACT(s).
+        ```end_of_reasoning_steps
+
+        In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
+        ```start_of_reasoning_output
+        1. {step_1_output}
+        2. {step_2_output}
+        3. [... etc.]
+        ```end_of_reasoning_output
+
+        After this block, you must output the validation result in this format:
+        ```start_of_validation_output
+        comment: |-
+        {validation_comment}
+        valid: !!bool |-  # note: must be either `true` or `false`
+        {validation_result}
+        artifacts: # note: use [] to indicate no artifacts
+        - description: "{artifact_1_description}"
+        location: "{artifact_1_location}"
+        - description: "{artifact_2_description}"
+        location: "{artifact_2_location}"
+        - [... etc.]
+        ```end_of_validation_output
+        Any additional comments or thoughts can be added before or after the output blocks.
+        """
+
+        breakpoint()
+        # generate artifact references
         raise NotImplementedError("TODO")
 
     async def execute(self) -> ExecutorReport:
@@ -4082,7 +4156,6 @@ class Bot:
         # have bot generate artifact if needed
         breakpoint()
         return self.finish_execution(bot_reply)
-        # > add ability for new conversational history # don't remember what this is
 
 
 def load_executor(
