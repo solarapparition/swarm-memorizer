@@ -125,7 +125,9 @@ class ArtifactValidationMessage(Enum):
 
     INVALID_ARTIFACT_TYPE = "Invalid artifact type."
     INLINE_MUST_BE_CREATED = "Inline artifact must be created."
-    REMOTE_RESOURCE_MUST_NOT_BE_CREATED = "Remote resource artifact must not be created."
+    REMOTE_RESOURCE_MUST_NOT_BE_CREATED = (
+        "Remote resource artifact must not be created."
+    )
     MISSING_CONTENT = "Content is missing for artifact that must be created."
     MISSING_LOCATION = "Location is missing for artifact that has already been created."
 
@@ -161,20 +163,34 @@ class Artifact:
             content=data["content"],
         )
 
+    def serialize(self) -> dict[str, Any]:
+        """Serialize the artifact to a JSON-compatible dictionary."""
+        serialized_data = asdict(self)
+        serialized_data["type"] = self.type.value
+        return serialized_data
+
     def validate(self) -> Literal[True]:
         """Validate the artifact."""
         try:
-            assert self.type in ArtifactType, ArtifactValidationMessage.INVALID_ARTIFACT_TYPE
+            assert (
+                self.type in ArtifactType
+            ), ArtifactValidationMessage.INVALID_ARTIFACT_TYPE
             if self.type == ArtifactType.INLINE:
-                assert self.must_be_created, ArtifactValidationMessage.INLINE_MUST_BE_CREATED
+                assert (
+                    self.must_be_created
+                ), ArtifactValidationMessage.INLINE_MUST_BE_CREATED
             if self.type == ArtifactType.REMOTE_RESOURCE:
-                assert not self.must_be_created, ArtifactValidationMessage.REMOTE_RESOURCE_MUST_NOT_BE_CREATED
+                assert (
+                    not self.must_be_created
+                ), ArtifactValidationMessage.REMOTE_RESOURCE_MUST_NOT_BE_CREATED
             if self.must_be_created:
                 assert self.content, ArtifactValidationMessage.MISSING_CONTENT
             else:
                 assert self.location, ArtifactValidationMessage.MISSING_LOCATION
         except AssertionError as error:
-            raise ArtifactValidationError(message=error.args[0], field_values = asdict(self)) from error
+            raise ArtifactValidationError(
+                message=error.args[0], field_values=asdict(self)
+            ) from error
         return True
 
     def __str__(self) -> str:
@@ -184,7 +200,9 @@ class Artifact:
           location: {location}
           content: {content}
         """
-        content = self.content if self.type == ArtifactType.INLINE else "See `location`."
+        content = (
+            self.content if self.type == ArtifactType.INLINE else "See `location`."
+        )
         return dedent_and_strip(template).format(
             description=self.description,
             location=self.location,
@@ -851,7 +869,14 @@ class TaskData:
 
     def serialize(self) -> dict[str, Any]:
         """Serialize the task."""
-        return asdict(self)
+        serialized_data = asdict(self)
+        serialized_data["input_artifacts"] = [
+            artifact.serialize() for artifact in self.input_artifacts
+        ]
+        serialized_data["output_artifacts"] = [
+            artifact.serialize() for artifact in self.output_artifacts
+        ]
+        return serialized_data
 
     @classmethod
     def from_serialized_data(cls, data: dict[str, Any]) -> Self:
@@ -2032,7 +2057,9 @@ class OrchestratorState:
     new_event_count: int = 0
 
 
-def validate_task_completion(task: Task, report: ExecutorReport) -> WorkValidationResult:
+def validate_task_completion(
+    task: Task, report: ExecutorReport
+) -> WorkValidationResult:
     """Validate a task."""
     assert report.task_completed is True, "Task must be completed to be validated."
     context = """
@@ -2180,6 +2207,7 @@ In your reply, you must include output from _all_ parts of the reasoning process
 #         feedback=validation_result["comment"],
 #         # artifacts=artifacts,
 #     )
+
 
 def generate_artifact(task: Task, bot_reply: Any) -> Artifact:
     """Generate artifacts."""
@@ -2335,10 +2363,14 @@ def generate_artifact(task: Task, bot_reply: Any) -> Artifact:
     ```end_of_artifact_spec_output
     Any additional comments or thoughts can be added as commented text in the yaml.
     """
-    request = dedent_and_strip(request).replace("{output_instructions}", REASONING_OUTPUT_INSTRUCTIONS).format(
-        ARTIFACT=Concept.ARTIFACT.value,
-        EXECUTOR=Concept.EXECUTOR.value,
-        reasoning_process=reasoning_process,
+    request = (
+        dedent_and_strip(request)
+        .replace("{output_instructions}", REASONING_OUTPUT_INSTRUCTIONS)
+        .format(
+            ARTIFACT=Concept.ARTIFACT.value,
+            EXECUTOR=Concept.EXECUTOR.value,
+            reasoning_process=reasoning_process,
+        )
     )
     messages = [
         SystemMessage(content=context),
@@ -2351,7 +2383,9 @@ def generate_artifact(task: Task, bot_reply: Any) -> Artifact:
         printout=VERBOSE,
         color=AGENT_COLOR,
     )
-    artifact_spec = extract_and_unpack(result, "start_of_artifact_spec_output", "end_of_artifact_spec_output")
+    artifact_spec = extract_and_unpack(
+        result, "start_of_artifact_spec_output", "end_of_artifact_spec_output"
+    )
     artifact = Artifact.from_serialized_data(default_yaml.load(artifact_spec))
     try:
         artifact.validate()
@@ -2365,7 +2399,9 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
     task.start_timer()
     assert task.executor
     report = await task.executor.execute()
-    assert isinstance(report.task_completed, bool), "Task completion must be determined after execution."
+    assert isinstance(
+        report.task_completed, bool
+    ), "Task completion must be determined after execution."
     if not report.task_completed:
         status_update_event = change_status(
             task, TaskWorkStatus.BLOCKED, "Task is blocked until reply to message."
@@ -2390,29 +2426,14 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
     else:
         if report.artifacts is None:
             report.artifacts = [generate_artifact(task, report)]
-
-        
-
-
-
-        breakpoint()
-        # > openai agent
-        # > soul engine https://github.com/opensouls/soul-engine
-        # > make sure that cached agent search doesn’t return outdated agent
-        # > add concept of in-memory artifact to account for artifacts small enough to be stored in memory
-        # > instead of artifact summary/description, use artifact "content", which could be either a description or the actual content of the artifact if it's in memory
-
-        assert report.artifacts, "Artifact(s) must be present when wrapping up execution."
+        assert (
+            report.artifacts
+        ), "Artifact(s) must be present when wrapping up execution."
         new_status = TaskWorkStatus.COMPLETED
         reason = "Validated as complete."
         task.output_artifacts = report.artifacts  # MUTATION
         task.wrap_execution(success=True)  # MUTATION
-        validation_result = WorkValidationResult(
-            valid=True, feedback=""
-        )
-    breakpoint()
-    # > move artifacts to report instead of validation
-
+        # validation_result = WorkValidationResult(valid=True, feedback="")
     # generated_artifact = (
     #     self.generate_artifact(bot_reply)
     #     if (
@@ -2422,18 +2443,9 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
     #     )
     #     else None
     # )
-    # breakpoint()
     # if generated_artifact:
     #     bot_reply.artifacts = [generated_artifact]
     #     bot_reply.report.reply = "Task completed. See artifacts below for details."
-
-    # # add bot evaluation of whether bot is waiting for input from task owner, or whether it believes that the task is complete
-    # # have bot generate artifact if needed
-    # breakpoint()
-    # return self.finish_execution(bot_reply)
-    # > retest previous curriculum items
-    # > separate out modules
-    # > semantic function
 
     validation_result_event = Event(
         data=TaskValidation(
@@ -2573,9 +2585,17 @@ def decide_acceptance(task: Task, executor: Executor) -> bool:
         success_list: Tasks successfully completed by the agent
       output_format:
         analysis_steps_output: Output of reasoning process for analysis steps
-        answer_block_delimiters: Block delimited by ```start_of_prediction_output and ```end_of_prediction_output, containing the prediction.
-        final_outcome: The agent's predicted success, highlighted within answer block.
-        final_outcome_enums:
+        analysis_steps_output_format: |-
+          ```start_of_analysis_steps_output
+          {analysis_steps_output}
+          ```end_of_analysis_steps_output
+        prediction: The agent's predicted success, highlighted within answer block.
+        prediction_block_format: |-
+          ```start_of_prediction_output
+          comment: {comment}
+          prediction: {prediction}
+          ```end_of_prediction_output
+        prediction_enums:
         - y
         - n
     feedback: Ensure clarity and precision in the analysis steps for effective understanding.
@@ -2594,12 +2614,12 @@ def decide_acceptance(task: Task, executor: Executor) -> bool:
     )
     output = extract_blocks(output, "start_of_prediction_output")
     assert output and len(output) == 1, "Exactly one prediction output is expected."
-    answer = output[0]
-    assert answer in {
+    prediction = default_yaml.load(output[0])["prediction"]
+    assert prediction in {
         "y",
         "n",
-    }, f"Prediction output must be 'y' or 'n'. Found '{answer}'."
-    return answer == "y"
+    }, f"Prediction output must be 'y' or 'n'. Found:\n'{prediction}'."
+    return prediction == "y"
 
 
 def make_if_not_exist(path: Path) -> Path:
@@ -4298,6 +4318,7 @@ class Bot:
         self.task.add_execution_reply(self.format_reply_message(report))
         return report
 
+
 def load_executor(
     blueprint: Blueprint, task: Task, files_dir: Path, delegator: "Delegator"
 ) -> Executor:
@@ -5005,6 +5026,12 @@ class Swarm:
 
 # next_curriculum_task: find the first 100 prime numbers
 # ....
+# > retest previous curriculum items
+# > separate out modules
+# > semantic function
+# > make sure that cached agent search doesn’t return outdated agent
+# > soul engine https://github.com/opensouls/soul-engine
+# > bot: openai agent
 # > create aranea-prime swarm and add all existing bots to it
 # > factor out swarm memorizer before mvp
 # bot: generic code-based executor (does not save code) > open interpreter
