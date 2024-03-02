@@ -108,20 +108,92 @@ def generate_swarm_id(
     return id_type(f"{str(id_generator())}")
 
 
+class ArtifactType(Enum):
+    """Types of artifacts."""
+
+    INLINE = "inline"
+    FILE = "file"
+    REMOTE_RESOURCE = "remote_resource"
+
+    def __str__(self) -> str:
+        """String representation of the artifact type."""
+        return self.value
+
+
+class ArtifactValidationMessage(Enum):
+    """Messages for validating an artifact."""
+
+    INVALID_ARTIFACT_TYPE = "Invalid artifact type."
+    INLINE_MUST_BE_CREATED = "Inline artifact must be created."
+    REMOTE_RESOURCE_MUST_NOT_BE_CREATED = "Remote resource artifact must not be created."
+    MISSING_CONTENT = "Content is missing for artifact that must be created."
+    MISSING_LOCATION = "Location is missing for artifact that has already been created."
+
+
+@dataclass
+class ArtifactValidationError(Exception):
+    """Error when validating an artifact."""
+
+    message: ArtifactValidationMessage
+    """Message for the error."""
+    field_values: dict[str, Any]
+    """Field values for the artifact that generated the validation error."""
+
+
 @dataclass
 class Artifact:
     """Entry for an artifact."""
 
-    location: str
+    type: ArtifactType
     description: str
+    location: str | None
+    must_be_created: bool
+    content: str | None
+
+    @classmethod
+    def from_serialized_data(cls, data: dict[str, Any]) -> Self:
+        """Deserialize the artifact from a JSON-compatible dictionary."""
+        return cls(
+            type=ArtifactType(data["type"]),
+            description=data["description"],
+            location=data["location"],
+            must_be_created=data["must_be_created"],
+            content=data["content"],
+        )
+
+    def validate(self) -> Literal[True]:
+        """Validate the artifact."""
+        try:
+            assert self.type in ArtifactType, ArtifactValidationMessage.INVALID_ARTIFACT_TYPE
+            if self.type == ArtifactType.INLINE:
+                assert self.must_be_created, ArtifactValidationMessage.INLINE_MUST_BE_CREATED
+            if self.type == ArtifactType.REMOTE_RESOURCE:
+                assert not self.must_be_created, ArtifactValidationMessage.REMOTE_RESOURCE_MUST_NOT_BE_CREATED
+            if self.must_be_created:
+                assert self.content, ArtifactValidationMessage.MISSING_CONTENT
+            else:
+                assert self.location, ArtifactValidationMessage.MISSING_LOCATION
+        except AssertionError as error:
+            raise ArtifactValidationError(message=error.args[0], field_values = asdict(self)) from error
+        return True
 
     def __str__(self) -> str:
         """String representation of the artifact."""
-        return f"- description: {self.description}\n  location: {self.location}"
+        template = """
+        - description: {description}
+          location: {location}
+          content: {content}
+        """
+        content = self.content if self.type == ArtifactType.INLINE else "See `location`."
+        return dedent_and_strip(template).format(
+            description=self.description,
+            location=self.location,
+            content=content,
+        )
 
 
 @dataclass
-class ValidationResult:
+class WorkValidationResult:
     """Validation of work done by agent."""
 
     valid: bool
@@ -307,7 +379,7 @@ class SubtaskIdentification:
     owner_id: RuntimeId
     subtask: str
     subtask_id: TaskId
-    validation_result: ValidationResult
+    validation_result: WorkValidationResult
 
     def __str__(self) -> str:
         if self.validation_result.valid:
@@ -384,7 +456,7 @@ class TaskValidation:
 
     validator_id: RuntimeId
     task_id: TaskId
-    validation_result: ValidationResult
+    validation_result: WorkValidationResult
 
     def __str__(self) -> str:
         if self.validation_result.valid:
@@ -480,7 +552,7 @@ class WorkValidator(Protocol):
         """Runtime id of the validator."""
         raise NotImplementedError
 
-    def validate(self, context: str) -> ValidationResult:
+    def validate(self, context: str) -> WorkValidationResult:
         """Validate the work done by an executor for a task."""
         raise NotImplementedError
 
@@ -524,7 +596,7 @@ class Human:
         )
         return reply
 
-    def validate(self, context: str) -> ValidationResult:
+    def validate(self, context: str) -> WorkValidationResult:
         """Validate some work done."""
         prompt = f"{context}\n\nPlease validate the work as described above (y/n): "
         while True:
@@ -534,7 +606,7 @@ class Human:
                 break
             print("Invalid input. Please enter 'y' or 'n'.")
         feedback: str = "" if valid else self.advise("Provide feedback: ")
-        return ValidationResult(valid, feedback)
+        return WorkValidationResult(valid, feedback)
 
 
 @dataclass
@@ -685,7 +757,7 @@ class ExecutorReport:
 
     reply: str
     task_completed: bool | None = None
-    validation: ValidationResult | None = None
+    validation: WorkValidationResult | None = None
     new_parent_events: list[Event] = field(default_factory=list)
     artifacts: list[Artifact] | None = None
     """Artifacts produced by the executor. `None` means that the executor does not report whether any artifacts are produced, while an empty list means that the executor explicitly reported that no artifacts were produced."""
@@ -1960,7 +2032,7 @@ class OrchestratorState:
     new_event_count: int = 0
 
 
-def validate_task_completion(task: Task, report: ExecutorReport) -> ValidationResult:
+def validate_task_completion(task: Task, report: ExecutorReport) -> WorkValidationResult:
     """Validate a task."""
     assert report.task_completed is True, "Task must be completed to be validated."
     context = """
@@ -2020,76 +2092,254 @@ In your reply, you must include output from _all_ parts of the reasoning process
 """.strip()
 
 
-def validate_artifact_mentions(
-    task: Task, report: ExecutorReport  # pylint: disable=unused-argument
-) -> ValidationResult:
-    """Validate that artifacts were reported by the executor."""
-    context = f"""
+# def validate_artifact_mentions(
+#     task: Task, report: ExecutorReport  # pylint: disable=unused-argument
+# ) -> ValidationResult:
+#     """Validate that artifacts were reported by the executor."""
+#     context = f"""
+#     ## MISSION:
+#     You are a validator for an AI task executor agent. Your purpose is to check that the executor has provided enough information to locate the output of the results, for futher validation.
+
+#     ## CONCEPTS:
+#     These are the concepts you should be familiar with:
+#     - {Concept.EXECUTOR.value}: the agent that is responsible for executing a task.
+#     - {Concept.MAIN_TASK_OWNER.value}: the agent that owns the task and is responsible for providing information to the executor to help it execute the task.
+#     - {Concept.ARTIFACT.value}: the output of a task, in the form of a file, message, or some other identifying information like a URI. {Concept.ARTIFACT.value}s are often provided as inputs to {Concept.EXECUTOR.value}s, and are generated as outputs by them. The {Concept.EXECUTOR.value} _must_ provide the artifacts for the task to be considered complete.
+#     - {Concept.ARTIFACT.value} LOCATION: the location of the {Concept.ARTIFACT.value}, which can be a file path, URI, or some other identifier. {Concept.EXECUTOR.value}s have full discretion over the {Concept.ARTIFACT.value} LOCATION.
+
+#     ## TASK SPECIFICATION:
+#     Here is the task specification:
+#     ```start_of_task_specification
+#     {{task_description}}
+#     ```end_of_task_specification
+
+#     ## TASK CONVERSATION:
+#     Here is the conversation for the task:
+#     ```start_of_task_conversation
+#     {{task_discussion}}
+#     ```end_of_task_conversation
+#     """
+#     context = dedent_and_strip(context).format(
+#         task_description=task.description,
+#         task_discussion=task.discussion(),
+#     )
+#     request = """
+#     ## REQUEST FOR YOU:
+#     Use the following reasoning process to validate that the executor has given sufficient information to locate the artifacts for the task:
+#     ```start_of_reasoning_steps
+#     1. Review the TASK SPECIFICATION to fully understand the expectations for the task's completion, including the details of what the final ARTIFACT(s) should be, and where and how it should be delivered or made accessible.
+#     2. Examine the TASK CONVERSATION for any communications that reference the delivery or completion of the ARTIFACT(s). Look for specific details such as file names, URIs, timestamps, or any other identifiers that would allow someone to attempt to locate and access the ARTIFACT(s).
+#     3. Cross-reference the information from the TASK CONVERSATION with the criteria outlined in the TASK SPECIFICATION to confirm that the EXECUTOR provided the necessary and correct details about the ARTIFACT(s). It is not necessary for you to actually locate the ARTIFACT(s) yourself.
+#     4. If anything is unclear or incomplete, prepare to request clarification or additional information from the EXECUTOR.
+
+#     You do _not_ need to validate whether the ARTIFACT(s) exists or not, just that the EXECUTOR was specific enough in their communications to allow someone to attempt to locate the ARTIFACT(s).
+#     ```end_of_reasoning_steps
+
+#     In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
+#     ```start_of_reasoning_output
+#     1. {step_1_output}
+#     2. {step_2_output}
+#     3. [... etc.]
+#     ```end_of_reasoning_output
+
+#     After this block, you must output the validation result in this format:
+#     ```start_of_validation_output
+#     comment: |-
+#       {validation_comment}
+#     valid: !!bool |-  # note: must be either `true` or `false`
+#       {validation_result}
+#     artifacts: # note: use [] to indicate no artifacts
+#     - description: "{artifact_1_description}"
+#       location: "{artifact_1_location}"
+#     - description: "{artifact_2_description}"
+#       location: "{artifact_2_location}"
+#     - [... etc.]
+#     ```end_of_validation_output
+#     Any additional comments or thoughts can be added before or after the output blocks.
+#     """
+#     request = dedent_and_strip(request)
+#     messages = [
+#         SystemMessage(content=context),
+#         SystemMessage(content=request),
+#     ]
+#     result = query_model(
+#         model=precise_model,
+#         messages=messages,
+#         preamble=f"Validating artifacts for task {task.id}...\n{format_messages(messages)}",
+#         printout=VERBOSE,
+#         color=AGENT_COLOR,
+#     )
+#     if not (extracted_result := extract_blocks(result, "start_of_validation_output")):
+#         raise ExtractionError("Could not extract validation output from the result.")
+#     validation_output = extracted_result[0]
+#     validation_result = default_yaml.load(validation_output)
+#     artifacts = validation_result["artifacts"]
+#     artifacts = [Artifact(**artifact) for artifact in artifacts] if artifacts else []
+#     return ValidationResult(
+#         valid=validation_result["valid"],
+#         feedback=validation_result["comment"],
+#         # artifacts=artifacts,
+#     )
+
+def generate_artifact(task: Task, bot_reply: Any) -> Artifact:
+    """Generate artifacts."""
+
+    # - {ARTIFACT} LOCATION: the location where the {ARTIFACT} is stored, such as a file path or a URI. {ARTIFACT}s can also be "in-memory" if they are simple enough to not need a separate resource to be stored in.
+    context = """
     ## MISSION:
-    You are a validator for an AI task executor agent. Your purpose is to check that the executor has provided enough information to locate the output of the results, for futher validation.
+    You are a reviewer for a task, looking over the information for a completed task. You are now figuring out what {ARTIFACT}(s) must be generated for the task, and then writing the specifications for those {ARTIFACT}(s).
 
     ## CONCEPTS:
     These are the concepts you should be familiar with:
-    - {Concept.EXECUTOR.value}: the agent that is responsible for executing a task.
-    - {Concept.MAIN_TASK_OWNER.value}: the agent that owns the task and is responsible for providing information to the executor to help it execute the task.
-    - {Concept.ARTIFACT.value}: the output of a task, in the form of a file, message, or some other identifying information like a URI. {Concept.ARTIFACT.value}s are often provided as inputs to {Concept.EXECUTOR.value}s, and are generated as outputs by them. The {Concept.EXECUTOR.value} _must_ provide the artifacts for the task to be considered complete.
-    - {Concept.ARTIFACT.value} LOCATION: the location of the {Concept.ARTIFACT.value}, which can be a file path, URI, or some other identifier. {Concept.EXECUTOR.value}s have full discretion over the {Concept.ARTIFACT.value} LOCATION.
+    - {EXECUTOR}: the agent that is responsible for executing a task.
+    - {MAIN_TASK_OWNER}: the agent that owns the task and is responsible for providing information to the executor to help it execute the task.
+    - {ARTIFACT}: the output of a task, in the form of a file, message, or a resource like a webpage. An {ARTIFACT} represents the final deliverable of a task.
+    - {ARTIFACT} SPEC: a specification for an {ARTIFACT}, which includes all information needed to locate the {ARTIFACT}, or create it if it doesn't exist yet.
 
     ## TASK SPECIFICATION:
     Here is the task specification:
     ```start_of_task_specification
-    {{task_description}}
+    {task_description}
     ```end_of_task_specification
 
     ## TASK CONVERSATION:
     Here is the conversation for the task:
     ```start_of_task_conversation
-    {{task_discussion}}
+    {task_discussion}
     ```end_of_task_conversation
+
+    ## {ARTIFACT} TYPES:
+    There are several cases for what kind of {ARTIFACT}(s) you might need to generate for the task.
+
+    ### ARTIFACT TYPE A: INLINE {ARTIFACT}
+    An "inline" {ARTIFACT} is something that can be easily communicated in a sentence or two—something that can be quickly said in a live conversation. This {ARTIFACT} does not need to be stored and referenced in a separate resource, which is why it's called "inline".
+
+    Format (YAML):
+    ```start_of_inline_artifact_spec_format
+    type: inline
+    description: {{inline_artifact_description_str}}
+    must_be_created: true
+    content: |-
+      {{full_artifact_content_str}}
+    location: null
+    ```end_of_inline_artifact_spec_format
+
+    ### ARTIFACT TYPE B: FILE {ARTIFACT}
+    A "file" {ARTIFACT} is information saved in a local file.
+
+    Format (YAML):
+    ```start_of_file_artifact_spec_format
+    type: file
+    description: {{file_description_str}}
+    # `location` of `null` means we don't know the location yet
+    must_be_created: {{true_or_false}}
+    content: |-
+      {{full_artifact_content_str_or_empty}}
+    location: {{file_path_or_null}}
+    ```end_of_file_artifact_spec_format
+
+    ### ARTIFACT TYPE C: REMOTE RESOURCE {ARTIFACT}
+    A "remote resource" {ARTIFACT} is information saved in a resource that is not local to the system, such as a webpage or a file stored in a cloud storage service. It can be any resource that is identified by a URI.
+
+    Format (YAML):
+    ```start_of_remote_resource_artifact_spec_format
+    type: remote_resource
+    description: {{resource_description}}
+    # `location` of `null` means we don't know the location yet
+    # We always assume that remote resource artifacts have already been created.
+    must_be_created: false
+    # Since the resource has already been created, the `content` field is `null`.
+    content: null
+    location: {{resource_uri_or_null}}
+    ```end_of_remote_resource_artifact_spec_format
     """
     context = dedent_and_strip(context).format(
+        ARTIFACT=Concept.ARTIFACT.value,
+        MAIN_TASK_OWNER=Concept.MAIN_TASK_OWNER.value,
+        EXECUTOR=Concept.EXECUTOR.value,
         task_description=task.description,
-        task_discussion=task.discussion(),
+        task_discussion=task.discussion(pov=Concept.OBJECTIVE_POV),
     )
-
-    breakpoint()
-    # > add step to check whether artifact is actually needed; should be at the end
-
+    reasoning_process = """
+    determine_required_artifact_types_phase: 
+    - description: Review the TASK SPECIFICATION to determine if the task explicitly requires a particular {ARTIFACT} TYPE (A, B, or C).
+      case_1:
+        description: TASK SPECIFICATION clearly requires particular {ARTIFACT} TYPE.
+        action: you know what {ARTIFACT} TYPE is needed, so skip the rest of the steps in this phase and go to `gather_spec_info_phase`.
+      case_2:
+        description: TASK SPECIFICATION does not clearly require particular {ARTIFACT} TYPE.
+        action: move to the next step.
+    - description: Assuming the task does not explicitly define what {ARTIFACT} TYPE is required, then check whether the latest message(s) in the TASK CONVERSATION from the {EXECUTOR} already have references to a specific {ARTIFACT} generated.
+      case_1:
+        description: there is a reference to a generated {ARTIFACT}.
+        action:
+          description: the {ARTIFACT} TYPE for each generated {ARTIFACT} is either B or C. Determine what kind of {ARTIFACT} TYPE is appropriate based on the TASK CONVERSATION, by checking whether the {ARTIFACT} has file references or remote resource references.
+          case_1_1: the {ARTIFACT} has file references. That means it's of {ARTIFACT} TYPE B.
+          case_1_2: the {ARTIFACT} has remote resource references. That means it's of {ARTIFACT} TYPE C.
+          followup: you now know the required {ARTIFACT} TYPE, so skip the rest of the steps in this phase and go to `gather_spec_info_phase`.
+      case_2:
+        description: there are no references to a generated {ARTIFACT}.
+        action: move to the next step.
+    - description: Assuming there are no references to a generated {ARTIFACT}, check if the output of the task is something that can be easily communicated in a sentence or two—something that can be quickly said in a live conversation. In this case, we call the output "simple".
+      case_1:
+        description: the output is "simple".
+        action: you now know the {ARTIFACT} TYPE is A.
+      case_2:
+        description: the output is not "simple".
+        action: you now know the {ARTIFACT} TYPE is B.
+    gather_spec_info_phase:
+      case_A:
+        description: the {ARTIFACT} TYPE is A, an inline {ARTIFACT}.
+        required_info: TYPE A {ARTIFACT}s require gathering info about the `description` and `content` fields. The other fields are preset for this type.
+        steps:
+        - Reproduce the YAML spec format for the {ARTIFACT} TYPE as a reminder of what it should be.
+        - Determine the value of the `description` field. For TYPE A, the `description` field is a description of what the `content` is for, to provide context for someone who reads the `content` without access to the original conversation.
+        - Determine the value of the `content` field. For TYPE A, the `content` field is the exact message from the {EXECUTOR} that provides the answer to the task.
+      case_B:
+        description: the {ARTIFACT} TYPE is B, a local file {ARTIFACT}.
+        required_info: TYPE B {ARTIFACT}s require gathering info about the `description`, `location`, `must_be_created`, and `content` fields. The other fields are preset for this type.
+        steps:
+        - Reproduce the YAML spec format for the {ARTIFACT} TYPE as a reminder of what it should be.
+        - Determine the value of the `description` field. For TYPE B, the `description` is a concise summary of what's in the {ARTIFACT}.
+        - Determine the value of the `must_be_created` field, by checking the TASK CONVERSATION to understand if the file for the {ARTIFACT} is supposed to already have been created. If it has, set the `must_be_created` field to `false`; otherwise, set it to `true`.
+        - Determine the value of the `content` field. If `must_be_created` is `true`, then this would be the full output required by the task. Otherwise, the value would be the empty string.
+        - Determine the value of the `location` field, by checking whether the TASK CONVERSATION contains a precise file name for the {ARTIFACT}. If it does, then the `location` field to the full path to the file; otherwise, set it to `null`.
+      case_C:
+        description: the {ARTIFACT} TYPE is C, a remote resource {ARTIFACT}.
+        required_info: TYPE C {ARTIFACT}s require gathering info in the `description`, and `location` fields. The other fields are preset for this type.
+        steps:
+        - Reproduce the YAML spec format for the {ARTIFACT} TYPE as a reminder of what it should be.
+        - Determine the value of the `description` field. For TYPE C, the `description` is a concise description of what's in the {ARTIFACT}.
+        - Determine the value of the `location` field, by checking whether the TASK CONVERSATION contains a precise URI for the {ARTIFACT}. If it does, then the `location` field to the full URI; otherwise, set it to `null`.
+    """
+    reasoning_process = dedent_and_strip(reasoning_process).format(
+        ARTIFACT=Concept.ARTIFACT.value,
+        EXECUTOR=Concept.EXECUTOR.value,
+    )
+    # reasoning_process = default_yaml.load(reasoning_process)
+    # reasoning_process = json.dumps(reasoning_process, indent=2)
     request = """
     ## REQUEST FOR YOU:
-    Use the following reasoning process to validate that the executor has given sufficient information to locate the artifacts for the task:
-    ```start_of_reasoning_steps
-    1. Review the TASK SPECIFICATION to fully understand the expectations for the task's completion, including the details of what the final ARTIFACT(s) should be, and where and how it should be delivered or made accessible.
-    2. Examine the TASK CONVERSATION for any communications that reference the delivery or completion of the ARTIFACT(s). Look for specific details such as file names, URIs, timestamps, or any other identifiers that would allow someone to attempt to locate and access the ARTIFACT(s).
-    3. Cross-reference the information from the TASK CONVERSATION with the criteria outlined in the TASK SPECIFICATION to confirm that the EXECUTOR provided the necessary and correct details about the ARTIFACT(s). It is not necessary for you to actually locate the ARTIFACT(s) yourself.
-    4. If anything is unclear or incomplete, prepare to request clarification or additional information from the EXECUTOR.
+    Use the following reasoning process to gather the information for specifying {ARTIFACT}s for the task.
 
-    You do _not_ need to validate whether the ARTIFACT(s) exists or not, just that the EXECUTOR was specific enough in their communications to allow someone to attempt to locate the ARTIFACT(s).
-    ```end_of_reasoning_steps
+    ```start_of_reasoning_process
+    {reasoning_process}
+    ```end_of_reasoning_process
 
-    In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
-    ```start_of_reasoning_output
-    1. {step_1_output}
-    2. {step_2_output}
-    3. [... etc.]
-    ```end_of_reasoning_output
+    {output_instructions}
+    Remember to go through both the `determine_required_artifact_types_phase` and the `gather_spec_info_phase` phases of the reasoning process.
 
-    After this block, you must output the validation result in this format:
-    ```start_of_validation_output
-    comment: |-
-      {validation_comment}
-    valid: !!bool |-  # note: must be either `true` or `false`
-      {validation_result}
-    artifacts: # note: use [] to indicate no artifacts
-    - description: "{artifact_1_description}"
-      location: "{artifact_1_location}"
-    - description: "{artifact_2_description}"
-      location: "{artifact_2_location}"
-    - [... etc.]
-    ```end_of_validation_output
-    Any additional comments or thoughts can be added before or after the output blocks.
+    After this block, you must output the final {ARTIFACT} SPEC in this format:
+    ```start_of_artifact_spec_output
+    {{artifact_spec_yaml}}
+    ```end_of_artifact_spec_output
+    Any additional comments or thoughts can be added as commented text in the yaml.
     """
-    request = dedent_and_strip(request)
+    request = dedent_and_strip(request).replace("{output_instructions}", REASONING_OUTPUT_INSTRUCTIONS).format(
+        ARTIFACT=Concept.ARTIFACT.value,
+        EXECUTOR=Concept.EXECUTOR.value,
+        reasoning_process=reasoning_process,
+    )
     messages = [
         SystemMessage(content=context),
         SystemMessage(content=request),
@@ -2097,21 +2347,17 @@ def validate_artifact_mentions(
     result = query_model(
         model=precise_model,
         messages=messages,
-        preamble=f"Validating artifacts for task {task.id}...\n{format_messages(messages)}",
+        preamble=f"Generating artifact specifications for task {task.id}...\n{format_messages(messages)}",
         printout=VERBOSE,
         color=AGENT_COLOR,
     )
-    if not (extracted_result := extract_blocks(result, "start_of_validation_output")):
-        raise ExtractionError("Could not extract validation output from the result.")
-    validation_output = extracted_result[0]
-    validation_result = default_yaml.load(validation_output)
-    artifacts = validation_result["artifacts"]
-    artifacts = [Artifact(**artifact) for artifact in artifacts] if artifacts else []
-    return ValidationResult(
-        valid=validation_result["valid"],
-        feedback=validation_result["comment"],
-        artifacts=artifacts,
-    )
+    artifact_spec = extract_and_unpack(result, "start_of_artifact_spec_output", "end_of_artifact_spec_output")
+    artifact = Artifact.from_serialized_data(default_yaml.load(artifact_spec))
+    try:
+        artifact.validate()
+    except ArtifactValidationError as error:
+        raise NotImplementedError("TODO") from error
+    return artifact
 
 
 async def execute_and_validate(task: Task) -> ExecutorReport:
@@ -2143,14 +2389,16 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
         report.task_completed = False  # MUTATION
     else:
         if report.artifacts is None:
-            report.artifacts = generate_artifacts(task, report)
+            report.artifacts = [generate_artifact(task, report)]
 
         
 
 
 
-        # generate artifacts
         breakpoint()
+        # > openai agent
+        # > soul engine https://github.com/opensouls/soul-engine
+        # > make sure that cached agent search doesn’t return outdated agent
         # > add concept of in-memory artifact to account for artifacts small enough to be stored in memory
         # > instead of artifact summary/description, use artifact "content", which could be either a description or the actual content of the artifact if it's in memory
 
@@ -2159,7 +2407,7 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
         reason = "Validated as complete."
         task.output_artifacts = report.artifacts  # MUTATION
         task.wrap_execution(success=True)  # MUTATION
-        validation_result = ValidationResult(
+        validation_result = WorkValidationResult(
             valid=True, feedback=""
         )
     breakpoint()
@@ -2185,6 +2433,7 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
     # return self.finish_execution(bot_reply)
     # > retest previous curriculum items
     # > separate out modules
+    # > semantic function
 
     validation_result_event = Event(
         data=TaskValidation(
@@ -2894,10 +3143,6 @@ class Orchestrator:
         `action_choice` must be one of the {ORCHESTRATOR_ACTIONS} listed above, in the same format.
         Any additional comments or thoughts can be added before or after the output blocks.
         """
-        # In your reply, you must include output from _all_ parts of the reasoning process, in this block format:
-        # ```start_of_action_reasoning_output
-        # {{reasoning_output}}
-        # ```end_of_action_reasoning_output
         return dedent_and_strip(template).replace(
             "{reasoning_output_instructions}", REASONING_OUTPUT_INSTRUCTIONS
         )
@@ -3252,7 +3497,7 @@ class Orchestrator:
             blocked_subtasks=blocked_subtasks,
         )
 
-    def validate_subtask_identification(self, subtask: str) -> ValidationResult:
+    def validate_subtask_identification(self, subtask: str) -> WorkValidationResult:
         """Validate some work."""
         instructions = """
         {validator_state}
@@ -4039,95 +4284,6 @@ class Bot:
             in_progress, bool
         ), f"Expected bool for `in_progress`, got: {in_progress}"
         return not in_progress
-
-    def generate_artifact(self, bot_reply: Any) -> Artifact:
-        """Generate artifacts."""
-
-        breakpoint()
-
-        context = """
-        ## MISSION:
-        You are an executor for a task, and you have just completed a task. You are now figuring out what {ARTIFACT}(s) must be generated for the task, and then writing the specifications for those {ARTIFACT}(s).
-
-        ## CONCEPTS:
-        These are the concepts you should be familiar with:
-        - {MAIN_TASK_OWNER}: the agent that owns the task and is responsible for providing information to the executor to help it execute the task.
-        - {ARTIFACT}: the output of a task, in the form of a file, message, or a resource like a webpage.
-        - {ARTIFACT} LOCATION: the location where the {ARTIFACT} is stored, such as a file path or a URI. {ARTIFACT}s can also be "in-memory" if they are simple enough to not need a separate resource to be stored in.
-
-        ## TASK SPECIFICATION:
-        Here is the task specification:
-        ```start_of_task_specification
-        {task_description}
-        ```end_of_task_specification
-
-        ## TASK CONVERSATION:
-        Here is the conversation for the task:
-        ```start_of_task_conversation
-        {task_discussion}
-        ```end_of_task_conversation
-        """
-        context = dedent_and_strip(context).format(
-            ARTIFACT=Concept.ARTIFACT.value,
-            MAIN_TASK_OWNER=Concept.MAIN_TASK_OWNER.value,
-            EXECUTOR=Concept.EXECUTOR.value,
-            task_description=self.task.description,
-            task_discussion=self.task_messages(bot_reply),
-        )
-        request = """
-        ## REQUEST FOR YOU:
-        Use the following reasoning process to determine what kind of {ARTIFACT}(s) you need to generate for the task.
-
-        ```start_of_reasoning_steps
-        1. Review the TASK SPECIFICATION and the TASK CONVERSATION to determine what kind of {ARTIFACT}s the task explicitly requires. If this is clear, then you can skip the rest of the reasoning steps and go straight to the output block.
-        2. If task does not explicitly define what {ARTIFACT}(s) are required, then check if the output of the task is something simple. We define a "simple" output as something that can be easily communicated in a sentence or two.
-
-
-
-
-
-
-
-        
-        # ....
-        4. Generate the {ARTIFACT}(s) as output(s) for your task:
-        - Most {ARTIFACT}(s) you generate will be files.
-        - When generating file {ARTIFACT}(s), save them to {output_dir}.
-        - File {ARTIFACT}(s) should be named in a way that is clear and descriptive of their contents, with extensions that make it clear what type of file they are.
-
-        # ....
-        # determine whether artifact is needed; if not, exit
-        # create the artifacts
-
-        You do _not_ need to validate whether the ARTIFACT(s) exists or not, just that the EXECUTOR was specific enough in their communications to allow someone to attempt to locate the ARTIFACT(s).
-        ```end_of_reasoning_steps
-
-        In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
-        ```start_of_reasoning_output
-        1. {step_1_output}
-        2. {step_2_output}
-        3. [... etc.]
-        ```end_of_reasoning_output
-
-        After this block, you must output the validation result in this format:
-        ```start_of_validation_output
-        comment: |-
-        {validation_comment}
-        valid: !!bool |-  # note: must be either `true` or `false`
-        {validation_result}
-        artifacts: # note: use [] to indicate no artifacts
-        - description: "{artifact_1_description}"
-        location: "{artifact_1_location}"
-        - description: "{artifact_2_description}"
-        location: "{artifact_2_location}"
-        - [... etc.]
-        ```end_of_validation_output
-        Any additional comments or thoughts can be added before or after the output blocks.
-        """
-
-        breakpoint()
-        # generate artifact references
-        raise NotImplementedError("TODO")
 
     async def execute(self) -> ExecutorReport:
         """Execute the task. Adds own message to the event log at the end of execution."""
