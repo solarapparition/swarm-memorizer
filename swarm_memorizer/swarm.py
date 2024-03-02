@@ -5024,6 +5024,8 @@ class Swarm:
         )
 
 
+# add open interpreter bot
+# ....
 # next_curriculum_task: find the first 100 prime numbers
 # ....
 # > retest previous curriculum items
