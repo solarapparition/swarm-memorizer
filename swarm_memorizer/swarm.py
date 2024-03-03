@@ -1,6 +1,5 @@
 """Structure for swarm agents."""
 
-import json
 from textwrap import indent
 from typing import (
     Generator,
@@ -800,6 +799,11 @@ class Executor(Protocol):
         """Rank of the executor."""
         raise NotImplementedError
 
+    @property
+    def output_dir(self) -> Path:
+        """Directory for the executor's output."""
+        raise NotImplementedError
+
     def accepts(self, task: "Task") -> bool:
         """Decides whether the executor accepts a task."""
         raise NotImplementedError
@@ -1007,6 +1011,12 @@ class Task:
     def rank_limit(self, value: int | None) -> None:
         """Set rank limit for the task."""
         self.data.rank_limit = value
+
+    @property
+    def output_dir(self) -> Path:
+        """Directory for the task's output."""
+        assert self.executor
+        return self.executor.output_dir
 
     @property
     def name(self) -> str | None:
@@ -2209,6 +2219,37 @@ In your reply, you must include output from _all_ parts of the reasoning process
 #     )
 
 
+def sanitize_filename(
+    description: str, max_length: int = 255, invalid_characters: set[str] | None = None
+) -> str:
+    """Sanitize a description to be used as a filename."""
+    if invalid_characters is None:
+        invalid_characters = set('<>:"/\\|?!*\0' + "".join(chr(i) for i in range(32)))
+    pre_sanitized = description.replace(" ", "_")
+    sanitized = "".join(
+        c if c not in invalid_characters else "_" for c in pre_sanitized
+    )
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length]
+    return sanitized
+
+
+def write_file_artifact(artifact: Artifact, output_dir: Path) -> Artifact:
+    """Write the content of a file artifact to the output directory. Returns an updated artifact with the location set to the output directory."""
+    raise NotImplementedError("TODO")
+    # assert artifact.type == ArtifactType.FILE and artifact.content and artifact.must_be_created
+    # file_name = f"{convert_to_filename(artifact.description)}.txt"
+    # output_path = output_dir / file_name
+    # task.output_dir.write_text(artifact.content, encoding="utf-8")
+    # return Artifact(
+    #     type=artifact.type,
+    #     description=artifact.description,
+    #     location=str(task.output_dir),
+    #     must_be_created=artifact.must_be_created,
+    #     content=None,
+    # )
+
+
 def generate_artifact(task: Task, bot_reply: Any) -> Artifact:
     """Generate artifacts."""
 
@@ -2391,6 +2432,10 @@ def generate_artifact(task: Task, bot_reply: Any) -> Artifact:
         artifact.validate()
     except ArtifactValidationError as error:
         raise NotImplementedError("TODO") from error
+
+    # post-validation, we can assume that for file artifacts, if `content` exists
+    if artifact.content and artifact.type == ArtifactType.FILE:
+        artifact = write_file_artifact(artifact, task.output_dir)
     return artifact
 
 
@@ -2414,7 +2459,7 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
     )
     validation_result = validate_task_completion(task, report)
     if not validation_result.valid and task.validation_failures:
-        new_executor = redelegate_task_executor(task.executor)
+        _ = redelegate_task_executor(task.executor)
         raise NotImplementedError("TODO")
         # task.reset_progress()
         # task.change_executor(new_executor)  # MUTATION
@@ -5024,6 +5069,8 @@ class Swarm:
         )
 
 
+# ....
+# > need to figure out whether there are cases where orchestrator will ask to create an artifact that is not actually possible for som bot to create
 # add open interpreter bot
 # ....
 # next_curriculum_task: find the first 100 prime numbers
