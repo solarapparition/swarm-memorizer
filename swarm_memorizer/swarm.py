@@ -61,6 +61,7 @@ IdTypeT = TypeVar("IdTypeT", BlueprintId, TaskId, EventId, DelegatorId)
 ConversationHistory = Sequence[HumanMessage | AIMessage]
 
 SWARM_COLOR = Fore.MAGENTA
+PROMPT_COLOR = Fore.BLUE
 VERBOSE = True
 NONE = "None"
 NoneStr = Literal["None"]
@@ -194,18 +195,20 @@ class Artifact:
 
     def __str__(self) -> str:
         """String representation of the artifact."""
+        # this must be an accurate programmatic representation of the artifact—may be read in to recreate the artifact
         template = """
         - description: {description}
+          type: {type}
           location: {location}
           content: {content}
+          must_be_created: {must_be_created}
         """
-        content = (
-            self.content if self.type == ArtifactType.INLINE else "See `location`."
-        )
         return dedent_and_strip(template).format(
             description=self.description,
             location=self.location,
-            content=content,
+            content=self.content,
+            type=self.type,
+            must_be_created=self.must_be_created,
         )
 
 
@@ -1633,15 +1636,15 @@ class SubtaskIdentifcationResult:
 
     identified_subtask: str
     comment: str
-    relevant_artifacts: list[Artifact]
+    input_artifacts: list[Artifact]
 
     @classmethod
     def from_yaml_str(cls, yaml_str: str) -> Self:
         """Create a subtask identification result from a YAML string."""
         data = default_yaml.load(yaml_str)
-        data["relevant_artifacts"] = (
-            [Artifact(**artifact) for artifact in relevant_artifacts]
-            if (relevant_artifacts := data["relevant_artifacts"])
+        data["input_artifacts"] = (
+            [Artifact.from_serialized_data(artifact) for artifact in input_artifacts]
+            if (input_artifacts := data["input_artifacts"])
             else []
         )
         return cls(**data)
@@ -3471,21 +3474,15 @@ class Orchestrator:
         ```start_of_subtask_identification_output
         comment: |-
           {{comment}}
-        relevant_artifacts:  # use [] to indicate no artifacts
-        - description: "{{relevant_artifact_1_description}}"
-          location: "{{relevant_artifact_1_location}}"
-        - description: "{{relevant_artifact_2_description}}"
-          location: "{{relevant_artifact_2_location}}"
+        input_artifacts:  # these are artifacts either given by the MAIN TASK OWNER or listed under COMPLETED SUBTASKs that the executor may need to complete the subtask; leave empty if there are none
+        - {{input_artifact_1}}
+        - {{input_artifact_2}}
         - [... etc.]
         identified_subtask: |-  # high-level, single-sentence description of the subtask
           {{identified_subtask}}
         ```end_of_subtask_identification_output
         Remember, the subtask should only include information from the MAIN TASK that is relevant to the executor; additional context may confuse the executor as to what is in scope.
         """
-        # In your reply, you must include output from _all_ parts of the reasoning process, in this block format:
-        # ```start_of_reasoning_output
-        # {{reasoning_output}}
-        # ```end_of_reasoning_output
         return (
             dedent_and_strip(template)
             .replace("{reasoning_output_instructions}", REASONING_OUTPUT_INSTRUCTIONS)
@@ -3677,6 +3674,10 @@ class Orchestrator:
         extracted_results = SubtaskIdentifcationResult.from_yaml_str(
             extracted_results[-1]
         )
+        for artifact in extracted_results.input_artifacts:
+            assert (
+                not artifact.must_be_created
+            ), f"Input artifacts must not be created.\nArtifact: {artifact}"
         identified_subtask = extracted_results.identified_subtask
         subtask_validation = self.validate_subtask_identification(identified_subtask)
         subtask_context = f'This task is a subtask of the following parent task:\n"""\n{self.task.initial_information}\n"""'
@@ -3686,7 +3687,7 @@ class Orchestrator:
                 owner_id=self.id,
                 rank_limit=None if self.rank_limit is None else self.rank_limit - 1,
                 description=TaskDescription(information=identified_subtask),
-                input_artifacts=extracted_results.relevant_artifacts,
+                input_artifacts=extracted_results.input_artifacts,
                 context=subtask_context,
             ),
             id_generator=self.id_generator,
@@ -5067,13 +5068,13 @@ class Swarm:
         )
 
 
-# make sure that cached agent search doesn’t return outdated agent
+# retest previous curriculum items
 # ....
-# > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
-# > retest previous curriculum items
-# > separate out modules
-# > set up open interpreter output directory
+# > convert swarm's run into execute() # only single swarm is meant to be instantiated at once
+# separate out modules
+# set up open interpreter output directory
 # create entry point to system > python fire
+# > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
 # > bot: add pure, offline language model assistants > gpt-4 > gemini
 # bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
 # bot: script writer: update script writer to save output as script runner for that script
@@ -5209,7 +5210,7 @@ async def test_curriculum_task_4() -> None:
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(test_curriculum_task_4())
+    asyncio.run(test_curriculum_task_2())
 
 
 if __name__ == "__main__":

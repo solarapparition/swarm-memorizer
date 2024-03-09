@@ -1,22 +1,18 @@
 "description":
   "information": |-  # high-level, single-sentence description of the subtask
-    Calculate 4 * 5.
+    Calculate the result of 4 * 5.
   "definition_of_done": !!null |
   "initial_information": |-  # high-level, single-sentence description of the subtask
-    Calculate 4 * 5.
+    Calculate the result of 4 * 5.
 "owner_id": |-
   5d0a8988-ffff-5ee5-8eed-4de0455c5da6_a2a68ec9-f47c-5de3-be6a-488cc8c994ee
 "rank_limit": !!int |-
   0
-"input_artifacts":
-- "location": |-
-    None
-  "description": |-
-    None
+"input_artifacts": []
 "id": |-
   a4399759-2d18-578f-9803-1427095efaa3
 "name": |-  # high-level, single-sentence description of the subtask
-  Calculate 4 * 5.
+  Calculate the result of 4 * 5.
 "context": |-
   This task is a subtask of the following parent task:
   """
@@ -37,13 +33,18 @@
     "success": !!bool |-
       true
 "output_artifacts":
-- "location": |-
-    test/swarms/6bcf7dd4-8e29-58f6-bf5f-7566d4108df5/executors/9b9672d4-5cee-5eef-9ad2-661c0946e353/output/mult_4_5.txt
+- "type": |-
+    file
   "description": |-
-    Result of the calculation 4 * 5
+    The result of the calculation 4 * 5.
+  "location": |-
+    test/swarms/6bcf7dd4-8e29-58f6-bf5f-7566d4108df5/executors/9b9672d4-5cee-5eef-9ad2-661c0946e353/output/mult_4_5.txt
+  "must_be_created": !!bool |-
+    false
+  "content": |
 "start_timestamp": !!float |-
-  1708296819.700395
+  1710013183.382188
 "end_timestamp": !!float |-
-  1708296819.725028
+  1710013183.410711
 "validation_failures": !!int |-
   0

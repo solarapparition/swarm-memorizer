@@ -4,24 +4,16 @@ from pathlib import Path
 from typing import Callable, Sequence
 import sys
 
-import pexpect
 from colorama import Fore
-from langchain.schema import SystemMessage, AIMessage, HumanMessage
-from interpreter import OpenInterpreter
+from langchain.schema import AIMessage, HumanMessage
 
 from swarm_memorizer.swarm import (
-    Artifact,
     BotCore,
     TaskDescription,
-    dedent_and_strip,
     ExecutorReport,
-    format_messages,
-    Concept,
-    SWARM_COLOR,
+    PROMPT_COLOR,
 )
-from swarm_memorizer.toolkit.models import query_model, precise_model
 from swarm_memorizer.toolkit.script_runner import create_script_runner
-from swarm_memorizer.toolkit.text import extract_and_unpack
 
 AGENT_COLOR = Fore.GREEN
 
@@ -49,7 +41,7 @@ def run_open_interpreter(
 ) -> ExecutorReport:
     """Run Open Interpreter."""
     message = create_message(task_description, message_history)
-    print(message)
+    print(f"{PROMPT_COLOR}{message}{Fore.RESET}")
     reply = send_message(message)
     print(f"{AGENT_COLOR}{reply}{Fore.RESET}")
     return ExecutorReport(reply)
