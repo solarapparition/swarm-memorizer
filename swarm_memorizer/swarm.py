@@ -13,7 +13,6 @@ from typing import (
     Protocol,
     Sequence,
     Set,
-    TypeVar,
     Callable,
     Coroutine,
     runtime_checkable,
@@ -31,12 +30,11 @@ import importlib.util
 import time
 
 from ruamel.yaml import YAML, YAMLError
-from colorama import Fore
 from langchain.schema import SystemMessage, AIMessage, HumanMessage
 from llama_index import VectorStoreIndex
 from llama_index.schema import TextNode
 
-from .config import configure_langchain_cache
+from .config import configure_langchain_cache, SWARM_COLOR, VERBOSE
 from .toolkit.models import (
     super_creative_model,
     precise_model,
@@ -50,216 +48,26 @@ from .toolkit.text import (
     dedent_and_strip,
 )
 from .toolkit.yaml_tools import format_as_yaml_str, default_yaml
-from .toolkit.id_generation import (
+from .id_generation import (
     utc_timestamp,
     IdGenerator as DefaultIdGenerator,
+    generate_id,
 )
 from .concept import Concept
-
-BlueprintId = NewType("BlueprintId", str)
-TaskId = NewType("TaskId", str)
-EventId = NewType("EventId", str)
-DelegatorId = NewType("DelegatorId", str)
-RuntimeId = NewType("RuntimeId", str)
-TaskHistory = list[TaskId]
-IdGenerator = Callable[[], UUID]
-IdTypeT = TypeVar("IdTypeT", BlueprintId, TaskId, EventId, DelegatorId)
-ConversationHistory = Sequence[HumanMessage | AIMessage]
-
-SWARM_COLOR = Fore.MAGENTA
-PROMPT_COLOR = Fore.BLUE
-VERBOSE = True
-NONE = "None"
-NoneStr = Literal["None"]
-
-
-def generate_swarm_id(
-    id_type: type[IdTypeT], id_generator: Callable[[], UUID]
-) -> IdTypeT:
-    """Generate an ID for an agent."""
-    return id_type(f"{str(id_generator())}")
-
-
-class ArtifactType(Enum):
-    """Types of artifacts."""
-
-    INLINE = "inline"
-    FILE = "file"
-    REMOTE_RESOURCE = "remote_resource"
-
-    def __str__(self) -> str:
-        """String representation of the artifact type."""
-        return self.value
-
-
-class ArtifactValidationMessage(Enum):
-    """Messages for validating an artifact."""
-
-    INVALID_ARTIFACT_TYPE = "Invalid artifact type."
-    INLINE_MUST_BE_CREATED = "Inline artifact must be created."
-    REMOTE_RESOURCE_MUST_NOT_BE_CREATED = (
-        "Remote resource artifact must not be created."
-    )
-    MISSING_CONTENT = "Content is missing for artifact that must be created."
-    MISSING_LOCATION = "Location is missing for artifact that has already been created."
-
-
-@dataclass
-class ArtifactValidationError(Exception):
-    """Error when validating an artifact."""
-
-    message: ArtifactValidationMessage
-    """Message for the error."""
-    artifact: "Artifact"
-    """Field values for the artifact that generated the validation error."""
-
-
-@dataclass
-class Artifact:
-    """Entry for an artifact."""
-
-    type: ArtifactType
-    description: str
-    location: str | None
-    must_be_created: bool
-    content: str | None
-
-    @classmethod
-    def from_serialized_data(cls, data: dict[str, Any]) -> Self:
-        """Deserialize the artifact from a JSON-compatible dictionary."""
-        return cls(
-            type=ArtifactType(data["type"]),
-            description=data["description"],
-            location=data["location"],
-            must_be_created=data["must_be_created"],
-            content=data["content"],
-        )
-
-    def serialize(self) -> dict[str, Any]:
-        """Serialize the artifact to a JSON-compatible dictionary."""
-        serialized_data = asdict(self)
-        serialized_data["type"] = self.type.value
-        return serialized_data
-
-    def validate(self) -> Literal[True]:
-        """Validate the artifact."""
-        try:
-            assert (
-                self.type in ArtifactType
-            ), ArtifactValidationMessage.INVALID_ARTIFACT_TYPE
-            if self.type == ArtifactType.INLINE:
-                assert (
-                    self.must_be_created
-                ), ArtifactValidationMessage.INLINE_MUST_BE_CREATED
-            if self.type == ArtifactType.REMOTE_RESOURCE:
-                assert (
-                    not self.must_be_created
-                ), ArtifactValidationMessage.REMOTE_RESOURCE_MUST_NOT_BE_CREATED
-            if self.must_be_created:
-                assert self.content, ArtifactValidationMessage.MISSING_CONTENT
-            else:
-                assert self.location, ArtifactValidationMessage.MISSING_LOCATION
-        except AssertionError as error:
-            raise ArtifactValidationError(
-                message=error.args[0], artifact=self
-            ) from error
-        return True
-
-    def __str__(self) -> str:
-        """String representation of the artifact."""
-        # this must be an accurate programmatic representation of the artifact—may be read in to recreate the artifact
-        template = """
-        - description: {description}
-          type: {type}
-          location: {location}
-          content: {content}
-          must_be_created: {must_be_created}
-        """
-        return dedent_and_strip(template).format(
-            description=self.description,
-            location=self.location,
-            content=self.content,
-            type=self.type,
-            must_be_created=self.must_be_created,
-        )
-
-
-@dataclass
-class WorkValidationResult:
-    """Validation of work done by agent."""
-
-    valid: bool
-    feedback: str
-    # artifacts: list[Artifact] = field(default_factory=list)
-
-
-class Role(Enum):
-    """Role of an agent."""
-
-    ORCHESTRATOR = "orchestrator"
-    BOT = "bot"
-
-
-@dataclass
-class Reasoning:
-    """Reasoning instructions for an agent."""
-
-    default_action_choice: str | None = None
-    subtask_action_choice: str | None = None
-    subtask_extraction: str | None = None
-    executor_selection: str | None = None
-    learning: str | None = None
-
-
-@dataclass
-class OrchestratorKnowledge:
-    """Knowledge for the orchestrator."""
-
-    executor_learnings: str
-    other_learnings: str
-
-    def __str__(self) -> str:
-        """String representation of the orchestrator's knowledge."""
-        return f"{self.executor_learnings}\n{self.other_learnings}"
-
-
-@dataclass
-class OrchestratorBlueprint:
-    """A blueprint for an orchestrator."""
-
-    id: BlueprintId
-    name: str
-    description: str | None
-    rank: int | None
-    reasoning: Reasoning
-    knowledge: OrchestratorKnowledge | None
-    recent_events_size: int
-    auto_wait: bool
-    # role: Role = field(init=False)
-
-    # def __post_init__(self) -> None:
-    #     self.role = Role.ORCHESTRATOR
-
-    @property
-    def role(self) -> Role:
-        """Role of the agent."""
-        return Role.ORCHESTRATOR
-
-    @classmethod
-    def from_serialized_data(cls, data: dict[str, Any]) -> Self:
-        """Deserialize the blueprint from a JSON-compatible dictionary."""
-        data = data.copy()
-        data["id"] = BlueprintId(data["id"])
-        data["reasoning"] = Reasoning(**data["reasoning"])
-        data["knowledge"] = OrchestratorKnowledge(**data["knowledge"])
-        del data["role"]
-        return cls(**data)
-
-    def serialize(self) -> dict[str, Any]:
-        """Serialize the blueprint to a JSON-compatible dictionary."""
-        data = asdict(self)
-        data["role"] = self.role.value
-        return data
+from .schema import (
+    BlueprintId,
+    TaskId,
+    EventId,
+    DelegatorId,
+    RuntimeId,
+    IdGenerator,
+    ConversationHistory,
+    NONE,
+    WorkValidationResult,
+    Role,
+)
+from .artifact import ArtifactType, ArtifactValidationError, Artifact
+from .orchestrator import Reasoning, Knowledge, Blueprint as OrchestratorBlueprint
 
 
 @dataclass
@@ -932,7 +740,7 @@ class Task:
     def __post_init__(self) -> None:
         """Post init."""
         self.task_records_dir.mkdir(parents=True, exist_ok=True)
-        self.data.id = self.data.id or generate_swarm_id(TaskId, self.id_generator)
+        self.data.id = self.data.id or generate_id(TaskId, self.id_generator)
 
     @property
     def id(self) -> TaskId:
@@ -1224,7 +1032,7 @@ class Task:
                 content=reply,
             ),
             generating_task_id=self.id,
-            id=generate_swarm_id(EventId, self.id_generator),
+            id=generate_id(EventId, self.id_generator),
         )
 
     def add_execution_reply(self, reply: str) -> None:
@@ -2073,7 +1881,7 @@ def change_status(task: Task, new_status: TaskWorkStatus, reason: str) -> Event:
             reason=reason,
         ),
         generating_task_id=task.id,
-        id=generate_swarm_id(EventId, task.id_generator),
+        id=generate_id(EventId, task.id_generator),
     )
     task.work_status = new_status  # MUTATION
     return status_update_event
@@ -2367,7 +2175,7 @@ async def execute_and_validate(task: Task) -> ExecutorReport:
             validation_result=validation_result,
         ),
         generating_task_id=task.id,
-        id=generate_swarm_id(EventId, task.id_generator),
+        id=generate_id(EventId, task.id_generator),
     )
     status_update_event = change_status(task, new_status, reason)  # MUTATION
     report.validation = validation_result  # MUTATION
@@ -2615,7 +2423,7 @@ class Orchestrator:
         return self.blueprint.reasoning
 
     @property
-    def knowledge(self) -> OrchestratorKnowledge | None:
+    def knowledge(self) -> Knowledge | None:
         """Learnings from past tasks."""
         return self.blueprint.knowledge
 
@@ -2875,7 +2683,7 @@ class Orchestrator:
         assert output and len(output) == 1, "Exactly one reasoning output is expected."
         return output[0]
 
-    def generate_knowledge(self) -> OrchestratorKnowledge:
+    def generate_knowledge(self) -> Knowledge:
         """Generate knowledge for the orchestrator."""
         context = self.knowledge_generation_context
         brainstorming = """
@@ -2946,7 +2754,7 @@ class Orchestrator:
         assert (
             other_output and len(other_output) == 1
         ), "Exactly one other output is expected."
-        return OrchestratorKnowledge(
+        return Knowledge(
             executor_learnings=executor_output[0], other_learnings=other_output[0]
         )
 
@@ -3453,7 +3261,7 @@ class Orchestrator:
                 content=message,
             ),
             generating_task_id=subtask.id,
-            id=generate_swarm_id(EventId, self.id_generator),
+            id=generate_id(EventId, self.id_generator),
         )
 
     def send_subtask_message(
@@ -3482,7 +3290,7 @@ class Orchestrator:
                 subtask_id=subtask.id,
             ),
             generating_task_id=self.task.id,
-            id=generate_swarm_id(EventId, self.id_generator),
+            id=generate_id(EventId, self.id_generator),
         )
 
     def unfocus_subtask(self) -> Event:
@@ -3496,7 +3304,7 @@ class Orchestrator:
                 subtask_id=subtask_id,
             ),
             generating_task_id=self.task.id,
-            id=generate_swarm_id(EventId, self.id_generator),
+            id=generate_id(EventId, self.id_generator),
         )
 
     @property
@@ -3567,7 +3375,7 @@ class Orchestrator:
                 validation_result=subtask_validation,
             ),
             generating_task_id=self.task.id,
-            id=generate_swarm_id(EventId, self.id_generator),
+            id=generate_id(EventId, self.id_generator),
         )
         if not subtask_validation.valid:
             return ActionResult(
@@ -3698,7 +3506,7 @@ class Orchestrator:
                 content=message,
             ),
             generating_task_id=self.task.id,
-            id=generate_swarm_id(EventId, self.id_generator),
+            id=generate_id(EventId, self.id_generator),
         )
 
     def to_owner_message(self, message: str) -> Event:
@@ -3710,7 +3518,7 @@ class Orchestrator:
                 content=message,
             ),
             generating_task_id=self.task.id,
-            id=generate_swarm_id(EventId, self.id_generator),
+            id=generate_id(EventId, self.id_generator),
         )
 
     @property
@@ -3865,7 +3673,7 @@ class Orchestrator:
                 reason=f"new information from latest events in {Concept.RECENT_EVENTS_LOG.value}",
             ),
             generating_task_id=self.task.id,
-            id=generate_swarm_id(EventId, self.id_generator),
+            id=generate_id(EventId, self.id_generator),
         )
         followup_event = (
             None
@@ -3876,7 +3684,7 @@ class Orchestrator:
                     content=followup_needed,
                 ),
                 generating_task_id=self.task.id,
-                id=generate_swarm_id(EventId, self.id_generator),
+                id=generate_id(EventId, self.id_generator),
             )
         )
         self.task.description = updated_task_description
@@ -3902,7 +3710,7 @@ class Orchestrator:
                         content=thought,
                     ),
                     generating_task_id=self.task.id,
-                    id=generate_swarm_id(EventId, self.id_generator),
+                    id=generate_id(EventId, self.id_generator),
                 )
             ]
         )
@@ -4475,7 +4283,7 @@ class Delegator:
     @cached_property
     def id(self) -> DelegatorId:
         """Id of the delegator."""
-        return generate_swarm_id(DelegatorId, self.id_generator)
+        return generate_id(DelegatorId, self.id_generator)
 
     def search_blueprints(
         self,
@@ -4671,7 +4479,7 @@ class Delegator:
             knowledge=None,
             recent_events_size=recent_events_size,
             auto_wait=auto_await,
-            id=generate_swarm_id(BlueprintId, self.id_generator),
+            id=generate_id(BlueprintId, self.id_generator),
         )
         return Orchestrator(
             blueprint=blueprint,
@@ -4810,17 +4618,11 @@ class Swarm:
     @property
     def cache_dir(self) -> Path:
         """Directory for the LLM cache."""
-        # if not (cache_dir := self.files_dir / ".cache").exists():
-        #     cache_dir.mkdir(parents=True, exist_ok=True)
-        # return cache_dir
         return make_if_not_exist(self.files_dir / ".cache")
 
     @property
     def executors_dir(self):
         """Directory for executors."""
-        # if not (executors_dir := self.files_dir / "executors").exists():
-        #     executors_dir.mkdir(parents=True, exist_ok=True)
-        # return executors_dir
         return make_if_not_exist(self.files_dir / "executors")
 
     @property
@@ -4919,7 +4721,7 @@ class Swarm:
                     content=message,
                 ),
                 generating_task_id=task.id,
-                id=generate_swarm_id(EventId, self.id_generator),
+                id=generate_id(EventId, self.id_generator),
             )
             task.work_status = TaskWorkStatus.IN_PROGRESS
             task.event_log.add(message_event)

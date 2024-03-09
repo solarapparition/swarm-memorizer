@@ -7,14 +7,13 @@ from colorama import Fore
 from langchain.schema import SystemMessage, AIMessage, HumanMessage
 
 from swarm_memorizer.swarm import (
-    Artifact,
-    ArtifactType,
     TaskDescription,
     dedent_and_strip,
     ExecutorReport,
 )
 from swarm_memorizer.toolkit.models import query_model, precise_model, format_messages
 from swarm_memorizer.toolkit.text import extract_and_unpack
+from swarm_memorizer.artifact import ArtifactType, Artifact
 
 AGENT_COLOR = Fore.GREEN
 
@@ -183,10 +182,6 @@ def run_function_writer(
         output_location = save_artifact(result, output_dir)
         reply = "Function has been successfully written."
         artifacts = [
-            # Artifact(
-            #     location=str(output_location),
-            #     description=f"Python function written for the following task: {task_description}",
-            # )
             Artifact(
                 type=ArtifactType.FILE,
                 description=f"Python function written for the following task: {task_description}",

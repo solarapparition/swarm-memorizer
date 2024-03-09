@@ -7,11 +7,11 @@ import sys
 from colorama import Fore
 from langchain.schema import AIMessage, HumanMessage
 
+from swarm_memorizer.config import PROMPT_COLOR
 from swarm_memorizer.swarm import (
     BotCore,
     TaskDescription,
     ExecutorReport,
-    PROMPT_COLOR,
 )
 from swarm_memorizer.toolkit.script_runner import create_script_runner
 

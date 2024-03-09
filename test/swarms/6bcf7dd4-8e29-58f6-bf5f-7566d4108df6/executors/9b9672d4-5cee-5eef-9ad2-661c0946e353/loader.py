@@ -9,18 +9,18 @@ from colorama import Fore
 from langchain.schema import SystemMessage, AIMessage
 from autogen import AssistantAgent, UserProxyAgent  # type: ignore
 
+from swarm_memorizer.schema import RuntimeId
 from swarm_memorizer.swarm import (
     Blueprint,
     EventLog,
     Task,
     Executor,
-    RuntimeId,
     get_choice,
     dedent_and_strip,
     ExecutorReport,
 )
 from swarm_memorizer.toolkit.models import query_model, precise_model, format_messages
-from swarm_memorizer.config import autogen_config_list
+from swarm_memorizer.config import AUTOGEN_CONFIG_LIST
 
 AGENT_COLOR = Fore.GREEN
 
@@ -136,14 +136,14 @@ class Multiplier:
 
         assistant = AssistantAgent(
             "assistant",
-            llm_config={"config_list": autogen_config_list},
+            llm_config={"config_list": AUTOGEN_CONFIG_LIST},
             system_message=self.role_prompt,
             is_termination_msg=assistant_termination,
         )
         user_proxy = UserProxyAgent(
             "user_proxy",
             code_execution_config={"work_dir": "coding"},
-            llm_config={"config_list": autogen_config_list},
+            llm_config={"config_list": AUTOGEN_CONFIG_LIST},
             human_input_mode="NEVER",
         )
 

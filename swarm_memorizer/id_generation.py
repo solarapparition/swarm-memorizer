@@ -1,8 +1,11 @@
 """Timestamp functionality."""
 
 from datetime import datetime, timezone
+from typing import Callable
 import uuid
 from dataclasses import dataclass, field
+
+from swarm_memorizer.schema import IdTypeT
 
 
 def utc_timestamp() -> str:
@@ -35,3 +38,10 @@ def test_id_generator():
     id_generator1_again = IdGenerator(namespace=fixed_namespace_uuid, seed="2023-12-17")
     uuids1_again = [id_generator1_again() for _ in range(5)]
     assert uuids1 == uuids1_again
+
+
+def generate_id(
+    id_type: type[IdTypeT], id_generator: Callable[[], uuid.UUID]
+) -> IdTypeT:
+    """Generate an ID for an agent."""
+    return id_type(f"{str(id_generator())}")
