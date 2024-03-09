@@ -4487,12 +4487,11 @@ def find_similar_tasks(task: Task, task_pool: Iterable[Task]) -> list[Task]:
 
 
 @lru_cache(maxsize=None)
-def search_task_records(task_info: str, task_records_dir: Path) -> list[TaskData]:
+def search_task_records_in_paths(
+    task_info: str, task_record_files: Sequence[Path]
+) -> list[TaskData]:
     """Search for similar tasks in the task records."""
     start_time = time.time()
-    if not (task_record_files := list(task_records_dir.iterdir())):
-        return []
-
     nodes: list[TextNode] = []
     task_data_list: list[TaskData] = []
     for task_record_file in task_record_files:
@@ -4524,6 +4523,13 @@ def search_task_records(task_info: str, task_records_dir: Path) -> list[TaskData
         # > TODO: need more efficient system to retrieve tasks; probably save `index`
 
     return [task_data for task_data in task_data_list if str(task_data.id) in results]
+
+
+def search_task_records(task_info: str, task_records_dir: Path) -> list[TaskData]:
+    """Search for similar tasks in the task records."""
+    if not (task_record_files := tuple(task_records_dir.iterdir())):
+        return []
+    return search_task_records_in_paths(task_info, task_record_files)
 
 
 def rerank_tasks(task_info: str, similar_tasks: list[TaskData]) -> list[TaskData]:
@@ -5061,27 +5067,14 @@ class Swarm:
         )
 
 
-# > commit
-# add open interpreter bot
+# make sure that cached agent search doesn’t return outdated agent
 # ....
-# > open interpreter bug: not sure why max_tokens gets system tokens deducted twice # .venv/lib/python3.11/site-packages/tokentrim/tokentrim.py
-# > move off of langchain primitives to use litellm
-# > set up open interpreter output directory
-# next_curriculum_task: find the first 100 prime numbers
-# ....
+# > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
 # > retest previous curriculum items
 # > separate out modules
-# > semantic function
-# > make sure that cached agent search doesn’t return outdated agent
-# > soul engine https://github.com/opensouls/soul-engine
-# > bot: openai agent
-# > create aranea-prime swarm and add all existing bots to it
-# > factor out swarm memorizer before mvp
-# bot: generic code-based executor (does not save code) > open interpreter
-# ....
+# > set up open interpreter output directory
+# create entry point to system > python fire
 # > bot: add pure, offline language model assistants > gpt-4 > gemini
-# > create entry point to system > python fire
-# > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
 # bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
 # bot: script writer: update script writer to save output as script runner for that script
 # bot: search agent > exaai > tavily > perplexity
@@ -5090,6 +5083,9 @@ class Swarm:
 # bot: document oracle > embedchain > gemini pro 1.5
 # bot: generalist > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY > open interpreter > self-operating computer
 # ---MVP---
+# > soul engine https://github.com/opensouls/soul-engine
+# > create aranea-prime swarm and add all existing bots to it
+# > move off of langchain primitives to use litellm
 # > main system dynamically populate hierarchical identity tree using memories
 # > bot: alphacodium
 # > bot: chat with github repo
