@@ -2132,96 +2132,6 @@ In your reply, you must include output from _all_ parts of the reasoning process
 """.strip()
 
 
-# def validate_artifact_mentions(
-#     task: Task, report: ExecutorReport  # pylint: disable=unused-argument
-# ) -> ValidationResult:
-#     """Validate that artifacts were reported by the executor."""
-#     context = f"""
-#     ## MISSION:
-#     You are a validator for an AI task executor agent. Your purpose is to check that the executor has provided enough information to locate the output of the results, for futher validation.
-
-#     ## CONCEPTS:
-#     These are the concepts you should be familiar with:
-#     - {Concept.EXECUTOR.value}: the agent that is responsible for executing a task.
-#     - {Concept.MAIN_TASK_OWNER.value}: the agent that owns the task and is responsible for providing information to the executor to help it execute the task.
-#     - {Concept.ARTIFACT.value}: the output of a task, in the form of a file, message, or some other identifying information like a URI. {Concept.ARTIFACT.value}s are often provided as inputs to {Concept.EXECUTOR.value}s, and are generated as outputs by them. The {Concept.EXECUTOR.value} _must_ provide the artifacts for the task to be considered complete.
-#     - {Concept.ARTIFACT.value} LOCATION: the location of the {Concept.ARTIFACT.value}, which can be a file path, URI, or some other identifier. {Concept.EXECUTOR.value}s have full discretion over the {Concept.ARTIFACT.value} LOCATION.
-
-#     ## TASK SPECIFICATION:
-#     Here is the task specification:
-#     ```start_of_task_specification
-#     {{task_description}}
-#     ```end_of_task_specification
-
-#     ## TASK CONVERSATION:
-#     Here is the conversation for the task:
-#     ```start_of_task_conversation
-#     {{task_discussion}}
-#     ```end_of_task_conversation
-#     """
-#     context = dedent_and_strip(context).format(
-#         task_description=task.description,
-#         task_discussion=task.discussion(),
-#     )
-#     request = """
-#     ## REQUEST FOR YOU:
-#     Use the following reasoning process to validate that the executor has given sufficient information to locate the artifacts for the task:
-#     ```start_of_reasoning_steps
-#     1. Review the TASK SPECIFICATION to fully understand the expectations for the task's completion, including the details of what the final ARTIFACT(s) should be, and where and how it should be delivered or made accessible.
-#     2. Examine the TASK CONVERSATION for any communications that reference the delivery or completion of the ARTIFACT(s). Look for specific details such as file names, URIs, timestamps, or any other identifiers that would allow someone to attempt to locate and access the ARTIFACT(s).
-#     3. Cross-reference the information from the TASK CONVERSATION with the criteria outlined in the TASK SPECIFICATION to confirm that the EXECUTOR provided the necessary and correct details about the ARTIFACT(s). It is not necessary for you to actually locate the ARTIFACT(s) yourself.
-#     4. If anything is unclear or incomplete, prepare to request clarification or additional information from the EXECUTOR.
-
-#     You do _not_ need to validate whether the ARTIFACT(s) exists or not, just that the EXECUTOR was specific enough in their communications to allow someone to attempt to locate the ARTIFACT(s).
-#     ```end_of_reasoning_steps
-
-#     In your reply, you must include output from _all_ steps of the reasoning process, in this block format:
-#     ```start_of_reasoning_output
-#     1. {step_1_output}
-#     2. {step_2_output}
-#     3. [... etc.]
-#     ```end_of_reasoning_output
-
-#     After this block, you must output the validation result in this format:
-#     ```start_of_validation_output
-#     comment: |-
-#       {validation_comment}
-#     valid: !!bool |-  # note: must be either `true` or `false`
-#       {validation_result}
-#     artifacts: # note: use [] to indicate no artifacts
-#     - description: "{artifact_1_description}"
-#       location: "{artifact_1_location}"
-#     - description: "{artifact_2_description}"
-#       location: "{artifact_2_location}"
-#     - [... etc.]
-#     ```end_of_validation_output
-#     Any additional comments or thoughts can be added before or after the output blocks.
-#     """
-#     request = dedent_and_strip(request)
-#     messages = [
-#         SystemMessage(content=context),
-#         SystemMessage(content=request),
-#     ]
-#     result = query_model(
-#         model=precise_model,
-#         messages=messages,
-#         preamble=f"Validating artifacts for task {task.id}...\n{format_messages(messages)}",
-#         printout=VERBOSE,
-#         color=AGENT_COLOR,
-#     )
-#     if not (extracted_result := extract_blocks(result, "start_of_validation_output")):
-#         raise ExtractionError("Could not extract validation output from the result.")
-#     validation_output = extracted_result[0]
-#     validation_result = default_yaml.load(validation_output)
-#     artifacts = validation_result["artifacts"]
-#     artifacts = [Artifact(**artifact) for artifact in artifacts] if artifacts else []
-#     return ValidationResult(
-#         valid=validation_result["valid"],
-#         feedback=validation_result["comment"],
-#         # artifacts=artifacts,
-#     )
-
-
 def sanitize_filename(
     description: str, max_length: int = 255, invalid_characters: set[str] | None = None
 ) -> str:
@@ -5177,12 +5087,6 @@ curriculum_test_tasks = [
 ]
 
 
-# async def test_orchestrator() -> None:
-#     """Run an example task that's likely to make use of all orchestrator actions."""
-#     task = "Create an OpenAI assistant agent."
-#     await run_test_task(task)
-
-
 async def test_curriculum_task_1() -> None:
     """Curriculum task 1."""
     task = curriculum_test_tasks[0]
@@ -5210,7 +5114,7 @@ async def test_curriculum_task_4() -> None:
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(test_curriculum_task_2())
+    asyncio.run(test_curriculum_task_4())
 
 
 if __name__ == "__main__":

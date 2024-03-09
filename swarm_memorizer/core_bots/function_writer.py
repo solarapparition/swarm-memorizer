@@ -8,7 +8,7 @@ from langchain.schema import SystemMessage, AIMessage, HumanMessage
 
 from swarm_memorizer.swarm import (
     Artifact,
-    BotReply,
+    ArtifactType,
     TaskDescription,
     dedent_and_strip,
     ExecutorReport,
@@ -174,7 +174,7 @@ def run_function_writer(
     task_description: TaskDescription,
     message_history: Sequence[HumanMessage | AIMessage],
     output_dir: Path,
-) -> BotReply:
+) -> ExecutorReport:
     """Run the function writer."""
     result = generate_script(task_description, message_history)
     task_completed = determine_task_completion(
@@ -184,19 +184,23 @@ def run_function_writer(
         output_location = save_artifact(result, output_dir)
         reply = "Function has been successfully written."
         artifacts = [
+            # Artifact(
+            #     location=str(output_location),
+            #     description=f"Python function written for the following task: {task_description}",
+            # )
             Artifact(
-                location=str(output_location),
+                type=ArtifactType.FILE,
                 description=f"Python function written for the following task: {task_description}",
+                location=str(output_location),
+                must_be_created=False,
+                content=None,
             )
         ]
     else:
         reply = result
         artifacts = []
-    report = ExecutorReport(
+    return ExecutorReport(
         reply=reply,
         task_completed=task_completed,
-    )
-    return BotReply(
-        report=report,
         artifacts=artifacts,
     )
