@@ -18,9 +18,8 @@ from swarm_memorizer.swarm import (
     get_choice,
     dedent_and_strip,
     ExecutorReport,
-    format_messages,
 )
-from swarm_memorizer.toolkit.models import query_model, precise_model
+from swarm_memorizer.toolkit.models import query_model, precise_model, format_messages
 from swarm_memorizer.config import autogen_config_list
 
 AGENT_COLOR = Fore.GREEN

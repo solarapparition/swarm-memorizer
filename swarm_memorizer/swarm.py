@@ -32,12 +32,17 @@ import time
 
 from ruamel.yaml import YAML, YAMLError
 from colorama import Fore
-from langchain.schema import SystemMessage, BaseMessage, AIMessage, HumanMessage
+from langchain.schema import SystemMessage, AIMessage, HumanMessage
 from llama_index import VectorStoreIndex
 from llama_index.schema import TextNode
 
 from .config import configure_langchain_cache
-from .toolkit.models import super_creative_model, precise_model, query_model
+from .toolkit.models import (
+    super_creative_model,
+    precise_model,
+    query_model,
+    format_messages,
+)
 from .toolkit.text import (
     ExtractionError,
     extract_and_unpack,
@@ -49,6 +54,7 @@ from .toolkit.id_generation import (
     utc_timestamp,
     IdGenerator as DefaultIdGenerator,
 )
+from .concept import Concept
 
 BlueprintId = NewType("BlueprintId", str)
 TaskId = NewType("TaskId", str)
@@ -65,40 +71,6 @@ PROMPT_COLOR = Fore.BLUE
 VERBOSE = True
 NONE = "None"
 NoneStr = Literal["None"]
-
-
-class Concept(Enum):
-    """Concepts for swarm agents."""
-
-    MAIN_TASK = "MAIN TASK"
-    MAIN_TASK_OWNER = f"{MAIN_TASK} OWNER"
-    ORCHESTRATOR = "ORCHESTRATOR"
-    ORCHESTRATOR_ACTIONS = f"{ORCHESTRATOR} ACTIONS"
-    EXECUTOR = "EXECUTOR"
-    RECENT_EVENTS_LOG = "RECENT EVENTS LOG"
-    ORCHESTRATOR_INFORMATION_SECTIONS = "ORCHESTRATOR INFORMATION SECTIONS"
-    SUBTASK = "SUBTASK"
-    SUBTASK_STATUS = f"{SUBTASK} STATUS"
-    SUBTASK_EXECUTOR = f"{SUBTASK} {EXECUTOR}"
-    FOCUSED_SUBTASK = f"FOCUSED {SUBTASK}"
-    FOCUSED_SUBTASK_DISCUSSION_LOG = f"{FOCUSED_SUBTASK} DISCUSSION LOG"
-    MAIN_TASK_DESCRIPTION = f"{MAIN_TASK} DESCRIPTION"
-    MAIN_TASK_INFORMATION = f"{MAIN_TASK} INFORMATION"
-    MAIN_TASK_DEFINITION_OF_DONE = f"{MAIN_TASK} DEFINITION OF DONE"
-    TASK_MESSAGES = "TASK MESSAGES"
-    LAST_READ_MAIN_TASK_OWNER_MESSAGE = f"LAST READ {MAIN_TASK_OWNER} MESSAGE"
-    OBJECTIVE_POV = "OBJECTIVE POV"
-    ARTIFACT = "ARTIFACT"
-    CONTEXT = "CONTEXT"
-    DELEGATOR = "DELEGATOR"
-    DELEGATOR_INFORMATION_SECTIONS = "DELEGATOR INFORMATION SECTIONS"
-
-
-def format_messages(messages: Sequence[BaseMessage]) -> str:
-    """Format LangChain messages into something printable."""
-    return "\n\n---\n\n".join(
-        [f"[{message.type.upper()}]:\n\n{message.content}" for message in messages]  # type: ignore
-    )
 
 
 def generate_swarm_id(
@@ -323,23 +295,6 @@ class BotBlueprint:
             description=data["description"],
             id=BlueprintId(data["id"]),
         )
-
-        # blueprint_id = BlueprintId(data["id"])
-        # reports_completion = data.get("reports_completion")
-        # assert (
-        #     reports_completion is not None
-        # ), f"Please provide a value for reports_completion for blueprint {blueprint_id}."
-        # reports_artifacts = data.get("reports_artifacts")
-        # assert (
-        #     reports_artifacts is not None
-        # ), f"Please provide a value for reports_artifacts for blueprint {blueprint_id}."
-        # return cls(
-        #     name=data["name"],
-        #     description=data["description"],
-        #     id=blueprint_id,
-        #     reports_completion=reports_completion or False,
-        #     reports_artifacts=reports_artifacts or False,
-        # )
 
 
 Blueprint = BotBlueprint | OrchestratorBlueprint
@@ -4978,10 +4933,10 @@ class Swarm:
         )
 
 
-# retest previous curriculum items
+# separate out modules
 # ....
 # > convert swarm's run into execute() # only single swarm is meant to be instantiated at once
-# separate out modules
+# > retest
 # set up open interpreter output directory
 # create entry point to system > python fire
 # > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks

@@ -12,9 +12,8 @@ from swarm_memorizer.swarm import (
     TaskDescription,
     dedent_and_strip,
     ExecutorReport,
-    format_messages,
 )
-from swarm_memorizer.toolkit.models import query_model, precise_model
+from swarm_memorizer.toolkit.models import query_model, precise_model, format_messages
 from swarm_memorizer.toolkit.text import extract_and_unpack
 
 AGENT_COLOR = Fore.GREEN

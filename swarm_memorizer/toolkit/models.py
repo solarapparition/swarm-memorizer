@@ -29,3 +29,10 @@ def query_model(
     if printout:
         print(f"{color}{result}{Fore.RESET}")
     return result
+
+
+def format_messages(messages: Sequence[BaseMessage]) -> str:
+    """Format model messages into something printable."""
+    return "\n\n---\n\n".join(
+        [f"[{message.type.upper()}]:\n\n{message.content}" for message in messages]  # type: ignore
+    )
