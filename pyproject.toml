@@ -16,6 +16,7 @@ openai = "^1.6.1"
 pyautogen = { git = "https://github.com/microsoft/autogen.git" }
 llama-index = "^0.9.32"
 open-interpreter = "^0.2.0"
+pexpect = "^4.9.0"
 
 [tool.poetry.group.dev.dependencies]
 pylint = "^3.0.3"

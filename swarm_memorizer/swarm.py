@@ -60,7 +60,7 @@ IdGenerator = Callable[[], UUID]
 IdTypeT = TypeVar("IdTypeT", BlueprintId, TaskId, EventId, DelegatorId)
 ConversationHistory = Sequence[HumanMessage | AIMessage]
 
-AGENT_COLOR = Fore.MAGENTA
+SWARM_COLOR = Fore.MAGENTA
 VERBOSE = True
 NONE = "None"
 NoneStr = Literal["None"]
@@ -137,7 +137,7 @@ class ArtifactValidationError(Exception):
 
     message: ArtifactValidationMessage
     """Message for the error."""
-    field_values: dict[str, Any]
+    artifact: "Artifact"
     """Field values for the artifact that generated the validation error."""
 
 
@@ -188,7 +188,7 @@ class Artifact:
                 assert self.location, ArtifactValidationMessage.MISSING_LOCATION
         except AssertionError as error:
             raise ArtifactValidationError(
-                message=error.args[0], field_values=asdict(self)
+                message=error.args[0], artifact=self
             ) from error
         return True
 
@@ -1447,7 +1447,7 @@ def query_and_extract_reasoning(
             model=super_creative_model,
             messages=messages,
             preamble=preamble,
-            color=AGENT_COLOR,
+            color=SWARM_COLOR,
             printout=printout,
         )
     else:
@@ -2372,14 +2372,14 @@ def generate_artifact(task: Task, bot_reply: Any) -> Artifact:
         - Determine the value of the `description` field. For TYPE B, the `description` is a concise summary of what's in the {ARTIFACT}.
         - Determine the value of the `must_be_created` field, by checking the TASK CONVERSATION to understand if the file for the {ARTIFACT} is supposed to already have been created. If it has, set the `must_be_created` field to `false`; otherwise, set it to `true`.
         - Determine the value of the `content` field. If `must_be_created` is `true`, then this would be the full output required by the task. Otherwise, the value would be the empty string.
-        - Determine the value of the `location` field, by checking whether the TASK CONVERSATION contains a precise file name for the {ARTIFACT}. If it does, then the `location` field to the full path to the file; otherwise, set it to `null`.
+        - Determine the value of the `location` field, by checking whether the TASK CONVERSATION contains a full path for the {ARTIFACT}. If it does, then the `location` field to the full path to the file; otherwise, set it to `null`.
       case_C:
         description: the {ARTIFACT} TYPE is C, a remote resource {ARTIFACT}.
         required_info: TYPE C {ARTIFACT}s require gathering info in the `description`, and `location` fields. The other fields are preset for this type.
         steps:
         - Reproduce the YAML spec format for the {ARTIFACT} TYPE as a reminder of what it should be.
         - Determine the value of the `description` field. For TYPE C, the `description` is a concise description of what's in the {ARTIFACT}.
-        - Determine the value of the `location` field, by checking whether the TASK CONVERSATION contains a precise URI for the {ARTIFACT}. If it does, then the `location` field to the full URI; otherwise, set it to `null`.
+        - Determine the value of the `location` field, by checking whether the TASK CONVERSATION contains a full URI for the {ARTIFACT}. If it does, then the `location` field to the full URI; otherwise, set it to `null`.
     """
     reasoning_process = dedent_and_strip(reasoning_process).format(
         ARTIFACT=Concept.ARTIFACT.value,
@@ -2422,7 +2422,7 @@ def generate_artifact(task: Task, bot_reply: Any) -> Artifact:
         messages=messages,
         preamble=f"Generating artifact specifications for task {task.id}...\n{format_messages(messages)}",
         printout=VERBOSE,
-        color=AGENT_COLOR,
+        color=SWARM_COLOR,
     )
     artifact_spec = extract_and_unpack(
         result, "start_of_artifact_spec_output", "end_of_artifact_spec_output"
@@ -2546,7 +2546,7 @@ def generate_agent_description(task_information: str) -> str:
         messages=messages,
         preamble=f"Generating agent description from task description...\n{format_messages(messages)}",
         printout=VERBOSE,
-        color=AGENT_COLOR,
+        color=SWARM_COLOR,
     )
     output = extract_blocks(output, "start_of_agent_description_output")
     assert (
@@ -2655,7 +2655,7 @@ def decide_acceptance(task: Task, executor: Executor) -> bool:
         messages=messages,
         preamble=f"Deciding whether to accept new task...\n{format_messages(messages)}",
         printout=VERBOSE,
-        color=AGENT_COLOR,
+        color=SWARM_COLOR,
     )
     output = extract_blocks(output, "start_of_prediction_output")
     assert output and len(output) == 1, "Exactly one prediction output is expected."
@@ -3000,7 +3000,7 @@ class Orchestrator:
             model=super_creative_model,
             messages=messages,
             preamble=f"Brainstorming knowledge from completion of {self.name}...\n{format_messages(messages)}",
-            color=AGENT_COLOR,
+            color=SWARM_COLOR,
             printout=VERBOSE,
         )
         output = extract_blocks(output, "start_of_reasoning_output")
@@ -3065,7 +3065,7 @@ class Orchestrator:
             messages=messages,
             preamble=f"Generating knowledge from completion of {self.name}...\n{format_messages(messages)}",
             printout=VERBOSE,
-            color=AGENT_COLOR,
+            color=SWARM_COLOR,
         )
         # output = extract_blocks(output, "start_of_learnings_output")
         # assert output and len(output) == 1, "Exactly one learning output is expected."
@@ -3399,7 +3399,7 @@ class Orchestrator:
             model=precise_model,
             messages=messages,
             preamble=f"Choosing next action...\n{format_messages(messages)}",
-            color=AGENT_COLOR,
+            color=SWARM_COLOR,
         )
         if not (
             extracted_result := extract_blocks(
@@ -3665,7 +3665,7 @@ class Orchestrator:
             model=precise_model,
             messages=messages,
             preamble=f"Extracting subtask...\n{format_messages(messages)}",
-            color=AGENT_COLOR,
+            color=SWARM_COLOR,
         )
         extracted_results = extract_blocks(
             new_subtask, "start_of_subtask_identification_output"
@@ -3951,7 +3951,7 @@ class Orchestrator:
             model=precise_model,
             messages=messages,
             preamble=f"Updating main task description...\n{format_messages(messages)}",
-            color=AGENT_COLOR,
+            color=SWARM_COLOR,
         )
         extracted_result = extract_blocks(result, "start_of_main_task_info")
         if not extracted_result:
@@ -4115,14 +4115,6 @@ class Reply:
         """Continue the conversation with a message."""
         assert self.continue_func is not None
         return await self.continue_func(message)
-
-
-# @dataclass
-# class BotReply:
-#     """Required reply format from bot runners."""
-
-#     report: ExecutorReport
-#     artifacts: list[Artifact]
 
 
 class BotRunner(Protocol):
@@ -4338,7 +4330,7 @@ class Bot:
             messages=messages,
             printout=True,
             preamble=f"Checking bot completion status...\n{format_messages(messages)}",
-            color=AGENT_COLOR,
+            color=SWARM_COLOR,
         )
         extracted = extract_and_unpack(
             result, "start_of_in_progress_status", "end_of_in_progress_status"
@@ -4762,7 +4754,7 @@ class Delegator:
             messages=messages,
             preamble=f"Selecting executor for task...\n{format_messages(messages)}",
             printout=VERBOSE,
-            color=AGENT_COLOR,
+            color=SWARM_COLOR,
         )
         if not (extracted_result := extract_blocks(result, "start_of_executor_choice")):
             raise ExtractionError("Could not extract executor choice from the result.")
@@ -5069,10 +5061,12 @@ class Swarm:
         )
 
 
-# ....
-# > need to figure out whether there are cases where orchestrator will ask to create an artifact that is not actually possible for som bot to create
+# > commit
 # add open interpreter bot
 # ....
+# > open interpreter bug: not sure why max_tokens gets system tokens deducted twice # .venv/lib/python3.11/site-packages/tokentrim/tokentrim.py
+# > move off of langchain primitives to use litellm
+# > set up open interpreter output directory
 # next_curriculum_task: find the first 100 prime numbers
 # ....
 # > retest previous curriculum items
@@ -5173,7 +5167,7 @@ curriculum_test_tasks = [
     "Write 'Hello, World!' to a file.",
     "Calculate 3 + 4 * 5.",
     "Create a mock timestamp generator that advances by 1 second each time it is called.",
-    "Find the first 100 prime numbers.",
+    "Find the first 10 prime numbers.",
     # "Create a mock timestamp generator that advances by 1 second each time it is called, and run it 5 times.",
     # > basic coding task case: 20 lines or less of base python > coding bot will be equipped with function it wrote
     # > basic search task case: search for basic info about a concept
