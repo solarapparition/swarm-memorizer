@@ -8,12 +8,10 @@ from colorama import Fore
 from langchain.schema import AIMessage, HumanMessage
 
 from swarm_memorizer.config import PROMPT_COLOR
-from swarm_memorizer.swarm import (
-    BotCore,
-    TaskDescription,
-    ExecutorReport,
-)
 from swarm_memorizer.toolkit.script_runner import create_script_runner
+from swarm_memorizer.task import ExecutionReport
+from swarm_memorizer.task_data import TaskDescription
+from swarm_memorizer.bot import BotCore
 
 AGENT_COLOR = Fore.GREEN
 
@@ -38,13 +36,13 @@ def run_open_interpreter(
     message_history: Sequence[HumanMessage | AIMessage],
     output_dir: Path,
     send_message: Callable[[str], str],
-) -> ExecutorReport:
+) -> ExecutionReport:
     """Run Open Interpreter."""
     message = create_message(task_description, message_history)
     print(f"{PROMPT_COLOR}{message}{Fore.RESET}")
     reply = send_message(message)
     print(f"{AGENT_COLOR}{reply}{Fore.RESET}")
-    return ExecutorReport(reply)
+    return ExecutionReport(reply)
 
 
 def create_message_sender() -> Callable[[str], str]:
@@ -68,7 +66,7 @@ def load_bot(*_) -> BotCore:
         task_description: TaskDescription,
         message_history: Sequence[HumanMessage | AIMessage],
         output_dir: Path,
-    ) -> ExecutorReport:
+    ) -> ExecutionReport:
         return run_open_interpreter(
             task_description=task_description,
             message_history=message_history,

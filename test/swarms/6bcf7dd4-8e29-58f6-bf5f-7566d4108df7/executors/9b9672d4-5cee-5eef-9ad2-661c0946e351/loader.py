@@ -9,22 +9,16 @@ from colorama import Fore
 from langchain.schema import SystemMessage, AIMessage
 from autogen import AssistantAgent, UserProxyAgent  # type: ignore
 
+from swarm_memorizer.event import EventLog
 from swarm_memorizer.schema import RuntimeId
-from swarm_memorizer.swarm import (
-    Blueprint,
-    EventLog,
-    Task,
-    Executor,
-    get_choice,
-    dedent_and_strip,
-    ExecutorReport,
-)
-from swarm_memorizer.toolkit.models import query_model, precise_model, format_messages
+from swarm_memorizer.toolkit.models import query_model, PRECISE_MODEL, format_messages
 from swarm_memorizer.config import AUTOGEN_CONFIG_LIST
+from swarm_memorizer.task import ExecutionReport, Executor, Task
+from swarm_memorizer.toolkit.text import dedent_and_strip
+from swarm_memorizer.toolkit.advisor import get_choice
+from swarm_memorizer.blueprint import BotBlueprint as Blueprint
 
 AGENT_COLOR = Fore.GREEN
-
-
 OaiMessage = Annotated[dict[str, str], "OpenAI message"]
 
 
@@ -38,7 +32,7 @@ class AcceptAdvisor:
         """Get advice about whether to accept the task or not."""
         self.messages.append(SystemMessage(content=prompt))
         result = query_model(
-            model=precise_model,
+            model=PRECISE_MODEL,
             messages=self.messages,
             preamble=format_messages(self.messages),
             color=AGENT_COLOR,
@@ -126,7 +120,7 @@ class TextWriter:
     def save_blueprint(self) -> None:
         """Not implemented."""
 
-    async def execute(self) -> ExecutorReport:
+    async def execute(self) -> ExecutionReport:
         """Execute the subtask. Adds a message to the task's event log if provided, and adds own message to the event log at the end of execution."""
 
         def assistant_termination(message: OaiMessage) -> bool:
@@ -212,7 +206,7 @@ class TextWriter:
         reply = str(user_proxy.last_message()["content"])
         successful = json.loads(reply)["successful"]
         self.task.event_log.add(self.task.execution_reply_message(reply=reply))
-        return ExecutorReport(reply=reply, task_completed=successful)
+        return ExecutionReport(reply=reply, task_completed=successful)
 
 
 def load_bot(blueprint: Blueprint, task: Task, files_dir: Path) -> Executor:

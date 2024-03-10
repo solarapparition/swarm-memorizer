@@ -7,13 +7,14 @@ from colorama import Fore
 from langchain.schema import SystemMessage, AIMessage, HumanMessage
 
 from swarm_memorizer.swarm import (
-    TaskDescription,
     dedent_and_strip,
-    ExecutorReport,
 )
-from swarm_memorizer.toolkit.models import query_model, precise_model, format_messages
+from swarm_memorizer.toolkit.models import query_model, PRECISE_MODEL, format_messages
 from swarm_memorizer.toolkit.text import extract_and_unpack
-from swarm_memorizer.artifact import ArtifactType, Artifact
+from swarm_memorizer.schema import ArtifactType
+from swarm_memorizer.artifact import Artifact
+from swarm_memorizer.task import ExecutionReport
+from swarm_memorizer.task_data import TaskDescription
 
 AGENT_COLOR = Fore.GREEN
 
@@ -106,7 +107,7 @@ def generate_script(
         SystemMessage(content=request),
     ]
     result = query_model(
-        model=precise_model,
+        model=PRECISE_MODEL,
         messages=messages,
         preamble=f"Running Script Writer...\n{format_messages(messages)}",
         printout=True,
@@ -143,7 +144,7 @@ def determine_task_completion(
         SystemMessage(content=request),
     ]
     result = query_model(
-        model=precise_model,
+        model=PRECISE_MODEL,
         messages=messages,
         preamble=f"Checking task completion...\n{format_messages(messages)}",
         printout=True,
@@ -172,7 +173,7 @@ def run_function_writer(
     task_description: TaskDescription,
     message_history: Sequence[HumanMessage | AIMessage],
     output_dir: Path,
-) -> ExecutorReport:
+) -> ExecutionReport:
     """Run the function writer."""
     result = generate_script(task_description, message_history)
     task_completed = determine_task_completion(
@@ -193,7 +194,7 @@ def run_function_writer(
     else:
         reply = result
         artifacts = []
-    return ExecutorReport(
+    return ExecutionReport(
         reply=reply,
         task_completed=task_completed,
         artifacts=artifacts,

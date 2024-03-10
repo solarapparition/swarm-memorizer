@@ -1,0 +1,253 @@
+"""Bot functionality for the swarm."""
+
+from dataclasses import dataclass
+import importlib.util
+from pathlib import Path
+import sys
+from typing import Protocol, Self
+
+from langchain.schema import AIMessage, HumanMessage, SystemMessage
+from swarm_memorizer.artifact import artifacts_printout
+
+from swarm_memorizer.blueprint import BotBlueprint
+from swarm_memorizer.config import SWARM_COLOR
+from swarm_memorizer.acceptance import Acceptor, decide_acceptance
+from swarm_memorizer.event import Event, Message
+from swarm_memorizer.task import ExecutionReport, Executor, Task
+from swarm_memorizer.schema import ConversationHistory, RuntimeId
+from swarm_memorizer.task_data import TaskDescription
+from swarm_memorizer.toolkit.files import make_if_not_exist
+from swarm_memorizer.toolkit.models import PRECISE_MODEL, format_messages, query_model
+from swarm_memorizer.toolkit.text import dedent_and_strip, extract_and_unpack
+from swarm_memorizer.toolkit.yaml_tools import DEFAULT_YAML
+
+
+class BotRunner(Protocol):
+    """Core of a bot."""
+
+    def __call__(
+        self,
+        task_description: TaskDescription,
+        message_history: ConversationHistory,
+        output_dir: Path,
+    ) -> ExecutionReport:
+        """Reply to a message."""
+        raise NotImplementedError
+
+
+BotCore = tuple[BotRunner, Acceptor | None]
+
+
+class BotCoreLoader(Protocol):
+    """A loader of the core of a bot."""
+
+    def __call__(
+        self, blueprint: BotBlueprint, task: Task, files_dir: Path
+    ) -> BotCore | Executor:
+        """Load the core of a bot."""
+        raise NotImplementedError
+
+
+def extract_bot_core_loader(loader_location: Path) -> BotCoreLoader:
+    """Extract a bot loader from a loader file."""
+    assert loader_location.exists(), f"Loader not found: {loader_location}"
+    module_name = loader_location.stem
+    spec = importlib.util.spec_from_file_location(module_name, loader_location)
+    assert spec and spec.loader, f"Could not load loader: {loader_location}"
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    assert hasattr(module, "load_bot"), "'load_bot' not found in the module"
+    return getattr(module, "load_bot")
+
+
+@dataclass(frozen=True)
+class Bot:
+    """Bot wrapper around a runner."""
+
+    blueprint: BotBlueprint
+    task: Task
+    files_parent_dir: Path
+    runner: BotRunner
+    acceptor: Acceptor = decide_acceptance
+
+    @classmethod
+    def from_core(
+        cls,
+        blueprint: BotBlueprint,
+        task: Task,
+        files_parent_dir: Path,
+        core: BotCore,
+    ) -> Self:
+        """Create a bot from a core."""
+        assert not isinstance(core, Executor)
+        runner, acceptor = core
+        if not acceptor:
+            return cls(blueprint, task, files_parent_dir, runner)
+        return cls(blueprint, task, files_parent_dir, runner, acceptor)
+
+    @property
+    def id(self) -> RuntimeId:
+        """Runtime id of the bot."""
+        return RuntimeId(f"{self.blueprint.id}_{self.task.id}")
+
+    @property
+    def rank(self) -> int:
+        """Rank of the bot."""
+        return 0
+
+    def accepts(self, task: Task) -> bool:
+        """Decides whether the bot accepts a task."""
+        return self.acceptor(task, self)
+
+    def save_blueprint(self) -> None:
+        """Bots have pre-configured blueprints so this does nothing."""
+        return
+
+    @property
+    def message_history(self) -> ConversationHistory:
+        """Messages from the discussion log."""
+        task_messages = self.task.event_log.messages
+
+        def to_bot_message(event: Event) -> HumanMessage | AIMessage:
+            """Convert an event to a message."""
+            assert isinstance(event.data, Message)
+            assert event.data.sender in {self.id, self.task.owner_id}
+            message_constructor = (
+                AIMessage if event.data.sender == self.id else HumanMessage
+            )
+            return message_constructor(content=event.data.content)
+
+        message_history = [to_bot_message(event) for event in task_messages]
+        if message_history:
+            assert isinstance(
+                message_history[-1], HumanMessage
+            ), "Last message must be from the task owner"
+        return message_history
+
+    @property
+    def formatted_message_history(self) -> str | None:
+        """Formatted message history."""
+
+        def sender(message: AIMessage | HumanMessage) -> str:
+            """Sender of the message."""
+            return "You" if isinstance(message, AIMessage) else "Task Owner"
+
+        return (
+            "\n".join(
+                f"{sender(message)}: {message.content}"  # type: ignore
+                for message in self.message_history
+            )
+            or None
+        )
+
+    @property
+    def files_dir(self) -> Path:
+        """Directory for the bot."""
+        return make_if_not_exist(
+            self.files_parent_dir / self.blueprint.id / self.task.id
+        )
+
+    @property
+    def output_dir(self) -> Path:
+        """Output directory for the bot."""
+        return make_if_not_exist(self.files_dir / "output")
+
+    @staticmethod
+    def format_reply_message(report: ExecutionReport) -> str:
+        """Format the reply message."""
+        reply_message_with_artifacts = """
+        {reply}
+
+        Artifacts:
+        {artifacts}
+        """
+        return (
+            dedent_and_strip(reply_message_with_artifacts).format(
+                reply=report.reply,
+                artifacts=artifacts_printout(report.artifacts),
+            )
+            if report.artifacts
+            else report.reply
+        )
+
+    def task_messages(self, report: ExecutionReport) -> str:
+        """Get the task messages. Assume that `bot_reply` hasn't been added to the task's messages yet."""
+        reply = f"You: {report.reply}"
+        return "\n".join(
+            [self.formatted_message_history, reply]
+            if self.formatted_message_history
+            else [reply]
+        )
+
+    def generate_completion_status(self, report: ExecutionReport) -> bool:
+        """Examine whether the bot has completed the task."""
+        if report.artifacts:
+            return True
+
+        context = """
+        # MISSION:
+        You are an executor for a task, and you are checking whether you are still in the middle of executing a task or not.
+
+        ## TASK INFORMATION:
+        Here is the information about the task:
+        ```start_of_task_info
+        {task_information}
+        ```end_of_task_info
+
+        ## TASK MESSAGES:
+        Here are the messages with the task owner:
+        ```start_of_task_messages
+        {task_messages}
+        ```end_of_task_messages
+        """
+        context = dedent_and_strip(context).format(
+            task_information=self.task.description,
+            task_messages=self.task_messages(report),
+        )
+        request = """
+        ## REQUEST FOR YOU:
+        Based on the information above, determine if you are still in the midst of executing the task or not. Post your output in the following format:
+
+        ```start_of_in_progress_status
+        comment: |-
+          {{comment}}
+        in_progress: !!bool |-
+          {{in_progress}}
+        ```end_of_in_progress_status
+        {{in_progress}} must be either `true` or `false`.
+        """
+        request = dedent_and_strip(request)
+        messages = [
+            SystemMessage(content=context),
+            SystemMessage(content=request),
+        ]
+        result = query_model(
+            model=PRECISE_MODEL,
+            messages=messages,
+            printout=True,
+            preamble=f"Checking bot completion status...\n{format_messages(messages)}",
+            color=SWARM_COLOR,
+        )
+        extracted = extract_and_unpack(
+            result, "start_of_in_progress_status", "end_of_in_progress_status"
+        )
+        extracted = DEFAULT_YAML.load(extracted)
+        in_progress = extracted["in_progress"]
+        assert isinstance(
+            in_progress, bool
+        ), f"Expected bool for `in_progress`, got: {in_progress}"
+        return not in_progress
+
+    async def execute(self) -> ExecutionReport:
+        """Execute the task. Adds own message to the event log at the end of execution."""
+        report = self.runner(
+            self.task.description, self.message_history, output_dir=self.output_dir
+        )
+        report.task_completed = (
+            report.task_completed
+            if isinstance(report.task_completed, bool)
+            else self.generate_completion_status(report)
+        )
+        self.task.add_execution_reply(self.format_reply_message(report))
+        return report
