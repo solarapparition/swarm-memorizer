@@ -197,8 +197,8 @@ class Swarm:
         )
 
 
-# retest curriculum tasks
 # ....
+# set cwd in open interpreter bot
 # convert swarm's run into execute() # only single swarm is meant to be instantiated at once
 # create entry point to system > python fire
 # > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
@@ -211,7 +211,6 @@ class Swarm:
 # bot: document oracle > embedchain > gemini pro 1.5
 # bot: generalist > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY > open interpreter > self-operating computer
 # ---MVP---
-# > set up open interpreter output directory
 # > soul engine https://github.com/opensouls/soul-engine
 # > create aranea-prime swarm and add all existing bots to it
 # > move off of langchain primitives to use litellm
@@ -332,7 +331,7 @@ async def test_curriculum_task_4() -> None:
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(test_curriculum_task_4())
+    asyncio.run(test_curriculum_task_3())
 
 
 if __name__ == "__main__":

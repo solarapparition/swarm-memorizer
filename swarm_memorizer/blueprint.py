@@ -124,10 +124,13 @@ def load_blueprints(executors_dir: Path) -> Iterable[Blueprint]:
         for executor_dir in executors_dir.iterdir()
         if executor_dir.is_dir()
     )
-    return (load_blueprint(executor_dir / "blueprint.yaml") for executor_dir in dirs)
+    return (
+        load_blueprint(path)
+        for executor_dir in dirs
+        if (path := executor_dir / "blueprint.yaml").exists()
+    )
 
 
 def is_bot(blueprint: Blueprint) -> bool:
     """Check if a blueprint is a bot."""
     return blueprint.rank == 0
-
