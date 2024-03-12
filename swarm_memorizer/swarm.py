@@ -51,7 +51,7 @@ class Reply:
 class Swarm:
     """Main interfacing class for the swarm."""
 
-    files_dir: Path = Path("core-swarm")
+    files_dir: Path = Path("core_swarm")
     """Directory for files related to the swarm."""
     validator: WorkValidator = field(
         default_factory=lambda: Human(name="Human Validator")
@@ -193,9 +193,7 @@ class Swarm:
         )
 
 
-# commit
 # ....
-# create core-swarm and add all core bots to it # add gitignore for others in core directory
 # convert swarm's run into execute() # only single swarm is meant to be instantiated at once > after task is complete, lock further execution attempts
 # create entry point to system > python fire
 # > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
