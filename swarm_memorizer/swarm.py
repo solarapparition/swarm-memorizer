@@ -13,9 +13,7 @@ from pathlib import Path
 from uuid import UUID
 
 from .config import configure_langchain_cache
-from .toolkit.text import (
-    dedent_and_strip
-)
+from .toolkit.text import dedent_and_strip
 from .id_generation import IdGenerator as DefaultIdGenerator, generate_id
 from .event import (
     Message,
@@ -23,9 +21,7 @@ from .event import (
 )
 from .human import Human
 from .task_data import TaskDescription, TaskData
-from .task import (
-    Task
-)
+from .task import Task
 from .toolkit.files import make_if_not_exist
 from .schema import (
     EventId,
@@ -51,12 +47,12 @@ class Reply:
         return await self.continue_func(message)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Swarm:
     """Main interfacing class for the swarm."""
 
-    files_dir: Path = Path(".data")
-    """Directory for files related to the agent and any subagents."""
+    files_dir: Path = Path("core-swarm")
+    """Directory for files related to the swarm."""
     validator: WorkValidator = field(
         default_factory=lambda: Human(name="Human Validator")
     )
@@ -64,7 +60,7 @@ class Swarm:
     recent_events_size: int = 15
     """Number of recent events to display in orchestrators' event logs."""
     auto_wait: bool = True
-    """Whether orchestrators will automatically wait for their executors. If disabled, orchestrators may perform other actions while an executor works on a task."""
+    """Whether orchestrators will automatically wait for their executors. If disabled, orchestrators may perform other actions in parallel while an executor works on a subtask."""
     task_search_rerank_threshold: int = 100
     """When searching for similar past tasks, run a reranker if there are more than this many tasks."""
     id_generator: IdGenerator = field(default_factory=DefaultIdGenerator)
@@ -197,22 +193,22 @@ class Swarm:
         )
 
 
+# commit
 # ....
-# set cwd in open interpreter bot
-# convert swarm's run into execute() # only single swarm is meant to be instantiated at once
+# create core-swarm and add all core bots to it # add gitignore for others in core directory
+# convert swarm's run into execute() # only single swarm is meant to be instantiated at once > after task is complete, lock further execution attempts
 # create entry point to system > python fire
 # > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
-# > bot: add pure, offline language model assistants > gpt-4 > gemini
-# bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
-# bot: script writer: update script writer to save output as script runner for that script
+# bot: add pure, offline language frontier model assistants # really bad at math > gpt-4 > gemini > claude
 # bot: search agent > exaai > tavily > perplexity
-# bot: api conversion bot # given an api page, convert to a bot for the api > bot creation: try generating command external agent interface using python fire lib
-# > bot: web browser > webvoyager > autogen web surfer agent
-# bot: document oracle > embedchain > gemini pro 1.5
-# bot: generalist > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY > open interpreter > self-operating computer
+# bot: document chat > embedchain > gemini pro 1.5
+# > bot: script writer: update script writer to save output as script runner for that script
+# bot: web browser > webvoyager > autogen web surfer agent
+# bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
 # ---MVP---
+# > bot: generalist agents > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY > self-operating computer
+# > bot: api conversion bot # given an api page, convert to a bot for the api > bot creation: try generating command external agent interface using python fire lib
 # > soul engine https://github.com/opensouls/soul-engine
-# > create aranea-prime swarm and add all existing bots to it
 # > move off of langchain primitives to use litellm
 # > main system dynamically populate hierarchical identity tree using memories
 # > bot: alphacodium
@@ -236,22 +232,6 @@ class Swarm:
 # > incorporate bot generation via autogen's builder
 # > bot: amazon mturk
 # turn printout into configurable parameter for swarm
-# > thoughtstream: valence: determines how strongly a node persists; decays slowly until reset; determined by multiplication of connection strength along chain
-# > thoughtstream: low valence thoughts get replaced first# > thoughtstream: thoughtstream: build context by chaining associations of current signal to previously generated thoughts
-# > thoughtstream: new thoughts recall previous thoughts; recency resets whenever recall is done; thoughts recalled together build strength if senses something good happen
-# > thoughtstream: new sensory info don’t immediately override all thoughts, just introduces new associations
-# > thoughtstream: associations decay naturally
-# > thoughtstream: has senses
-# > thoughtstream: has clock speed; can wait
-# > thoughtstream: can delete thoughts memories
-# > thoughtstream: generates the next thought, action
-# > thoughtstream: can have human provide description initially
-# > thoughtstream: has both remote, indirect senses, and direct senses
-# > thoughtstream: has “body” that translates commands
-# > thoughtstream: also has “knowledge” or “procedure”
-# > thoughtstream: curious and want to create things
-# > thoughtstream: help
-# > thoughtstream: thoughtstream # like a reverse swarm, bottom up
 
 
 TEST_DIR = Path(".data/test/agents")
@@ -331,7 +311,7 @@ async def test_curriculum_task_4() -> None:
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(test_curriculum_task_3())
+    asyncio.run(test_curriculum_task_4())
 
 
 if __name__ == "__main__":

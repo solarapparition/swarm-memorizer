@@ -11,15 +11,18 @@ def create_script_runner(
     input_pattern: str,
     output_pattern: str | None = None,
     interpreter: Path = Path("python"),
+    cwd: Path = Path("."),
 ) -> Callable[[str], str]:
     """
     Run an interactive Python script. Returns a function to send further messages.
 
     Args:
+    - script: The path to the script to run.
     - input_pattern: The pattern the script will output to indicate it's ready for input.
     - output_pattern: The pattern the script uses to indicate the start of its output. By default, uses the input message itself (this assumes that the input message is printed out).
+    - interpreter: The Python interpreter to use. Defaults to "python".
     """
-    child = pexpect.spawn(f"{interpreter} {script}", encoding="utf-8")
+    child = pexpect.spawn(f"{interpreter} {script}", cwd=str(cwd), encoding="utf-8")
 
     def send_message(message: str) -> str:
         """Send a message to interactive script and return the reply."""

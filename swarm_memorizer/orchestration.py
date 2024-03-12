@@ -17,6 +17,7 @@ from swarm_memorizer.blueprint import Knowledge, OrchestratorBlueprint, Reasonin
 from swarm_memorizer.config import SWARM_COLOR, VERBOSE
 from swarm_memorizer.acceptance import decide_acceptance
 from swarm_memorizer.delegation import (
+    Delegator,
     generate_executor_selection_reasoning
 )
 from swarm_memorizer.description import generate_agent_description
@@ -636,7 +637,7 @@ class Orchestrator:
     blueprint: OrchestratorBlueprint
     task: Task
     files_parent_dir: Path
-    delegator: "Delegator"
+    delegator: Delegator
     state: OrchestratorState = field(default_factory=OrchestratorState)
 
     @property
