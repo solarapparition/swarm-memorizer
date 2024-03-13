@@ -1,5 +1,6 @@
 """Execution of tasks and validation of their completion."""
 
+from swarm_memorizer.artifact import ArtifactValidationError, ArtifactValidationMessage
 from swarm_memorizer.delegation import redelegate_task_executor
 from swarm_memorizer.event import Event, TaskValidation
 from swarm_memorizer.id_generation import generate_id
@@ -11,6 +12,13 @@ from swarm_memorizer.task import (
     generate_artifact,
     validate_task_completion,
 )
+
+
+def translate_artifact_validation_error(error: ArtifactValidationError) -> str:
+    """Translate an artifact validation error to a failure reason."""
+    if error.message == ArtifactValidationMessage.MISSING_LOCATION:
+        return "Executor did not provide a location for the output of the task, or the provided location was not precise."
+    raise NotImplementedError("TODO") from error
 
 
 async def execute_and_validate(task: Task) -> ExecutionReport:
@@ -32,40 +40,38 @@ async def execute_and_validate(task: Task) -> ExecutionReport:
         task, TaskWorkStatus.IN_VALIDATION, "Validation has begun for task."
     )
     validation_result = validate_task_completion(task, report)
-    if not validation_result.valid and task.validation_failures:
-        _ = redelegate_task_executor(task.executor)
+    if not validation_result.valid and task.validation_fail_count:
+        new_executor = redelegate_task_executor(task.executor)
         raise NotImplementedError("TODO")
-        # task.reset_progress()
-        # task.change_executor(new_executor)  # MUTATION
+        task.reset_progress()
+        task.change_executor(new_executor)  # MUTATION
     if not validation_result.valid:
         new_status = TaskWorkStatus.BLOCKED
         reason = "Failed completion validation."
-        task.add_validation_failure()  # MUTATION
+        task.increment_fail_count()  # MUTATION
         report.task_completed = False  # MUTATION
+    elif not report.artifacts:
+        try:
+            artifact = generate_artifact(task)
+        except ArtifactValidationError as error:
+            new_status = TaskWorkStatus.BLOCKED
+            reason = translate_artifact_validation_error(error)
+            task.increment_fail_count()  # MUTATION
+            report.task_completed = False  # MUTATION
+        else:
+            report.artifacts = [artifact]
+            new_status = TaskWorkStatus.COMPLETED
+            reason = "Validated as complete."
+            task.output_artifacts = report.artifacts  # MUTATION
+            task.wrap_execution(success=True)  # MUTATION
     else:
-        if report.artifacts is None:
-            report.artifacts = [generate_artifact(task)]
-        assert (
-            report.artifacts
-        ), "Artifact(s) must be present when wrapping up execution."
+        # assert (
+        #     report.artifacts
+        # ), "Artifact(s) must be present when wrapping up execution."
         new_status = TaskWorkStatus.COMPLETED
         reason = "Validated as complete."
         task.output_artifacts = report.artifacts  # MUTATION
         task.wrap_execution(success=True)  # MUTATION
-        # validation_result = WorkValidationResult(valid=True, feedback="")
-    # generated_artifact = (
-    #     self.generate_artifact(bot_reply)
-    #     if (
-    #         task_completed
-    #         and not self.reports_artifacts
-    #         and not bot_reply.artifacts
-    #     )
-    #     else None
-    # )
-    # if generated_artifact:
-    #     bot_reply.artifacts = [generated_artifact]
-    #     bot_reply.report.reply = "Task completed. See artifacts below for details."
-
     validation_result_event = Event(
         data=TaskValidation(
             validator_id=task.validator.id,

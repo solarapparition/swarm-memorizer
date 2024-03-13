@@ -11,7 +11,6 @@ from langchain.schema import SystemMessage
 
 from swarm_memorizer.artifact import (
     Artifact,
-    ArtifactValidationError,
     artifacts_printout,
     write_file_artifact,
 )
@@ -383,11 +382,11 @@ class Task:
         )
 
     @property
-    def validation_failures(self) -> int:
+    def validation_fail_count(self) -> int:
         """Number of times the task has failed validation."""
         return self.data.validation_failures
 
-    def add_validation_failure(self) -> None:
+    def increment_fail_count(self) -> None:
         """Increment the number of validation failures."""
         self.data.validation_failures += 1
 
@@ -752,11 +751,7 @@ def generate_artifact(task: Task) -> Artifact:
         result, "start_of_artifact_spec_output", "end_of_artifact_spec_output"
     )
     artifact = Artifact.from_serialized_data(DEFAULT_YAML.load(artifact_spec))
-    try:
-        artifact.validate()
-    except ArtifactValidationError as error:
-        raise NotImplementedError("TODO") from error
-
+    artifact.validate()
     # post-validation, we can assume that for file artifacts, if `content` exists
     if artifact.content and artifact.type == ArtifactType.FILE:
         artifact = write_file_artifact(artifact, task.output_dir)

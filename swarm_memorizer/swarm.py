@@ -181,8 +181,8 @@ class Swarm:
         return await self.execute()
 
 
-# ....
 # implementation: artifact error handling case: "Write 'Hello, World!' to a file." response: "The code executed successfully, and "Hello, World!" has been written to a file named `hello.txt`."
+# ....
 # > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
 # bot: add pure, offline language frontier model assistants # really bad at math > gpt-4 > gemini > claude 3
 # bot: search agent > exaai > tavily > perplexity
@@ -191,10 +191,9 @@ class Swarm:
 # bot: web browser > webvoyager > autogen web surfer agent
 # bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
 # ---MVP---
-# > auto-integration of new bots > phase: convert any demo page to a script > phase: test any script based on spec from demo page > phase: convert any script to conversational interface (if needed) > phase: convert any conversational interface to a bot > phase: integrate bot into swarm
+# > auto-integration of new bots > phase: convert any demo page to a script > phase: test any script based on spec from demo page > phase: convert any script to conversational interface (if needed) > phase: convert any conversational interface to a bot > phase: integrate bot into swarm > given an api page, convert to a bot for the api > bot creation: try generating command external agent interface using python fire lib
 # > improve validation printout
 # > bot: generalist agents > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY > self-operating computer
-# > bot: api conversion bot # given an api page, convert to a bot for the api > bot creation: try generating command external agent interface using python fire lib
 # > soul engine https://github.com/opensouls/soul-engine
 # > move off of langchain primitives to use litellm
 # > main system dynamically populate hierarchical identity tree using memories
@@ -256,7 +255,7 @@ async def run_test_task(task: str, id_namespace: str) -> None:
             report = await swarm.receive_and_execute(message)
 
 
-curriculum_test_tasks = [
+CURRICULUM_TEST_TASKS = [
     "Write 'Hello, World!' to a file.",
     "Calculate 3 + 4 * 5.",
     "Create a mock timestamp generator that advances by 1 second each time it is called.",
@@ -275,32 +274,43 @@ curriculum_test_tasks = [
 
 async def test_curriculum_task_1() -> None:
     """Curriculum task 1."""
-    task = curriculum_test_tasks[0]
+    task = CURRICULUM_TEST_TASKS[0]
     await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df4")
 
 
 async def test_curriculum_task_2() -> None:
     """Curriculum task 1."""
-    task = curriculum_test_tasks[1]
+    task = CURRICULUM_TEST_TASKS[1]
     await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df5")
 
 
 async def test_curriculum_task_3() -> None:
     """Curriculum task 1."""
-    task = curriculum_test_tasks[2]
+    task = CURRICULUM_TEST_TASKS[2]
     await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df6")
 
 
 async def test_curriculum_task_4() -> None:
     """Curriculum task 1."""
-    task = curriculum_test_tasks[3]
+    task = CURRICULUM_TEST_TASKS[3]
     await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df7")
+
+
+MINOR_CASE_TASKS = [
+    "Write 'Hello, World!' to a file.",
+]
+
+
+async def test_minor_case_task_1() -> None:
+    """Curriculum task 1."""
+    task = MINOR_CASE_TASKS[0]
+    await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df8")
 
 
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(test_curriculum_task_1())
+    asyncio.run(test_minor_case_task_1())
 
 
 if __name__ == "__main__":
