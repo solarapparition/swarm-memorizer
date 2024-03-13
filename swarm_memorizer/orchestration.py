@@ -16,10 +16,7 @@ from swarm_memorizer.blueprint import Knowledge, OrchestratorBlueprint, Reasonin
 
 from swarm_memorizer.config import SWARM_COLOR, VERBOSE
 from swarm_memorizer.acceptance import decide_acceptance
-from swarm_memorizer.delegation import (
-    Delegator,
-    generate_executor_selection_reasoning
-)
+from swarm_memorizer.delegation import Delegator, generate_executor_selection_reasoning
 from swarm_memorizer.description import generate_agent_description
 from swarm_memorizer.event import (
     Event,

@@ -5,11 +5,6 @@ from dataclasses import InitVar, dataclass, field
 from functools import cached_property
 from pathlib import Path
 import shelve
-from typing import (
-    Any,
-    Callable,
-    Coroutine,
-)
 from uuid import UUID
 
 from .config import configure_langchain_cache
@@ -33,19 +28,6 @@ from .task import ExecutionReport, Task
 from .task_data import TaskDescription, TaskData
 from .toolkit.files import make_if_not_exist
 from .toolkit.text import dedent_and_strip
-
-
-@dataclass
-class Reply:
-    """A reply from the main agent."""
-
-    content: str
-    continue_func: Callable[[str], Coroutine[Any, Any, str]] | None
-
-    async def continue_conversation(self, message: str) -> str:
-        """Continue the conversation with a message."""
-        assert self.continue_func is not None
-        return await self.continue_func(message)
 
 
 @dataclass(frozen=True)
@@ -199,18 +181,17 @@ class Swarm:
         return await self.execute()
 
 
-# > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
-# > auto-integration of new executors > phase: convert any demo page to a script > phase: test any script based on spec from demo page > phase: convert any script to conversational interface (if needed) > phase: convert any conversational interface to a bot > phase: integrate bot into swarm
-# > commit
-# > implementation: artifact error handling case: "Write 'Hello, World!' to a file." response: "The code executed successfully, and "Hello, World!" has been written to a file named `hello.txt`."
 # ....
-# bot: add pure, offline language frontier model assistants # really bad at math > gpt-4 > gemini > claude
+# implementation: artifact error handling case: "Write 'Hello, World!' to a file." response: "The code executed successfully, and "Hello, World!" has been written to a file named `hello.txt`."
+# > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
+# bot: add pure, offline language frontier model assistants # really bad at math > gpt-4 > gemini > claude 3
 # bot: search agent > exaai > tavily > perplexity
 # bot: document chat > embedchain > gemini pro 1.5
 # > bot: script writer: update script writer to save output as script runner for that script
 # bot: web browser > webvoyager > autogen web surfer agent
 # bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
 # ---MVP---
+# > auto-integration of new bots > phase: convert any demo page to a script > phase: test any script based on spec from demo page > phase: convert any script to conversational interface (if needed) > phase: convert any conversational interface to a bot > phase: integrate bot into swarm
 # > improve validation printout
 # > bot: generalist agents > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY > self-operating computer
 # > bot: api conversion bot # given an api page, convert to a bot for the api > bot creation: try generating command external agent interface using python fire lib

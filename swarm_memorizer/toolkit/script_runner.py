@@ -1,7 +1,7 @@
 """Run external Python scripts."""
 
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Callable
 import pexpect
 
 
