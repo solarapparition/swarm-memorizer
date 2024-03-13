@@ -105,6 +105,7 @@ def artifacts_printout(artifacts: Sequence[Artifact]) -> str:
     """String representation of the artifacts."""
     return "\n".join(str(artifact) for artifact in artifacts) or NONE
 
+
 def write_file_artifact(artifact: Artifact, output_dir: Path) -> Artifact:
     """Write the content of a file artifact to the output directory. Returns an updated artifact with the location set to the output directory."""
     raise NotImplementedError("TODO")
@@ -119,4 +120,3 @@ def write_file_artifact(artifact: Artifact, output_dir: Path) -> Artifact:
     #     must_be_created=artifact.must_be_created,
     #     content=None,
     # )
-

@@ -85,6 +85,28 @@ class ExecutionReport:
     artifacts: list[Artifact] | None = None
     """Artifacts produced by the executor. `None` means that the executor does not report whether any artifacts are produced, while an empty list means that the executor explicitly reported that no artifacts were produced."""
 
+    def __str__(self) -> str:
+        """String representation of the execution report."""
+        external_artifacts = (
+            [
+                artifact
+                for artifact in self.artifacts
+                if artifact.type != ArtifactType.INLINE
+            ]
+            if self.artifacts
+            else []
+        )
+        template = """
+        {reply}
+
+        Artifacts:
+        {artifacts}
+        """
+        return dedent_and_strip(template).format(
+            reply=self.reply,
+            artifacts=artifacts_printout(external_artifacts),
+        )
+
 
 @runtime_checkable
 class Executor(Protocol):
@@ -739,4 +761,3 @@ def generate_artifact(task: Task) -> Artifact:
     if artifact.content and artifact.type == ArtifactType.FILE:
         artifact = write_file_artifact(artifact, task.output_dir)
     return artifact
-
