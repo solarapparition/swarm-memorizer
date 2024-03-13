@@ -2,6 +2,7 @@
 
 from argparse import ArgumentParser, Namespace
 import asyncio
+from pathlib import Path
 
 from colorama import Fore
 
@@ -14,14 +15,26 @@ def get_args() -> Namespace:
     parser = ArgumentParser()
     parser.add_argument(
         "task",
+        type=str,
         help="A task to be executed.",
+    )
+    parser.add_argument(
+        "--data-dir",
+        default="base_swarm/data",
+        type=str,
+        help="Path to the directory containing data files needed for the swarm.",
     )
     return parser.parse_args()
 
 
 def main() -> None:
     """Run the main function."""
-    swarm = Swarm(task_description=get_args().task, llm_cache_enabled=True)
+    args = get_args()
+    swarm = Swarm(
+        task_description=args.task,
+        llm_cache_enabled=True,
+        files_dir=Path(args.data_dir),
+    )
     report = asyncio.run(swarm.execute())
     print(f"{SWARM_COLOR}{report}{Fore.RESET}")
 

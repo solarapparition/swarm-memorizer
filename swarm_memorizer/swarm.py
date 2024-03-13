@@ -36,7 +36,7 @@ class Swarm:
 
     task_description: str
     """Initial task description."""
-    files_dir: Path = Path("core_swarm")
+    files_dir: Path
     """Directory for files related to the swarm."""
     validator: WorkValidator = field(
         default_factory=lambda: Human(name="Human Validator")
@@ -181,16 +181,29 @@ class Swarm:
         return await self.execute()
 
 
-# implementation: artifact error handling case: "Write 'Hello, World!' to a file." response: "The code executed successfully, and "Hello, World!" has been written to a file named `hello.txt`."
+# commit
 # ....
-# > (next_curriculum_task) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
-# bot: add pure, offline language frontier model assistants # really bad at math > gpt-4 > gemini > claude 3
-# bot: search agent > exaai > tavily > perplexity
-# bot: document chat > embedchain > gemini pro 1.5
-# > bot: script writer: update script writer to save output as script runner for that script
-# bot: web browser > webvoyager > autogen web surfer agent
+# change .gitignore
+# update autogen to use actual version constraint
+# bot: search agent > perplexity
+# > (next_curriculum_task:basic) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
+# > (next_curriculum_task:integration)
+# > add ability for bots to (optionally) save, which creates a specialized version of them
+# bot: document chat > embedchain # has save() which creates embedchain wrapper around document
+# > bot: image interpreter model > can this be done with open interpreter?
+# > bot: script writer: update script writer to create wrapper bot around output script on save()
+# bot: web browser > autogen web surfer agent
 # bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
+# > (next_not_implemented)
+# write readme > artifact system > demo > maybe video
 # ---MVP---
+# > bot: gpt-researcher
+# > bot: openai assistant
+# > bot: add pure, offline language frontier model assistants # really bad at math > gpt-4 > gemini > claude 3
+# > bot: huggingface agent
+# > bot: web browser > webvoyager > autogen web surfer agent
+# > bot: document chat > embedchain > gemini pro 1.5
+# > bot: search agent > exaai > tavily > perplexity
 # > auto-integration of new bots > phase: convert any demo page to a script > phase: test any script based on spec from demo page > phase: convert any script to conversational interface (if needed) > phase: convert any conversational interface to a bot > phase: integrate bot into swarm > given an api page, convert to a bot for the api > bot creation: try generating command external agent interface using python fire lib
 # > improve validation printout
 # > bot: generalist agents > multion > cognosys > os-copilot https://github.com/OS-Copilot/FRIDAY > self-operating computer
