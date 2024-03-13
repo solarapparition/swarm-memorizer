@@ -19,6 +19,7 @@ IdTypeT = TypeVar("IdTypeT", BlueprintId, TaskId, EventId, DelegatorId)
 ConversationHistory = Sequence[HumanMessage | AIMessage]
 NoneStr = Literal["None"]
 PauseExecution = NewType("PauseExecution", bool)
+DelegationSuccessful = NewType("DelegationSuccessful", bool)
 
 
 class Concept(Enum):
@@ -156,4 +157,8 @@ class ExecutionOutcome:
     success: bool
 
 
-DelegationSuccessful = NewType("DelegationSuccessful", bool)
+@dataclass
+class ExecutionError(Exception):
+    """Error when executing a task."""
+
+    message: str

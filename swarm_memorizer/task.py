@@ -9,7 +9,12 @@ from typing import Any, Iterator, Literal, Protocol, Self, runtime_checkable
 
 from langchain.schema import SystemMessage
 
-from swarm_memorizer.artifact import Artifact, ArtifactValidationError, write_file_artifact
+from swarm_memorizer.artifact import (
+    Artifact,
+    ArtifactValidationError,
+    artifacts_printout,
+    write_file_artifact,
+)
 from swarm_memorizer.blueprint import Blueprint
 from swarm_memorizer.config import SWARM_COLOR, VERBOSE
 from swarm_memorizer.event import (

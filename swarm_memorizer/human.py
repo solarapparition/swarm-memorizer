@@ -12,7 +12,7 @@ class Human:
 
     name: str = "Human"
     thread: list[str] = field(default_factory=list)
-    _reply_cache: MutableMapping[str, str] | None = None
+    reply_cache: MutableMapping[str, str] | None = None
 
     @property
     def id(self) -> RuntimeId:
@@ -38,8 +38,8 @@ class Human:
         self.thread.append(prompt)
         self.thread.append(
             reply := (
-                self.respond_using_cache(self._reply_cache)
-                if self._reply_cache is not None
+                self.respond_using_cache(self.reply_cache)
+                if self.reply_cache is not None
                 else self.respond_manually()
             )
         )
