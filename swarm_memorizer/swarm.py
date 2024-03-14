@@ -323,7 +323,7 @@ async def test_minor_case_task_1() -> None:
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(test_minor_case_task_1())
+    asyncio.run(test_curriculum_task_1())
 
 
 if __name__ == "__main__":

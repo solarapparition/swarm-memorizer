@@ -9,14 +9,16 @@ packages = [{include = "swarm_memorizer"}]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.12"
-langchain = "^0.0.353"
 "ruamel.yaml" = "^0.18.5"
 colorama = "^0.4.6"
 openai = "^1.6.1"
 llama-index = "^0.9.32"
+langchain = "^0.1.12"
+langchain-openai = "^0.0.8"
+
 pyautogen = {version = "^0.2.19", optional = true}
-open-interpreter = { version = "^0.2.0", optional = true }
-pexpect = { version = "^4.9.0", optional = true }
+open-interpreter = {version = "^0.2.0", optional = true}
+pexpect = {version = "^4.9.0", optional = true}
 
 [tool.poetry.group.dev.dependencies]
 pylint = "^3.0.3"
