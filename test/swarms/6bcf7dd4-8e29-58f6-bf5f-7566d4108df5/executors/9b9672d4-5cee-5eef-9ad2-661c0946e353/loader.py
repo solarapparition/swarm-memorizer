@@ -128,7 +128,7 @@ class Multiplier:
                 json.loads(message["content"].strip())
             except json.JSONDecodeError:
                 return False
-            return message["role"] == "function"
+            return message["role"] == "tool"
 
         assistant = AssistantAgent(
             "assistant",

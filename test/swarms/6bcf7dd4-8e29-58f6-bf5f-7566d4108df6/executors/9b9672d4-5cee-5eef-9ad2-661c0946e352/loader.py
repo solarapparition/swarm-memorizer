@@ -137,7 +137,7 @@ class Adder:
                 json.loads(message["content"].strip())
             except json.JSONDecodeError:
                 return False
-            return message["role"] == "function" and message["name"] in [
+            return message["role"] == "tool" and message["name"] in [
                 "error_message",
                 "add",
             ]
