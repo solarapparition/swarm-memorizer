@@ -12,7 +12,7 @@ from swarm_memorizer.bot import BotCore
 
 AGENT_COLOR = Fore.GREEN
 
-from base_swarm.core_bots.open_interpreter.loader import load_bot
+from base_swarm.bots.open_interpreter.loader import load_bot
 
 # def load_bot(*_) -> BotCore:
 #     """Load the bot core."""
