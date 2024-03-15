@@ -252,15 +252,22 @@ def test_human_cache_response():
     cache_path.unlink(missing_ok=True)
 
 
-async def run_test_task(task: str, id_namespace: str) -> None:
+@dataclass
+class TestTask:
+    """Test task."""
+
+    task: str
+    id_namespace: str
+
+async def run_test_task(test_task: TestTask) -> None:
     """Run a test task."""
     with shelve.open(".data/cache/human_reply", writeback=True) as cache:
         human_tester = Human(reply_cache=cache)
         swarm = Swarm(
-            task_description=task,
-            files_dir=Path(f"test/swarms/{id_namespace}"),
+            task_description=test_task.task,
+            files_dir=Path(f"test/swarms/{test_task.id_namespace}"),
             validator=human_tester,
-            id_generator=DefaultIdGenerator(namespace=UUID(id_namespace), seed="test"),
+            id_generator=DefaultIdGenerator(namespace=UUID(test_task.id_namespace), seed="test"),
         )
         report = await swarm.execute()
         while not report.task_completed:
@@ -268,11 +275,31 @@ async def run_test_task(task: str, id_namespace: str) -> None:
             report = await swarm.receive_and_execute(message)
 
 
-CURRICULUM_TEST_TASKS = [
-    "Write 'Hello, World!' to a file.",
-    "Calculate 3 + 4 * 5.",
-    "Create a mock timestamp generator that advances by 1 second each time it is called.",
-    "Find the first 10 prime numbers.",
+MAIN_CURRICULUM = [
+    TestTask(
+        task="Write 'Hello, World!' to a file.",
+        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df4",
+    ),
+    TestTask(
+        task="Calculate 3 + 4 * 5.",
+        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df5",
+    ),
+    TestTask(
+        task="Create a mock timestamp generator that advances by 1 second each time it is called.",
+        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df6",
+    ),
+    TestTask(
+        task="Find the first 10 prime numbers.",
+        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df7",
+    ),
+    TestTask(
+        task="Tell me about Inflection 2.5.",
+        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df9",
+    ),
+    TestTask(
+        task="Write a description of Inflection 2.5 to a file called 'inflection_description.txt'.",
+        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e00",
+    ),
     # "Create a mock timestamp generator that advances by 1 second each time it is called, and run it 5 times.",
     # > basic coding task case: 20 lines or less of base python > coding bot will be equipped with function it wrote
     # > basic search task case: search for basic info about a concept
@@ -283,47 +310,31 @@ CURRICULUM_TEST_TASKS = [
     # > create an oai assistant agent using only documentation # need to set up virtual environment for it
     # > buy something from amazon
 ]
+# CURRICULUM_TEST_TASKS = [
+#     "Write 'Hello, World!' to a file.",
+#     "Calculate 3 + 4 * 5.",
+#     "Create a mock timestamp generator that advances by 1 second each time it is called.",
+#     "Find the first 10 prime numbers.",
+#     "Tell me about Inflection 2.5.", # recently released as of test creation
+#     "Write a description of Inflection 2.5 to a file called 'inflection_description.txt'.",
+# ]
 
 
-async def test_curriculum_task_1() -> None:
-    """Curriculum task 1."""
-    task = CURRICULUM_TEST_TASKS[0]
-    await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df4")
-
-
-async def test_curriculum_task_2() -> None:
-    """Curriculum task 1."""
-    task = CURRICULUM_TEST_TASKS[1]
-    await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df5")
-
-
-async def test_curriculum_task_3() -> None:
-    """Curriculum task 1."""
-    task = CURRICULUM_TEST_TASKS[2]
-    await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df6")
-
-
-async def test_curriculum_task_4() -> None:
-    """Curriculum task 1."""
-    task = CURRICULUM_TEST_TASKS[3]
-    await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df7")
-
-
-MINOR_CASE_TASKS = [
-    "Write 'Hello, World!' to a file.",
+MINOR_TASKS = [
+    TestTask(
+        task="Write 'Hello, World!' to a file.",
+        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df8",
+    ),
 ]
 
-
-async def test_minor_case_task_1() -> None:
-    """Curriculum task 1."""
-    task = MINOR_CASE_TASKS[0]
-    await run_test_task(task, id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df8")
-
+# MINOR_TASKS = [
+#     "Write 'Hello, World!' to a file.",
+# ]
 
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(test_curriculum_task_1())
+    asyncio.run(run_test_task(MAIN_CURRICULUM[5]))
 
 
 if __name__ == "__main__":
