@@ -24,6 +24,7 @@ def main() -> None:
     while True:
         message = input("Send message: ")
         interpreter.chat(message=message, display=False, stream=False)
+        print("Open Interpreter Reply:")
         print(interpreter.messages[-1]["content"])
         # print(DUMMY_REPLY)
 

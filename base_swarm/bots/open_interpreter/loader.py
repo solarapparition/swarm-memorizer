@@ -86,7 +86,7 @@ def load_bot(*_) -> BotCore:
             interpreter_proxy.runner = create_script_runner(
                 script=Path(__file__).resolve().parent / "run_interpreter.py",
                 input_pattern="Send message: ",
-                output_pattern=None,
+                output_pattern="Open Interpreter Reply:\r\n", # yes this is correct on UNIX, see  https://pexpect.readthedocs.io/en/stable/overview.html#find-the-end-of-line-cr-lf-conventions
                 interpreter=Path(sys.executable),
                 cwd=output_dir,
             )
