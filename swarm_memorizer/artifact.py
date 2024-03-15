@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Literal, Self, Sequence
 
 from swarm_memorizer.schema import NONE, ArtifactType
+from swarm_memorizer.toolkit.files import sanitize_filename
 from swarm_memorizer.toolkit.text import dedent_and_strip
 
 
@@ -108,15 +109,14 @@ def artifacts_printout(artifacts: Sequence[Artifact]) -> str:
 
 def write_file_artifact(artifact: Artifact, output_dir: Path) -> Artifact:
     """Write the content of a file artifact to the output directory. Returns an updated artifact with the location set to the output directory."""
-    raise NotImplementedError("TODO")
-    # assert artifact.type == ArtifactType.FILE and artifact.content and artifact.must_be_created
-    # file_name = f"{convert_to_filename(artifact.description)}.txt"
-    # output_path = output_dir / file_name
-    # task.output_dir.write_text(artifact.content, encoding="utf-8")
-    # return Artifact(
-    #     type=artifact.type,
-    #     description=artifact.description,
-    #     location=str(task.output_dir),
-    #     must_be_created=artifact.must_be_created,
-    #     content=None,
-    # )
+    assert artifact.type == ArtifactType.FILE and artifact.content and artifact.must_be_created
+    file_name = f"{sanitize_filename(artifact.description)}.txt"
+    output_path = output_dir / file_name
+    output_path.write_text(artifact.content, encoding="utf-8")
+    return Artifact(
+        type=artifact.type,
+        description=artifact.description,
+        location=str(output_path),
+        must_be_created=artifact.must_be_created,
+        content=None,
+    )

@@ -753,6 +753,6 @@ def generate_artifact(task: Task) -> Artifact:
     artifact = Artifact.from_serialized_data(DEFAULT_YAML.load(artifact_spec))
     artifact.validate()
     # post-validation, we can assume that for file artifacts, if `content` exists
-    if artifact.content and artifact.type == ArtifactType.FILE:
+    if artifact.must_be_created and artifact.type == ArtifactType.FILE:
         artifact = write_file_artifact(artifact, task.output_dir)
     return artifact
