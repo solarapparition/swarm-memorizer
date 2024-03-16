@@ -51,6 +51,7 @@ from swarm_memorizer.task import (
     TaskList,
     change_status,
     create_task_message,
+    send_subtask_message,
 )
 from swarm_memorizer.task_data import TaskData, TaskDescription
 from swarm_memorizer.toolkit.files import make_if_not_exist
@@ -626,22 +627,6 @@ class OrchestratorState:
 
     focused_subtask: Task | None = None
     new_event_count: int = 0
-
-
-def send_subtask_message(
-    subtask: Task, message_event: Event, initial: bool
-) -> list[Event]:
-    """Send a message to the executor of a subtask."""
-    subtask.event_log.add(message_event)
-    report_status_change = (
-        not initial and subtask.work_status != TaskWorkStatus.IN_PROGRESS
-    )
-    status_change_event = change_status(
-        subtask,
-        TaskWorkStatus.IN_PROGRESS,
-        f"Sent message to {Concept.EXECUTOR.value} unblock subtask.",
-    )
-    return [status_change_event] if report_status_change else []
 
 
 @dataclass(frozen=True)

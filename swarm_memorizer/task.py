@@ -774,3 +774,19 @@ def create_task_message(
         generating_task_id=task.id,
         id=event_id,
     )
+
+
+def send_subtask_message(
+    subtask: Task, message_event: Event, initial: bool
+) -> list[Event]:
+    """Send a message to the executor of a subtask."""
+    subtask.event_log.add(message_event)
+    report_status_change = (
+        not initial and subtask.work_status != TaskWorkStatus.IN_PROGRESS
+    )
+    status_change_event = change_status(
+        subtask,
+        TaskWorkStatus.IN_PROGRESS,
+        f"Sent message to {Concept.EXECUTOR.value} unblock subtask.",
+    )
+    return [status_change_event] if report_status_change else []
