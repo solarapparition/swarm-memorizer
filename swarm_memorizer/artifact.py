@@ -45,6 +45,16 @@ class Artifact:
     @classmethod
     def from_serialized_data(cls, data: dict[str, Any]) -> Self:
         """Deserialize the artifact from a JSON-compatible dictionary."""
+        # try:
+        #     return cls(
+        #         type=ArtifactType(data["type"]),
+        #         description=data["description"],
+        #         location=data["location"],
+        #         must_be_created=data["must_be_created"],
+        #         content=data["content"],
+        #     )
+        # except:
+        #     breakpoint()
         return cls(
             type=ArtifactType(data["type"]),
             description=data["description"],
@@ -101,10 +111,37 @@ class Artifact:
             must_be_created=self.must_be_created,
         )
 
+    def format_as_input(self) -> str:
+        """String representation of the artifact as input. Expected to be understandable to executors."""
+        if self.type in [ArtifactType.FILE, ArtifactType.REMOTE_RESOURCE]:
+            template = """
+            - description: {description}
+              type: {type}
+              location: {location}
+            """
+        elif self.type == ArtifactType.INLINE:
+            template = """
+            - description: {description}
+              content: {content}
+            """
+        else:
+            raise ValueError(f"Invalid artifact type: {self.type}")
+        return dedent_and_strip(template).format(
+            description=self.description,
+            location=self.location,
+            content=self.content,
+            type=self.type,
+        )
+
 
 def artifacts_printout(artifacts: Sequence[Artifact]) -> str:
     """String representation of the artifacts."""
     return "\n".join(str(artifact) for artifact in artifacts) or NONE
+
+
+def input_artifacts_printout(artifacts: Sequence[Artifact]) -> str:
+    """String representation of the input artifacts."""
+    return "\n".join(artifact.format_as_input() for artifact in artifacts) or NONE
 
 
 def write_file_artifact(artifact: Artifact, output_dir: Path) -> Artifact:
