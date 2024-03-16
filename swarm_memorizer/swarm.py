@@ -5,6 +5,7 @@ from dataclasses import InitVar, dataclass, field
 from functools import cached_property
 from pathlib import Path
 import shelve
+from typing import Protocol
 from uuid import UUID
 
 from .config import configure_langchain_cache
@@ -30,6 +31,24 @@ from .toolkit.files import make_if_not_exist
 from .toolkit.text import dedent_and_strip
 
 
+class Director(Protocol):
+    """Core of a swarm."""
+
+    def direct(self, task: Task, report: ExecutionReport) -> str:
+        """Direct the task."""
+        raise NotImplementedError
+
+
+@dataclass
+class DummyDirector:
+    """Dummy core that just reflects back the validation error."""
+
+    def direct(self, task: Task, report: ExecutionReport) -> str:
+        """Sends back the validation error for the task."""
+        assert report.validation and not report.validation.valid
+        return report.validation.feedback
+
+
 @dataclass(frozen=True)
 class Swarm:
     """Main interfacing class for the swarm."""
@@ -38,6 +57,7 @@ class Swarm:
     """Initial task description."""
     files_dir: Path
     """Directory for files related to the swarm."""
+    core: Director = field(default_factory=DummyDirector)
     validator: WorkValidator = field(
         default_factory=lambda: Human(name="Human Validator")
     )
@@ -174,18 +194,13 @@ class Swarm:
             )
             assert self.task.executor, "Task executor assignment failed."
         self.task.work_status = TaskWorkStatus.IN_PROGRESS
-        return await execute_and_validate(self.task)
-        # report = await execute_and_validate(self.task)
-        # while True:
-        #     if report.task_completed:
-        #         return report
-        #     directive = self.core.get_directive(self.task, report)
-
-        #     # post directive as message to executor
-        #     breakpoint()
-        
-        
-        # breakpoint()
+        report = await execute_and_validate(self.task)
+        while True:
+            if report.task_completed:
+                return report
+            directive = self.core.direct(self.task, report)
+            self.receive(directive)
+            report = await execute_and_validate(self.task)
 
     async def receive_and_execute(self, task_description: str) -> ExecutionReport:
         """Receive and execute a task."""
@@ -193,20 +208,13 @@ class Swarm:
         return await self.execute()
 
 
-
-
-
-
-# ....
-# > add generic typing to event
-# create swarm core # this is what report gets sent to
-# ....
-# need a clean way to handle this > maybe some sort of core agent is the root owner
-# figure out method for swarm to send feedback when executor fails task # possibly create new placeholder orchestrator, or just redelegate
+# > test director system
 # ....
 # check to see if learning works (when open interpreter fails)
 # test integration to base swarm
 # ....
+# > factor out tests
+# > add generic typing to event
 # > decouple __repr__ artifact from __str__ artifact > bypass step of having to have llm pass around artifact info # may require creation of artifact_id, to allow for orchestrator to reference artifact without seeing its data structure # would also be helpful for REPORT_TASK_AS_COMPLETE
 # > add placeholder system for a different mode for each orchestrator action, to allow for reasoning within that mode
 # > investigate having blueprints for swarm
@@ -286,6 +294,7 @@ class TestTask:
     task: str
     id_namespace: str
     purpose: str | None = None
+
 
 async def run_test_task(test_task: TestTask) -> None:
     """Run a test task."""
