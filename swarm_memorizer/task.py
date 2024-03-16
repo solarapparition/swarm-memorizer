@@ -664,7 +664,10 @@ def generate_artifact(task: Task) -> Artifact:
         description: TASK SPECIFICATION does not clearly require particular {ARTIFACT} TYPE.
         action: move to the next step.
     - description: Assuming the task does not explicitly define what {ARTIFACT} TYPE is required, then check whether the latest message(s) in the TASK CONVERSATION from the {EXECUTOR} already have references to a specific {ARTIFACT} generated.
-      case_1:
+      case_1a:
+        description: there are references to more than one {ARTIFACT}s.
+        action: choose a single {ARTIFACT} that represents the output of the task, and go on to case_1b, the case for a single {ARTIFACT}.
+      case_1b:
         description: there is a reference to a generated {ARTIFACT}.
         action:
           description: the {ARTIFACT} TYPE for each generated {ARTIFACT} is either B or C. Determine what kind of {ARTIFACT} TYPE is appropriate based on the TASK CONVERSATION, by checking whether the {ARTIFACT} has file references or remote resource references.
@@ -719,7 +722,7 @@ def generate_artifact(task: Task) -> Artifact:
     ```end_of_reasoning_process
 
     {output_instructions}
-    Remember to go through both the `determine_required_artifact_types_phase` and the `gather_spec_info_phase` phases of the reasoning process.
+    Remember to go through both the `determine_required_artifact_type_phase` and the `gather_spec_info_phase` phases of the reasoning process.
 
     After this block, you must output the final {ARTIFACT} SPEC in this format:
     ```start_of_artifact_spec_output
