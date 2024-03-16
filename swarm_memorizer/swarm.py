@@ -304,7 +304,9 @@ async def run_test_task(test_task: TestTask) -> None:
             task_description=test_task.task,
             files_dir=Path(f"test/swarms/{test_task.id_namespace}"),
             validator=human_tester,
-            id_generator=DefaultIdGenerator(namespace=UUID(test_task.id_namespace), seed="test"),
+            id_generator=DefaultIdGenerator(
+                namespace=UUID(test_task.id_namespace), seed="test"
+            ),
         )
         report = await swarm.execute()
         while not report.task_completed:
@@ -320,7 +322,7 @@ MAIN_CURRICULUM = [
     TestTask(
         task="Calculate 3 + 4 * 5.",
         id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df5",
-        purpose="Tests a simple task that requires orchestration."
+        purpose="Tests a simple task that requires orchestration.",
     ),
     TestTask(
         task="Create a mock timestamp generator that advances by 1 second each time it is called.",
