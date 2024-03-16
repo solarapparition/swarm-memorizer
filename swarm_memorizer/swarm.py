@@ -175,6 +175,17 @@ class Swarm:
             assert self.task.executor, "Task executor assignment failed."
         self.task.work_status = TaskWorkStatus.IN_PROGRESS
         return await execute_and_validate(self.task)
+        # report = await execute_and_validate(self.task)
+        # while True:
+        #     if report.task_completed:
+        #         return report
+        #     directive = self.core.get_directive(self.task, report)
+
+        #     # post directive as message to executor
+        #     breakpoint()
+        
+        
+        # breakpoint()
 
     async def receive_and_execute(self, task_description: str) -> ExecutionReport:
         """Receive and execute a task."""
