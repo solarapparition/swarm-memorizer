@@ -238,7 +238,7 @@ class Adder:
             assistant,
             clear_history=False,
             message=last_conversation_message["content"],  # type: ignore
-            silent=True,
+            silent=False,
         )
         reply = str(user_proxy.last_message()["content"])
         successful = json.loads(reply)["successful"]
