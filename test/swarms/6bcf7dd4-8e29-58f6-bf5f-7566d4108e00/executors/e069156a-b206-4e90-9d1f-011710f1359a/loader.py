@@ -19,8 +19,9 @@ def load_bot(*_) -> BotCore:
         output_dir: Path,
     ) -> ExecutionReport:
         """Run the bot."""
+        breakpoint()
         return ExecutionReport(
-            'The description of Inflection 2.5 has been written to a file named "inflection_description.txt"',
+            "'Hello World!' was written to 'output.txt' successfully.",
             task_completed=True,
         )
 

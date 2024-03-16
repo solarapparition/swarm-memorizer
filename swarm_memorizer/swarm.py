@@ -46,7 +46,7 @@ class DummyDirector:
     def direct(self, task: Task, report: ExecutionReport) -> str:
         """Sends back the validation error for the task."""
         assert report.validation and not report.validation.valid
-        return report.validation.feedback
+        return f"The task was not successfully executed. {report.validation.feedback}"
 
 
 @dataclass(frozen=True)
@@ -208,9 +208,11 @@ class Swarm:
         return await self.execute()
 
 
-# > test director system
+# test director system
 # ....
+# > update open interpreter: "programmatic task" to make it clear this is a coding agent
 # check to see if learning works (when open interpreter fails)
+# > access to and integration with devin # https://www.cognition-labs.com/blog
 # test integration to base swarm
 # ....
 # > factor out tests
@@ -220,7 +222,6 @@ class Swarm:
 # > investigate having blueprints for swarm
 # > add printout for open interpreter output
 # integrate function writer into base swarm # make clear this is repeatable
-# > access to devin # https://www.cognition-labs.com/blog
 # > (next_curriculum_task:integration)
 # > (next_curriculum_task:basic) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
 # add ability for bots to (optionally) save, which creates a specialized version of them
@@ -337,6 +338,11 @@ MAIN_CURRICULUM = [
         id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df9",
     ),
     TestTask(
+        task="Write 'Hello, World!' to a file.",
+        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e00",
+        purpose="This tests what happens when a bot fails a task.",
+    ),
+    TestTask(
         task="Write a description of Inflection 2.5 to a file called 'inflection_description.txt'.",
         id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e00",
         purpose="This tests what happens when a bot fails a task.",
@@ -376,7 +382,7 @@ MINOR_TASKS = [
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(run_test_task(MAIN_CURRICULUM[1]))
+    asyncio.run(run_test_task(MAIN_CURRICULUM[5]))
 
 
 if __name__ == "__main__":
