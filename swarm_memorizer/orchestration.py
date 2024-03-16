@@ -50,6 +50,7 @@ from swarm_memorizer.task import (
     Task,
     TaskList,
     change_status,
+    create_task_message,
 )
 from swarm_memorizer.task_data import TaskData, TaskDescription
 from swarm_memorizer.toolkit.files import make_if_not_exist
@@ -625,6 +626,22 @@ class OrchestratorState:
 
     focused_subtask: Task | None = None
     new_event_count: int = 0
+
+
+def send_subtask_message(
+    subtask: Task, message_event: Event, initial: bool
+) -> list[Event]:
+    """Send a message to the executor of a subtask."""
+    subtask.event_log.add(message_event)
+    report_status_change = (
+        not initial and subtask.work_status != TaskWorkStatus.IN_PROGRESS
+    )
+    status_change_event = change_status(
+        subtask,
+        TaskWorkStatus.IN_PROGRESS,
+        f"Sent message to {Concept.EXECUTOR.value} unblock subtask.",
+    )
+    return [status_change_event] if report_status_change else []
 
 
 @dataclass(frozen=True)
@@ -1531,32 +1548,20 @@ class Orchestrator:
     def subtask_message(self, subtask: Task, message: str) -> Event:
         """Format a message to a subtask."""
         assert subtask.executor, "Cannot post message to subtask without an executor."
-        return Event(
-            data=Message(
-                sender=self.id,
-                recipient=subtask.executor_id,
-                content=message,
-            ),
-            generating_task_id=subtask.id,
-            id=generate_id(EventId, self.id_generator),
+        event_id = generate_id(EventId, self.id_generator)
+        return create_task_message(
+            subtask, message, sender_id=self.id, event_id=event_id
         )
 
-    def send_subtask_message(
+    def send_focused_subtask_message(
         self, message_text: str, initial: bool = False
     ) -> list[Event]:
         """Send a message to the executor for the focused subtask."""
-        assert (focused_subtask := self.focused_subtask) is not None
-        message_event = self.subtask_message(focused_subtask, message_text)
-        focused_subtask.event_log.add(message_event)
-        report_status_change = (
-            not initial and focused_subtask.work_status != TaskWorkStatus.IN_PROGRESS
+        assert self.focused_subtask is not None
+        message_event = self.subtask_message(self.focused_subtask, message_text)
+        return send_subtask_message(
+            self.focused_subtask, message_event=message_event, initial=initial
         )
-        status_change_event = change_status(
-            focused_subtask,
-            TaskWorkStatus.IN_PROGRESS,
-            f"Sent message to {Concept.EXECUTOR.value} unblock subtask.",
-        )
-        return [status_change_event] if report_status_change else []
 
     def focus_subtask(self, subtask: Task) -> Event:
         """Focus on a subtask."""
@@ -1679,7 +1684,7 @@ class Orchestrator:
             else ""
         )
         initial_message += addendum
-        subtask_initiation_events = self.send_subtask_message(
+        subtask_initiation_events = self.send_focused_subtask_message(
             message_text=initial_message,
             initial=True,
         )
@@ -1730,7 +1735,7 @@ class Orchestrator:
     def message_subtask_executor(self, message: str) -> ActionResult:
         """Send message to executor for the focused subtask."""
         return ActionResult(
-            new_events=self.send_subtask_message(message),
+            new_events=self.send_focused_subtask_message(message),
             pause_execution=PauseExecution(False),
             task_completed=False,
             # new_work_status=TaskWorkStatus.IN_PROGRESS,

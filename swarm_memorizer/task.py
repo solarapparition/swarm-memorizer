@@ -756,3 +756,18 @@ def generate_artifact(task: Task) -> Artifact:
     if artifact.must_be_created and artifact.type == ArtifactType.FILE:
         artifact = write_file_artifact(artifact, task.output_dir)
     return artifact
+
+
+def create_task_message(
+    task: Task, message: str, sender_id: RuntimeId, event_id: EventId
+) -> Event:
+    """Create a message event for a task."""
+    return Event(
+        data=Message(
+            sender=sender_id,
+            recipient=task.executor_id,
+            content=message,
+        ),
+        generating_task_id=task.id,
+        id=event_id,
+    )
