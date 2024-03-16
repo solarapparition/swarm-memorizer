@@ -146,7 +146,11 @@ def input_artifacts_printout(artifacts: Sequence[Artifact]) -> str:
 
 def write_file_artifact(artifact: Artifact, output_dir: Path) -> Artifact:
     """Write the content of a file artifact to the output directory. Returns an updated artifact with the location set to the output directory."""
-    assert artifact.type == ArtifactType.FILE and artifact.content and artifact.must_be_created
+    assert (
+        artifact.type == ArtifactType.FILE
+        and artifact.content
+        and artifact.must_be_created
+    )
     file_name = f"{sanitize_filename(artifact.description)}.txt"
     output_path = output_dir / file_name
     output_path.write_text(artifact.content, encoding="utf-8")

@@ -181,14 +181,29 @@ class Swarm:
         return await self.execute()
 
 
-# commit
+
+
+
+
 # ....
-# change .gitignore
-# update autogen to use actual version constraint
-# bot: search agent > perplexity
-# > (next_curriculum_task:basic) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
+# > add generic typing to event
+# create swarm core # this is what report gets sent to
+# ....
+# need a clean way to handle this > maybe some sort of core agent is the root owner
+# figure out method for swarm to send feedback when executor fails task # possibly create new placeholder orchestrator, or just redelegate
+# ....
+# check to see if learning works (when open interpreter fails)
+# test integration to base swarm
+# ....
+# > decouple __repr__ artifact from __str__ artifact > bypass step of having to have llm pass around artifact info # may require creation of artifact_id, to allow for orchestrator to reference artifact without seeing its data structure # would also be helpful for REPORT_TASK_AS_COMPLETE
+# > add placeholder system for a different mode for each orchestrator action, to allow for reasoning within that mode
+# > investigate having blueprints for swarm
+# > add printout for open interpreter output
+# integrate function writer into base swarm # make clear this is repeatable
+# > access to devin # https://www.cognition-labs.com/blog
 # > (next_curriculum_task:integration)
-# > add ability for bots to (optionally) save, which creates a specialized version of them
+# > (next_curriculum_task:basic) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
+# add ability for bots to (optionally) save, which creates a specialized version of them
 # bot: document chat > embedchain # has save() which creates embedchain wrapper around document
 # > bot: image interpreter model > can this be done with open interpreter?
 # > bot: script writer: update script writer to create wrapper bot around output script on save()

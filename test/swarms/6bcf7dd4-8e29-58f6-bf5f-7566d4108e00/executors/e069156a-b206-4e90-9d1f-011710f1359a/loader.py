@@ -1,3 +1,3 @@
-"""Bot for writing simple Python functions based on user requirements."""
+"""Dummy bot core for testing purposes."""
 
 from base_swarm.bots.open_interpreter.loader import load_bot
