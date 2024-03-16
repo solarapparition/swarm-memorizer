@@ -655,7 +655,7 @@ def generate_artifact(task: Task) -> Artifact:
         task_discussion=task.discussion(pov=Concept.OBJECTIVE_POV),
     )
     reasoning_process = """
-    determine_required_artifact_types_phase: 
+    determine_required_artifact_type_phase:
     - description: Review the TASK SPECIFICATION to determine if the task explicitly requires a particular {ARTIFACT} TYPE (A, B, or C).
       case_1:
         description: TASK SPECIFICATION clearly requires particular {ARTIFACT} TYPE.
