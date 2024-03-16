@@ -137,10 +137,12 @@ class Adder:
                 json.loads(message["content"].strip())
             except json.JSONDecodeError:
                 return False
-            return message["role"] == "tool" and message["name"] in [
-                "error_message",
-                "add",
-            ]
+            # return message["role"] == "tool" and message["name"] in [
+            #     "error_message",
+            #     "add",
+            # ]
+            # we terminate when we know that the assistant has called one of its tools that is not the read_artifact_value function
+            return message["role"] == "tool" and "artifact_value" not in message["content"]
 
         assistant = AssistantAgent(
             "assistant",
