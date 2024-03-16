@@ -285,6 +285,7 @@ class TestTask:
 
     task: str
     id_namespace: str
+    purpose: str | None = None
 
 async def run_test_task(test_task: TestTask) -> None:
     """Run a test task."""
@@ -310,6 +311,7 @@ MAIN_CURRICULUM = [
     TestTask(
         task="Calculate 3 + 4 * 5.",
         id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df5",
+        purpose="Tests a simple task that requires orchestration."
     ),
     TestTask(
         task="Create a mock timestamp generator that advances by 1 second each time it is called.",
@@ -326,6 +328,7 @@ MAIN_CURRICULUM = [
     TestTask(
         task="Write a description of Inflection 2.5 to a file called 'inflection_description.txt'.",
         id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e00",
+        purpose="This tests what happens when a bot fails a task.",
     ),
     # "Create a mock timestamp generator that advances by 1 second each time it is called, and run it 5 times.",
     # > basic coding task case: 20 lines or less of base python > coding bot will be equipped with function it wrote
