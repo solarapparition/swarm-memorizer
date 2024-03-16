@@ -364,7 +364,7 @@ MINOR_TASKS = [
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(run_test_task(MAIN_CURRICULUM[5]))
+    asyncio.run(run_test_task(MAIN_CURRICULUM[1]))
 
 
 if __name__ == "__main__":
