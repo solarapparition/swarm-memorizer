@@ -164,14 +164,15 @@ class Swarm:
         """Execute the task the swarm is keyed on."""
         if self.task.work_status == TaskWorkStatus.COMPLETED:
             raise ExecutionError("Task has already been completed.")
-        self.delegator.assign_executor(
-            self.task,
-            self.recent_events_size,
-            self.auto_wait,
-            self.executor_selection_reasoning,
-            executor_memory=None,
-        )
-        assert self.task.executor is not None, "Task executor assignment failed."
+        if not self.task.executor:
+            self.delegator.assign_executor(
+                self.task,
+                self.recent_events_size,
+                self.auto_wait,
+                self.executor_selection_reasoning,
+                executor_memory=None,
+            )
+            assert self.task.executor, "Task executor assignment failed."
         self.task.work_status = TaskWorkStatus.IN_PROGRESS
         return await execute_and_validate(self.task)
 
