@@ -24,10 +24,19 @@ def load_bot(*_) -> BotCore:
         output_dir: Path,  # pylint: disable=unused-argument
     ) -> ExecutionReport:
         """Run the bot."""
-        messages = [
-            HumanMessage(content=str(task_description)),
-            *message_history,
-        ]
+        if message_history and isinstance(message_history[0], HumanMessage):
+            combined_message = "\n".join(
+                [str(task_description), str(message_history[0].content)]
+            )
+            messages = [
+                HumanMessage(content=combined_message),
+                *message_history[1:],
+            ]
+        else:
+            messages = [
+                HumanMessage(content=str(task_description)),
+                *message_history,
+            ]
         result = query_model(
             model=PERPLEXITY,
             messages=messages,
