@@ -171,9 +171,9 @@ class Bot:
             else report.reply
         )
 
-    def task_messages(self, report: ExecutionReport) -> str:
+    def task_messages(self, report: ExecutionReport, executor_name: str = "You") -> str:
         """Get the task messages. Assume that `bot_reply` hasn't been added to the task's messages yet."""
-        reply = f"You: {report.reply}"
+        reply = f"{executor_name}: {report.reply}"
         return "\n".join(
             [self.formatted_message_history, reply]
             if self.formatted_message_history
@@ -187,7 +187,7 @@ class Bot:
 
         context = """
         # MISSION:
-        You are an executor for a task, and you are checking whether you are still in the middle of executing a task or not.
+        You are a reviewer reviewing the status of a task executor.
 
         ## TASK INFORMATION:
         Here is the information about the task:
@@ -203,19 +203,18 @@ class Bot:
         """
         context = dedent_and_strip(context).format(
             task_information=self.task.description,
-            task_messages=self.task_messages(report),
+            task_messages=self.task_messages(report, executor_name="Executor"),
         )
         request = """
         ## REQUEST FOR YOU:
-        Based on the information above, determine if you are still in the midst of executing the task or not. Post your output in the following format:
-
-        ```start_of_in_progress_status
+        Based on the information above, determine if the executor seems to be waiting for an answer or confirmation from the task owner. Post your output in the following block format:
+        ```start_of_confirmation_status
         comment: |-
           {{comment}}
-        in_progress: !!bool |-
-          {{in_progress}}
-        ```end_of_in_progress_status
-        {{in_progress}} must be either `true` or `false`.
+        waiting_for_reply: !!bool |-
+          {{waiting_for_reply}}
+        ```end_of_confirmation_status
+        {{waiting_for_reply}} must be `true` if the executor seems to be waiting for a reply from the task owner, and `false` if the executor does not seem to be waiting for a reply.
         """
         request = dedent_and_strip(request)
         messages = [
@@ -229,14 +228,12 @@ class Bot:
             preamble=f"Checking bot completion status...\n{format_messages(messages)}",
             color=SWARM_COLOR,
         )
-        extracted = extract_and_unpack(
-            result, "start_of_in_progress_status", "end_of_in_progress_status"
-        )
+        extracted = extract_and_unpack(result, "start_of_confirmation_status")
         extracted = DEFAULT_YAML.load(extracted)
-        in_progress = extracted["in_progress"]
+        in_progress = extracted["waiting_for_reply"]
         assert isinstance(
             in_progress, bool
-        ), f"Expected bool for `in_progress`, got: {in_progress}"
+        ), f"Expected bool for `completed`, got: {in_progress}"
         return not in_progress
 
     async def execute(self) -> ExecutionReport:

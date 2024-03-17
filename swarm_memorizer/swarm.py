@@ -215,10 +215,6 @@ class Swarm:
         return await self.execute()
 
 
-# set up test swarm
-# ....
-# handle case: executor knows it hasn't done the task correctly, but isn't actually able to perform the task > may need to add a way for executor to signal this
-# ....
 # train integration until there's enough record data for correction
 # ....
 # > need to handle full failure path for the whole swarm
@@ -382,12 +378,12 @@ MINOR_CASES = [
     TestTask(
         task="Write 'Hello, World!' to a file.",
         id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e00",
-        purpose="This tests what happens when a bot fails a task.",
+        purpose="Tests what happens when a bot fails a task.",
     ),
     TestTask(
         task="Research Inflection 2.5, write a description of it and count the number of characters in the description.",
         id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e02",
-        purpose="This tests what happens when a bot can detect that it hasn't finished a task, but can't actually finish it.",
+        purpose="This tests what happens when a bot fails a task but might not trigger validation flow.",
     ),
 ]
 
