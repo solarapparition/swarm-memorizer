@@ -347,16 +347,12 @@ MAIN_CURRICULUM = [
     TestTask(
         task="Tell me about Inflection 2.5.",
         id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df9",
+        purpose="Tests perplexity base swarm bot."
     ),
     TestTask(
-        task="Write 'Hello, World!' to a file.",
-        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e00",
-        purpose="This tests what happens when a bot fails a task.",
-    ),
-    TestTask(
-        task="Write a description of Inflection 2.5 to a file called 'inflection_description.txt'.",
-        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e00",
-        purpose="This tests what happens when a bot fails a task.",
+        task="Research Inflection 2.5, write a description of it and count the number of characters in the description.",
+        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e01",
+        purpose="This tests integration of 2 base swarm bots: open interpreter and perplexity.",
     ),
     # "Create a mock timestamp generator that advances by 1 second each time it is called, and run it 5 times.",
     # > basic coding task case: 20 lines or less of base python > coding bot will be equipped with function it wrote
@@ -378,10 +374,20 @@ MAIN_CURRICULUM = [
 # ]
 
 
-MINOR_TASKS = [
+MINOR_CASES = [
     TestTask(
         task="Write 'Hello, World!' to a file.",
         id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df8",
+    ),
+    TestTask(
+        task="Write 'Hello, World!' to a file.",
+        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e00",
+        purpose="This tests what happens when a bot fails a task.",
+    ),
+    TestTask(
+        task="Research Inflection 2.5, write a description of it and count the number of characters in the description.",
+        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e02",
+        purpose="This tests what happens when a bot can detect that it hasn't finished a task, but can't actually finish it.",
     ),
 ]
 
@@ -393,7 +399,8 @@ MINOR_TASKS = [
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(run_test_task(MAIN_CURRICULUM[5]))
+    # asyncio.run(run_test_task(MAIN_CURRICULUM[5]))
+    asyncio.run(run_test_task(MINOR_CASES[2]))
 
 
 if __name__ == "__main__":
