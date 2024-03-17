@@ -80,7 +80,7 @@ class ExecutionReport:
     reply: str
     task_completed: bool | None = None
     validation: WorkValidationResult | None = None
-    new_parent_events: list[Event] = field(default_factory=list)
+    new_parent_events: list[Event[Any]] = field(default_factory=list)
     artifacts: list[Artifact] | None = None
     """Artifacts produced by the executor. `None` means that the executor does not report whether any artifacts are produced, while an empty list means that the executor explicitly reported that no artifacts were produced."""
 
@@ -440,7 +440,7 @@ class Task:
         """Discussion of a task in the event log."""
         return self.reformat_event_log(self.event_log.messages, pov)
 
-    def execution_reply_message(self, reply: str) -> Event:
+    def execution_reply_message(self, reply: str) -> Event[Message]:
         """Create events for updating the status of the task upon execution."""
         assert self.executor
         return Event(
@@ -557,7 +557,7 @@ def validate_task_completion(
     return task.validator.validate(context)
 
 
-def change_status(task: Task, new_status: TaskWorkStatus, reason: str) -> Event:
+def change_status(task: Task, new_status: TaskWorkStatus, reason: str) -> Event[TaskStatusChange]:
     """Change the status of a task."""
     assert (
         task.work_status != new_status
@@ -763,7 +763,7 @@ def generate_artifact(task: Task) -> Artifact:
 
 def create_task_message(
     task: Task, message: str, sender_id: RuntimeId, event_id: EventId
-) -> Event:
+) -> Event[Message]:
     """Create a message event for a task."""
     return Event(
         data=Message(
@@ -777,8 +777,8 @@ def create_task_message(
 
 
 def send_subtask_message(
-    subtask: Task, message_event: Event, initial: bool
-) -> list[Event]:
+    subtask: Task, message_event: Event[Message], initial: bool
+) -> list[Event[TaskStatusChange]]:
     """Send a message to the executor of a subtask."""
     subtask.event_log.add(message_event)
     report_status_change = (

@@ -109,7 +109,7 @@ class Bot:
         """Messages from the discussion log."""
         task_messages = self.task.event_log.messages
 
-        def to_bot_message(event: Event) -> HumanMessage | AIMessage:
+        def to_bot_message(event: Event[Message]) -> HumanMessage | AIMessage:
             """Convert an event to a message."""
             assert isinstance(event.data, Message)
             assert event.data.sender in {self.id, self.task.owner_id}

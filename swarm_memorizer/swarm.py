@@ -215,24 +215,23 @@ class Swarm:
         return await self.execute()
 
 
-# train integration until there's enough record data for correction
 # ....
-# > need to handle full failure path for the whole swarm
-# > update executor frustration threshold to 3
-# > make sure to update bot descriptions from test results
-# > use an actual framework for tests; # pytest # agenteval
+# make sure to update bot descriptions from test results
+# update executor frustration threshold to 3
 # > access to and integration with devin # https://www.cognition-labs.com/blog
-# > factor out tests
-# > add generic typing to event
-# > decouple __repr__ artifact from __str__ artifact > bypass step of having to have llm pass around artifact info # may require creation of artifact_id, to allow for orchestrator to reference artifact without seeing its data structure # would also be helpful for REPORT_TASK_AS_COMPLETE
-# > add placeholder system for a different mode for each orchestrator action, to allow for reasoning within that mode
-# > investigate having blueprints for swarm
-# > add printout for open interpreter output
+# need to handle full failure path for the whole swarm
+# train integration until there's enough record data for correction for curriculum task 5
+# add generic typing to event
+# factor out tests
 # integrate function writer into base swarm # make clear this is repeatable
+# > add printout for full open interpreter output
+# > add placeholder system for a different mode for each orchestrator action, to allow for reasoning within that mode
 # > (next_curriculum_task:integration)
 # > (next_curriculum_task:basic) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
 # add ability for bots to (optionally) save, which creates a specialized version of them
 # bot: document chat > embedchain # has save() which creates embedchain wrapper around document
+# > use an actual framework for tests; # pytest # agenteval
+# > decouple __repr__ artifact from __str__ artifact > bypass step of having to have llm pass around artifact info # may require creation of artifact_id, to allow for orchestrator to reference artifact without seeing its data structure # would also be helpful for REPORT_TASK_AS_COMPLETE
 # > bot: image interpreter model > can this be done with open interpreter?
 # > bot: script writer: update script writer to create wrapper bot around output script on save()
 # bot: web browser > autogen web surfer agent
@@ -240,6 +239,7 @@ class Swarm:
 # > (next_not_implemented)
 # write readme > artifact system > demo > maybe video
 # ---MVP---
+# > investigate having blueprints for swarm
 # > bot: gpt-researcher
 # > bot: openai assistant
 # > bot: add pure, offline language frontier model assistants # really bad at math > gpt-4 > gemini > claude 3

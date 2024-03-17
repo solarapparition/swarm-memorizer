@@ -26,6 +26,7 @@ from swarm_memorizer.event import (
     StartedSubtaskDiscussion,
     SubtaskIdentification,
     TaskDescriptionUpdate,
+    TaskStatusChange,
     Thought,
 )
 from swarm_memorizer.execution import execute_and_validate
@@ -222,7 +223,7 @@ class ActionResult:
     """Result of an action."""
 
     pause_execution: PauseExecution
-    new_events: list[Event]
+    new_events: list[Event[Any]]
     task_completed: bool
 
 
@@ -1530,7 +1531,7 @@ class Orchestrator:
         """Add a subtask to the orchestrator."""
         self.task.subtasks.items.append(subtask)
 
-    def subtask_message(self, subtask: Task, message: str) -> Event:
+    def subtask_message(self, subtask: Task, message: str) -> Event[Message]:
         """Format a message to a subtask."""
         assert subtask.executor, "Cannot post message to subtask without an executor."
         event_id = generate_id(EventId, self.id_generator)
@@ -1540,7 +1541,7 @@ class Orchestrator:
 
     def send_focused_subtask_message(
         self, message_text: str, initial: bool = False
-    ) -> list[Event]:
+    ) -> list[Event[TaskStatusChange]]:
         """Send a message to the executor for the focused subtask."""
         assert self.focused_subtask is not None
         message_event = self.subtask_message(self.focused_subtask, message_text)
@@ -1548,7 +1549,7 @@ class Orchestrator:
             self.focused_subtask, message_event=message_event, initial=initial
         )
 
-    def focus_subtask(self, subtask: Task) -> Event:
+    def focus_subtask(self, subtask: Task) -> Event[StartedSubtaskDiscussion]:
         """Focus on a subtask."""
         self.state.focused_subtask = subtask
         return Event(
@@ -1560,7 +1561,7 @@ class Orchestrator:
             id=generate_id(EventId, self.id_generator),
         )
 
-    def unfocus_subtask(self) -> Event:
+    def unfocus_subtask(self) -> Event[PausedSubtaskDiscussion]:
         """Unfocus on a subtask."""
         assert self.state.focused_subtask, "Can't unfocus without a focused subtask."
         subtask_id = self.state.focused_subtask.id
@@ -1764,7 +1765,7 @@ class Orchestrator:
         # (next_action_implementation) > pause subtask discussion: adds event that is a summary of the new items in the discussion to maintain state continuity
         # raise ValueError(f"Unknown action: {decision.action_name}")
 
-    def from_owner_message(self, message: str) -> Event:
+    def from_owner_message(self, message: str) -> Event[Message]:
         """Create a message from the task owner."""
         return Event(
             data=Message(
@@ -1776,7 +1777,7 @@ class Orchestrator:
             id=generate_id(EventId, self.id_generator),
         )
 
-    def to_owner_message(self, message: str) -> Event:
+    def to_owner_message(self, message: str) -> Event[Message]:
         """Create a message to the task owner."""
         return Event(
             data=Message(
@@ -1789,12 +1790,12 @@ class Orchestrator:
         )
 
     @property
-    def first_new_event(self) -> Event:
+    def first_new_event(self) -> Event[Any]:
         """First new event since the last update of the main task."""
         return self.event_log.events[-(self.new_event_count)]
 
     @property
-    def last_read_message(self) -> Event | None:
+    def last_read_message(self) -> Event[Message] | None:
         """Last message read by the orchestrator."""
         old_events = reversed(self.event_log.events[: -(self.new_event_count)])
         old_messages = (
@@ -1959,7 +1960,7 @@ class Orchestrator:
         if followup_event is not None:
             self.event_log.add(followup_event)
 
-    def add_to_event_log(self, events: Sequence[Event]) -> None:
+    def add_to_event_log(self, events: Sequence[Event[Any]]) -> None:
         """Add events to the event log."""
         self.task.event_log.add(*events)
         self.state.new_event_count += len(events)

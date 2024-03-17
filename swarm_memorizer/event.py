@@ -1,7 +1,7 @@
 """Classes for events."""
 
 from dataclasses import asdict, dataclass, field
-from typing import Any, Iterator
+from typing import Any, Iterator, TypeVar, Generic
 
 from swarm_memorizer.schema import (
     NONE,
@@ -121,18 +121,6 @@ class TaskValidation:
         return f"System: Task {self.task_id} was reported as complete by executor, but failed validation, with the following feedback: {self.validation_result.feedback}."
 
 
-EventData = (
-    Message
-    | SubtaskIdentification
-    | TaskStatusChange
-    | StartedSubtaskDiscussion
-    | PausedSubtaskDiscussion
-    | TaskDescriptionUpdate
-    | Thought
-    | TaskValidation
-)
-
-
 def replace_agent_id(
     text_to_replace: str, replace_with: str, agent_id: RuntimeId
 ) -> str:
@@ -149,8 +137,21 @@ def replace_task_id(text_to_replace: str, task_id: TaskId, replacement: str) -> 
     return text_to_replace.replace(task_id, f"`{replacement}`")
 
 
+EventData = TypeVar(
+    "EventData",
+    Message,
+    SubtaskIdentification,
+    TaskStatusChange,
+    StartedSubtaskDiscussion,
+    PausedSubtaskDiscussion,
+    TaskDescriptionUpdate,
+    Thought,
+    TaskValidation,
+)
+
+
 @dataclass
-class Event:
+class Event(Generic[EventData]):
     """An event in the event log."""
 
     data: EventData
@@ -160,7 +161,6 @@ class Event:
     timestamp: str = field(default_factory=utc_timestamp)
 
     def __str__(self) -> str:
-        # return f"[{self.timestamp}] {self.data}"
         return f"{self.data}"
 
     def to_str_with_pov(
@@ -209,10 +209,10 @@ class Event:
 class EventLog:
     """A log of events within a task."""
 
-    events: list[Event] = field(default_factory=list)
+    events: list[Event[Any]] = field(default_factory=list)
 
     @property
-    def last_event(self) -> Event | None:
+    def last_event(self) -> Event[Any] | None:
         """Last event in the event log."""
         return self.events[-1] if self.events else None
 
@@ -268,7 +268,7 @@ class EventLog:
         """Recent events."""
         return EventLog(events=self.events[-num_recent:])
 
-    def add(self, *events: Event) -> None:
+    def add(self, *events: Event[Any]) -> None:
         """Add events to the event log."""
         self.events.extend(events)
 
@@ -280,6 +280,6 @@ class EventLog:
         """Whether the event log is empty."""
         return bool(self.events)
 
-    def __iter__(self) -> Iterator[Event]:
+    def __iter__(self) -> Iterator[Event[Any]]:
         """Iterate over the event log."""
         return iter(self.events)
