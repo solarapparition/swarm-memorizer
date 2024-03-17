@@ -64,6 +64,7 @@ class Swarm:
     files_dir: Path
     """Directory for files related to the swarm."""
     core: Director = field(default_factory=DummyDirector)
+    """Core of the swarm that makes top-level decisions."""
     validator: WorkValidator = field(
         default_factory=lambda: Human(name="Human Validator")
     )
@@ -214,13 +215,17 @@ class Swarm:
         return await self.execute()
 
 
-# test director system
+# set up test swarm
 # ....
-# > update open interpreter: "programmatic task" to make it clear this is a coding agent
-# check to see if learning works (when open interpreter fails)
+# handle case: executor knows it hasn't done the task correctly, but isn't actually able to perform the task > may need to add a way for executor to signal this
+# ....
+# train integration until there's enough record data for correction
+# ....
+# > need to handle full failure path for the whole swarm
+# > update executor frustration threshold to 3
+# > make sure to update bot descriptions from test results
+# > use an actual framework for tests; # pytest # agenteval
 # > access to and integration with devin # https://www.cognition-labs.com/blog
-# test integration to base swarm
-# ....
 # > factor out tests
 # > add generic typing to event
 # > decouple __repr__ artifact from __str__ artifact > bypass step of having to have llm pass around artifact info # may require creation of artifact_id, to allow for orchestrator to reference artifact without seeing its data structure # would also be helpful for REPORT_TASK_AS_COMPLETE

@@ -700,14 +700,14 @@ def generate_artifact(task: Task) -> Artifact:
         - Determine the value of the `description` field. For TYPE B, the `description` is a concise summary of what's in the {ARTIFACT}.
         - Determine the value of the `must_be_created` field, by checking the TASK CONVERSATION to understand if the file for the {ARTIFACT} is supposed to already have been created. If it has, set the `must_be_created` field to `false`; otherwise, set it to `true`.
         - Determine the value of the `content` field. If `must_be_created` is `true`, then this would be the full output required by the task. Otherwise, the value would be the empty string.
-        - Determine the value of the `location` field, by checking whether the TASK CONVERSATION contains an absolute path for the {ARTIFACT}. If it does, then the `location` field to the absolute path to the file; if no path is present, or the path is relative, set it to `null`.
+        - Determine the value of the `location` field, by checking whether the TASK CONVERSATION contains an absolute path for the {ARTIFACT}. If it does, then set the `location` field to the absolute path to the file; if no path is present, or the path is relative, set it to `null`.
       case_C:
         description: the {ARTIFACT} TYPE is C, a remote resource {ARTIFACT}.
         required_info: TYPE C {ARTIFACT}s require gathering info in the `description`, and `location` fields. The other fields are preset for this type.
         steps:
         - Reproduce the YAML spec format for the {ARTIFACT} TYPE as a reminder of what it should be.
         - Determine the value of the `description` field. For TYPE C, the `description` is a concise description of what's in the {ARTIFACT}.
-        - Determine the value of the `location` field, by checking whether the TASK CONVERSATION contains a full URI for the {ARTIFACT}. If it does, then the `location` field to the full URI; otherwise, set it to `null`.
+        - Determine the value of the `location` field, by checking whether the TASK CONVERSATION contains a full URI for the {ARTIFACT}. If it does, then set the `location` field to the full URI; otherwise, set it to `null`.
     """
     reasoning_process = dedent_and_strip(reasoning_process).format(
         ARTIFACT=Concept.ARTIFACT.value,
