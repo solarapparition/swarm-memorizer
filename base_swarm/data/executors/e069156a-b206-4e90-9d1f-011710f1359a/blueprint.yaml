@@ -6,7 +6,7 @@
   An agent that can perform digital tasks by writing and executing code.
   
   Limitations:
-  - Can only perform tasks that are possible with code—wouldn't be able to do anything physical, or operate a GUI, for example.
+  - Can only perform deterministic, programmatic tasks that are possible with code—it wouldn't be able to do anything physical, or operate a GUI, for example, or perform research.
   - It doesn't code _for_ you; i.e. it won't give you the code nor save it anywhere.
   - It also can't execute code that you give it—it's not an interpreter.
 "role": |-
