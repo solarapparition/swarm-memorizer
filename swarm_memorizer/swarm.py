@@ -41,12 +41,18 @@ class Director(Protocol):
 
 @dataclass
 class DummyDirector:
-    """Dummy core that just reflects back the validation error."""
+    """Dummy core that just reflects back the validation error, or redirects to a human."""
+
+    @cached_property
+    def human(self) -> Human:
+        """Human validator."""
+        return Human(name="Human Director")
 
     def direct(self, task: Task, report: ExecutionReport) -> str:
         """Sends back the validation error for the task."""
-        assert report.validation and not report.validation.valid
-        return f"The task was not successfully executed. {report.validation.feedback}"
+        if report.validation and not report.validation.valid:
+            return f"The task was not successfully executed. {report.validation.feedback}"
+        return self.human.advise(report.reply)
 
 
 @dataclass(frozen=True)
