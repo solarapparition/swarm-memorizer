@@ -23,10 +23,10 @@ def create_script_runner(
     - interpreter: The Python interpreter to use. Defaults to "python".
     """
     child = pexpect.spawn(f"{interpreter} {script}", cwd=str(cwd), encoding="utf-8")
+    child.expect(input_pattern)
 
     def send_message(message: str) -> str:
         """Send a message to interactive script and return the reply."""
-        child.expect(input_pattern)
         child.sendline(message)
         child.expect(output_pattern or message, timeout=None)
         child.expect(input_pattern)
