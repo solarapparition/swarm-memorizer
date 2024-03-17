@@ -1,0 +1,11 @@
+"id": |-
+  e069156a-b206-4e90-9d1f-011710f1359a
+"name": |-
+  Code Execution Assistant
+"description": |-
+  An agent that can perform digital tasks by writing and executing code.
+  
+  Limitations:
+  - Can only perform deterministic, programmatic tasks that are possible with code—it wouldn't be able to do anything physical, or operate a GUI, for example, or perform research.
+"role": |-
+  bot

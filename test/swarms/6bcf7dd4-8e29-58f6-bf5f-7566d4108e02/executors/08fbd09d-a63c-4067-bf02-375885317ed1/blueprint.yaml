@@ -1,0 +1,12 @@
+"id": |-
+  08fbd09d-a63c-4067-bf02-375885317ed1
+"name": |-
+  perplexity-query
+"description": |-
+  An query bot that can search for basic information on the internet.
+
+  Limitations:
+  - It can only search for basic, factual information, and not queries that require significant analysis.
+  - It can not perform any tasks that require coding, file manipulation or interacting with a local machine environment.
+"role": |-
+  bot
