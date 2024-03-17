@@ -40,7 +40,7 @@ async def execute_and_validate(task: Task) -> ExecutionReport:
         task, TaskWorkStatus.IN_VALIDATION, "Validation has begun for task."
     )
     validation_result = validate_task_completion(task, report)
-    if not validation_result.valid and task.validation_fail_count:
+    if not validation_result.valid and task.validation_fail_count >= 2:
         new_executor = redelegate_task_executor(task.executor)
         raise NotImplementedError("TODO")
         task.reset_progress()

@@ -3,10 +3,10 @@
 "name": |-
   perplexity-query
 "description": |-
-  An agent that can search for basic information on the internet.
+  An query bot that can search for basic information on the internet.
 
   Limitations:
-  - It can only search for basic, factual information, and not queries that require significant research.
-  - It can not perform any actions that require coding or interaction with files.
+  - It can only search for basic, factual information, and not queries that require significant analysis.
+  - It can not perform any tasks that require coding, file manipulation or interacting with a local machine environment.
 "role": |-
   bot

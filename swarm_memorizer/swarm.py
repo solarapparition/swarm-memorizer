@@ -216,12 +216,9 @@ class Swarm:
 
 
 # ....
-# make sure to update bot descriptions from test results
-# update executor frustration threshold to 3
 # > access to and integration with devin # https://www.cognition-labs.com/blog
 # need to handle full failure path for the whole swarm
 # train integration until there's enough record data for correction for curriculum task 5
-# add generic typing to event
 # factor out tests
 # integrate function writer into base swarm # make clear this is repeatable
 # > add printout for full open interpreter output
