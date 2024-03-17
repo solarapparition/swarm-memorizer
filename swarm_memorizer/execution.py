@@ -4,7 +4,7 @@ from swarm_memorizer.artifact import ArtifactValidationError, ArtifactValidation
 from swarm_memorizer.delegation import redelegate_task_executor
 from swarm_memorizer.event import Event, TaskValidation
 from swarm_memorizer.id_generation import generate_id
-from swarm_memorizer.schema import EventId, TaskWorkStatus
+from swarm_memorizer.schema import EventId, TaskWorkStatus, WorkValidationResult
 from swarm_memorizer.task import (
     ExecutionReport,
     Task,
@@ -56,6 +56,9 @@ async def execute_and_validate(task: Task) -> ExecutionReport:
         except ArtifactValidationError as error:
             new_status = TaskWorkStatus.BLOCKED
             reason = translate_artifact_validation_error(error)
+            validation_result = WorkValidationResult(
+                valid=False, feedback=reason
+            )
             task.increment_fail_count()  # MUTATION
             report.task_completed = False  # MUTATION
         else:
