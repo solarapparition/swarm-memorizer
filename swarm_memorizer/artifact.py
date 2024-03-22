@@ -55,12 +55,14 @@ class Artifact:
         #     )
         # except:
         #     breakpoint()
+        if "location" not in data:
+            data["type"] = ArtifactType.INLINE.value
         return cls(
             type=ArtifactType(data["type"]),
             description=data["description"],
-            location=data["location"],
-            must_be_created=data["must_be_created"],
-            content=data["content"],
+            location=data.get("location"),
+            must_be_created=bool(data.get("must_be_created")),
+            content=data.get("content"),
         )
 
     def serialize(self) -> dict[str, Any]:
