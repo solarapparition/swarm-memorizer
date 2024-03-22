@@ -272,6 +272,17 @@ class EventLog:
         """Add events to the event log."""
         self.events.extend(events)
 
+    def add_before_message(self, event: Event[Any]) -> None:
+        """Add an event before a message."""
+        if self.events and isinstance(self.events[-1].data, Message):
+            self.events.insert(-1, event)
+        else:
+            self.events.append(event)
+
+    def reset(self) -> None:
+        """Reset the event log."""
+        self.events = []
+
     def __str__(self) -> str:
         """String representation of the event log."""
         return "\n".join([str(event) for event in self.events]) if self.events else NONE

@@ -1955,9 +1955,9 @@ class Orchestrator:
             )
         )
         self.task.description = updated_task_description
-        self.event_log.add(task_update_event)
+        self.event_log.add_before_message(task_update_event)
         if followup_event is not None:
-            self.event_log.add(followup_event)
+            self.event_log.add_before_message(followup_event)
 
     def add_to_event_log(self, events: Sequence[Event[Any]]) -> None:
         """Add events to the event log."""
