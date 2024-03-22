@@ -43,10 +43,7 @@ class Director(Protocol):
 class DummyDirector:
     """Dummy core that just reflects back the validation error, or redirects to a human."""
 
-    @cached_property
-    def human(self) -> Human:
-        """Human validator."""
-        return Human(name="Human Director")
+    human: Human
 
     def direct(self, task: Task, report: ExecutionReport) -> str:
         """Sends back the validation error for the task."""
@@ -65,7 +62,9 @@ class Swarm:
     """Initial task description."""
     files_dir: Path
     """Directory for files related to the swarm."""
-    core: Director = field(default_factory=DummyDirector)
+    core: Director = field(
+        default_factory=lambda: DummyDirector(human=Human(name="Human Director"))
+    )
     """Core of the swarm that makes top-level decisions."""
     validator: WorkValidator = field(
         default_factory=lambda: Human(name="Human Validator")
@@ -329,6 +328,7 @@ async def run_test_task(test_task: TestTask) -> None:
     with shelve.open(".data/cache/human_reply", writeback=True) as cache:
         human_tester = Human(reply_cache=cache)
         swarm = Swarm(
+            core=DummyDirector(human=human_tester),
             task_description=test_task.task,
             files_dir=Path(f"test/swarms/{test_task.id_namespace}"),
             validator=human_tester,
