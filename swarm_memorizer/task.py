@@ -27,6 +27,7 @@ from swarm_memorizer.schema import (
     NONE,
     REASONING_OUTPUT_INSTRUCTIONS,
     ArtifactType,
+    BlueprintId,
     Concept,
     EventId,
     ExecutionOutcome,
@@ -386,9 +387,26 @@ class Task:
         """Number of times the task has failed validation."""
         return self.data.validation_failures
 
+    @property
+    def failed_executors(self) -> list[BlueprintId]:
+        """Ids of failed executors."""
+        return [
+            outcome.blueprint_id
+            for outcome in self.execution_history.history
+            if not outcome.success
+        ]
+
     def increment_fail_count(self) -> None:
         """Increment the number of validation failures."""
         self.data.validation_failures += 1
+
+    def reset_fail_count(self) -> None:
+        """Reset the number of validation failures."""
+        self.data.validation_failures = 0
+    
+    def reset_event_log(self) -> None:
+        """Reset the event log."""
+        self.event_log.reset()
 
     def reformat_event_log(
         self,

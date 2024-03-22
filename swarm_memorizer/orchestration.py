@@ -1987,7 +1987,16 @@ class Orchestrator:
         while True:
             if self.auto_wait and self.awaitable_subtasks:
                 executor_reports = [
-                    asyncio.create_task(execute_and_validate(subtask))
+                    asyncio.create_task(
+                        execute_and_validate(
+                            subtask,
+                            delegator=self.delegator,
+                            recent_events_size=self.recent_events_size,
+                            auto_await=self.auto_wait,
+                            executor_selection_reasoning=self.executor_selection_reasoning,
+                            executor_memory=self.executor_memory,
+                        )
+                    )
                     for subtask in self.awaitable_subtasks
                     if subtask.executor is not None
                 ]
