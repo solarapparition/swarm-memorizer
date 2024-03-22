@@ -8,7 +8,7 @@ from typing import Any, Self, Sequence
 from llama_index.schema import TextNode
 from llama_index import VectorStoreIndex
 
-from swarm_memorizer.artifact import Artifact, artifacts_printout, input_artifacts_printout
+from swarm_memorizer.artifact import Artifact, artifacts_printout, abbreviated_artifacts_printout
 from swarm_memorizer.schema import BlueprintId, ExecutionOutcome, RuntimeId, TaskId
 from swarm_memorizer.toolkit.text import dedent_and_strip
 from swarm_memorizer.toolkit.yaml_tools import DEFAULT_YAML
@@ -154,12 +154,12 @@ class TaskData:
     def input_artifacts_printout(self) -> str:
         """String representation of the artifacts."""
         # return artifacts_printout(self.input_artifacts)
-        return input_artifacts_printout(self.input_artifacts)
+        return abbreviated_artifacts_printout(self.input_artifacts)
 
     @property
     def output_artifacts_printout(self) -> str:
         """String representation of the artifacts."""
-        return artifacts_printout(self.output_artifacts)
+        return abbreviated_artifacts_printout(self.output_artifacts)
 
     @property
     def information_with_artifacts(self) -> str:

@@ -141,7 +141,7 @@ def artifacts_printout(artifacts: Sequence[Artifact]) -> str:
     return "\n".join(str(artifact) for artifact in artifacts) or NONE
 
 
-def input_artifacts_printout(artifacts: Sequence[Artifact]) -> str:
+def abbreviated_artifacts_printout(artifacts: Sequence[Artifact]) -> str:
     """String representation of the input artifacts."""
     return "\n".join(artifact.format_as_input() for artifact in artifacts) or NONE
 
