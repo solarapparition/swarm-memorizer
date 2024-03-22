@@ -155,6 +155,7 @@ class Swarm:
                 description=TaskDescription(information=self.task_description),
                 owner_id=self.id,
                 rank_limit=None,
+                parent_rank_limit=None,
                 input_artifacts=[],
             ),
             validator=self.validator,

@@ -1629,6 +1629,7 @@ class Orchestrator:
                 description=TaskDescription(information=identified_subtask),
                 input_artifacts=extracted_results.input_artifacts,
                 context=subtask_context,
+                parent_rank_limit=self.rank_limit,
             ),
             id_generator=self.id_generator,
             task_records_dir=self.task.task_records_dir,

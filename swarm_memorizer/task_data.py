@@ -81,6 +81,7 @@ class TaskData:
     start_timestamp: float | None = field(default=None, init=False)
     end_timestamp: float | None = field(default=None, init=False)
     validation_failures: int = field(default=0, init=False)
+    parent_rank_limit: int | None = None
 
     def serialize(self) -> dict[str, Any]:
         """Serialize the task."""

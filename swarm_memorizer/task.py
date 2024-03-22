@@ -244,6 +244,16 @@ class Task:
         self.data.output_artifacts = value
 
     @property
+    def parent_rank_limit(self) -> int | None:
+        """Rank limit for the task."""
+        return self.data.parent_rank_limit
+
+    @parent_rank_limit.setter
+    def parent_rank_limit(self, value: int | None) -> None:
+        """Set rank limit for the task."""
+        self.data.parent_rank_limit = value
+
+    @property
     def definition_of_done(self) -> str | None:
         """Definition of done for the task."""
         return self.description.definition_of_done
@@ -517,6 +527,13 @@ class Task:
         self.executor.save_blueprint()
         self.executor = None
         self.save()
+
+    def reset_rank_limit(self) -> None:
+        """Reset the rank limit of a task."""
+        parent_rank = self.parent_rank_limit
+        assert parent_rank != 0, "Parent task can't be a 0-rank task."
+        self.rank_limit = parent_rank - 1 if parent_rank else None
+
 
     @classmethod
     def from_serialized_data(
