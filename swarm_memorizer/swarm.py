@@ -231,9 +231,7 @@ class Swarm:
         return await self.execute()
 
 
-# commit and bump version
 # ....
-# ---0.1.0---
 # > add save() ability to bots # saves copy of bot specialized for task
 # > update orchestrator learning to be more specific to task
 # > last read main task owner message (when making task updates) needs to have its ids replaced
@@ -243,7 +241,7 @@ class Swarm:
 # integrate function writer into base swarm # make clear this is repeatable
 # bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
 # bot: function writer: update function writer to create wrapper bot around output script on save()
-# ---0.2.0---
+# ---0.3.0---
 # > refactor: delegator's `assign_executor` args should be saved as 2 objects within delegator, one for delegation and one for orchestrator creation
 # > factor out tests
 # > add printout for full open interpreter output
