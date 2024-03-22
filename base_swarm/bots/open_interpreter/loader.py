@@ -24,6 +24,8 @@ def create_message(
     """Create message to send to Open Interpreter."""
     if not message_history:
         return str(task_description)
+    if len(message_history) == 1:
+        return f"{task_description}\n\n{message_history[0].content}"  # type: ignore
     assert isinstance(message_history[-1], HumanMessage), (
         f"Expected last message to be a HumanMessage, but got: {type(message_history[-1])}.\n"
         "Message history:\n"
