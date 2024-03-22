@@ -510,6 +510,7 @@ class Delegator:
         task: Task,
         executor_selection_reasoning: str,
         executor_memory: str | None,
+        excluded_executors: Sequence[BlueprintId] | set[BlueprintId] | None = None,
         max_candidates: int = 10,
     ) -> DelegationSuccessful:
         """Find an executor to delegate the task to."""
@@ -519,6 +520,12 @@ class Delegator:
         candidates = self.search_blueprints(
             task.data.initial_information, task.rank_limit
         )
+        if excluded_executors:
+            candidates = [
+                candidate
+                for candidate in candidates
+                if candidate.blueprint.id not in excluded_executors
+            ]
         if not candidates:
             return DelegationSuccessful(False)
 
@@ -550,10 +557,14 @@ class Delegator:
         auto_await: bool,
         executor_selection_reasoning: str,
         executor_memory: str | None,
+        excluded_executors: Sequence[BlueprintId] | set[BlueprintId] | None = None,
     ) -> None:
         """Assign an existing or new executor to a task."""
         delegation_successful = self.delegate(
-            task, executor_selection_reasoning, executor_memory=executor_memory
+            task,
+            executor_selection_reasoning,
+            executor_memory=executor_memory,
+            excluded_executors=excluded_executors,
         )
         # blueprints represent known capabilities; so, failure means we must create a new executor
         if not delegation_successful:
