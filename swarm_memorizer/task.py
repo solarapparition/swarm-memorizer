@@ -557,7 +557,9 @@ def validate_task_completion(
     return task.validator.validate(context)
 
 
-def change_status(task: Task, new_status: TaskWorkStatus, reason: str) -> Event[TaskStatusChange]:
+def change_status(
+    task: Task, new_status: TaskWorkStatus, reason: str
+) -> Event[TaskStatusChange]:
     """Change the status of a task."""
     assert (
         task.work_status != new_status

@@ -11,9 +11,9 @@ from typing import Any, Iterable, Self, Sequence
 
 from langchain.schema import SystemMessage, AIMessage
 from ruamel.yaml import YAMLError, YAML
+
 from swarm_memorizer.artifact import Artifact
 from swarm_memorizer.blueprint import Knowledge, OrchestratorBlueprint, Reasoning
-
 from swarm_memorizer.config import SWARM_COLOR, VERBOSE
 from swarm_memorizer.acceptance import decide_acceptance
 from swarm_memorizer.delegation import Delegator, generate_executor_selection_reasoning
@@ -50,7 +50,6 @@ from swarm_memorizer.task import (
     ExecutionReport,
     Task,
     TaskList,
-    change_status,
     create_task_message,
     send_subtask_message,
 )
@@ -1427,7 +1426,7 @@ class Orchestrator:
         ```start_of_subtask_identification_output
         comment: |-
           {{comment}}
-        input_artifacts:  # these are artifacts either given by the MAIN TASK OWNER or listed under COMPLETED SUBTASKs that the executor may need to complete the subtask; leave empty if there are none
+        input_artifacts:  # these are artifacts either given by the MAIN TASK OWNER or listed under COMPLETED SUBTASKs that the executor may need to complete the subtask; don't add any items if there are no artifacts
         - {{input_artifact_1}}
         - {{input_artifact_2}}
         - [... etc.]

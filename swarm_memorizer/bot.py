@@ -7,8 +7,8 @@ import sys
 from typing import Protocol, Self
 
 from langchain.schema import AIMessage, HumanMessage, SystemMessage
-from swarm_memorizer.artifact import artifacts_printout
 
+from swarm_memorizer.artifact import artifacts_printout
 from swarm_memorizer.blueprint import BotBlueprint
 from swarm_memorizer.config import SWARM_COLOR
 from swarm_memorizer.acceptance import Acceptor, decide_acceptance

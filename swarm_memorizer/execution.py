@@ -68,9 +68,6 @@ async def execute_and_validate(task: Task) -> ExecutionReport:
             task.output_artifacts = report.artifacts  # MUTATION
             task.wrap_execution(success=True)  # MUTATION
     else:
-        # assert (
-        #     report.artifacts
-        # ), "Artifact(s) must be present when wrapping up execution."
         new_status = TaskWorkStatus.COMPLETED
         reason = "Validated as complete."
         task.output_artifacts = report.artifacts  # MUTATION

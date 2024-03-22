@@ -121,7 +121,7 @@ class ActionName(Enum):
 class ReasoningGenerationNotes(Enum):
     """Template notes for reasoning generation."""
 
-    OVERVIEW = "Provide a nested, robust reasoning structure in YAML format for the {role} to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:"
+    OVERVIEW = "Provide a nested, robust reasoning structure in YAML format for the {role} to sequentially think through the information it has access to so that it has the appropriate mental context for deciding what to do next. Provide the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:"
     INFORMATION_RESTRICTIONS = "Assume that the {role} has access to what's described in {INFORMATION_SECTIONS} above, but no other information, except for general world knowledge that is available to a standard LLM like GPT-3."
     TERM_REFERENCES = """The {role} requires precise references to information it's been given, and it may need a reminder to check for specific parts; it's best to be explicit and use the _exact_ capitalized terminology to refer to concepts or information sections (e.g. "{example_section_1}" or "{example_section_2}"); however, only use capitalization to refer to specific terms—don't use capitalization as emphasis, as that could be confusing to the {role}."""
     STEPS_RESTRICTIONS = "The reasoning process should be written in second person, in YAML format, and be around 5-7 overall parts, though they can be nested arbitrarily deep as needed."

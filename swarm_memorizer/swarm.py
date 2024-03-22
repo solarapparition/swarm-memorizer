@@ -51,7 +51,9 @@ class DummyDirector:
     def direct(self, task: Task, report: ExecutionReport) -> str:
         """Sends back the validation error for the task."""
         if report.validation and not report.validation.valid:
-            return f"The task was not successfully executed. {report.validation.feedback}"
+            return (
+                f"The task was not successfully executed. {report.validation.feedback}"
+            )
         return self.human.advise(report.reply)
 
 
@@ -201,26 +203,49 @@ class Swarm:
             )
             assert self.task.executor, "Task executor assignment failed."
         self.task.work_status = TaskWorkStatus.IN_PROGRESS
-        report = await execute_and_validate(self.task)
+        report = await execute_and_validate(
+            self.task,
+            delegator=self.delegator,
+            recent_events_size=self.recent_events_size,
+            auto_await=self.auto_wait,
+            executor_selection_reasoning=self.executor_selection_reasoning,
+            executor_memory=None,
+        )
         while True:
             if report.task_completed:
                 return report
             directive = self.core.direct(self.task, report)
             self.receive(directive)
-            report = await execute_and_validate(self.task)
+            report = await execute_and_validate(
+                self.task,
+                delegator=self.delegator,
+                recent_events_size=self.recent_events_size,
+                auto_await=self.auto_wait,
+                executor_selection_reasoning=self.executor_selection_reasoning,
+                executor_memory=None,
+            )
 
-    async def receive_and_execute(self, task_description: str) -> ExecutionReport:
+    async def receive_and_execute(self, message: str) -> ExecutionReport:
         """Receive and execute a task."""
-        self.receive(task_description)
+        self.receive(message)
         return await self.execute()
 
 
+# commit and bump version
 # ....
-# > access to and integration with devin # https://www.cognition-labs.com/blog
-# need to handle full failure path for the whole swarm
-# train integration until there's enough record data for correction for curriculum task 5
-# factor out tests
+# ---0.1.0---
+# > add save() ability to bots # saves copy of bot specialized for task
+# > update orchestrator learning to be more specific to task
+# > last read main task owner message (when making task updates) needs to have its ids replaced
+# > when changing executors, need to add event to parent that describes the fact that executor has changed
+# > reasoning generation: consider adding in section for task to increase variety in reasoning generated
+# case: initial assignment fails, need to reassign to new executor # curriculum task 5
 # integrate function writer into base swarm # make clear this is repeatable
+# bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
+# bot: function writer: update function writer to create wrapper bot around output script on save()
+# ---0.2.0---
+# > refactor: delegator's `assign_executor` args should be saved as 2 objects within delegator, one for delegation and one for orchestrator creation
+# > factor out tests
 # > add printout for full open interpreter output
 # > add placeholder system for a different mode for each orchestrator action, to allow for reasoning within that mode
 # > (next_curriculum_task:integration)
@@ -230,12 +255,9 @@ class Swarm:
 # > use an actual framework for tests; # pytest # agenteval
 # > decouple __repr__ artifact from __str__ artifact > bypass step of having to have llm pass around artifact info # may require creation of artifact_id, to allow for orchestrator to reference artifact without seeing its data structure # would also be helpful for REPORT_TASK_AS_COMPLETE
 # > bot: image interpreter model > can this be done with open interpreter?
-# > bot: script writer: update script writer to create wrapper bot around output script on save()
 # bot: web browser > autogen web surfer agent
-# bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
 # > (next_not_implemented)
 # write readme > artifact system > demo > maybe video
-# ---MVP---
 # > investigate having blueprints for swarm
 # > bot: gpt-researcher
 # > bot: openai assistant
@@ -340,7 +362,7 @@ MAIN_CURRICULUM = [
     TestTask(
         task="Tell me about Inflection 2.5.",
         id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df9",
-        purpose="Tests perplexity base swarm bot."
+        purpose="Tests perplexity base swarm bot.",
     ),
     TestTask(
         task="Research Inflection 2.5, write a description of it and count the number of characters in the description.",

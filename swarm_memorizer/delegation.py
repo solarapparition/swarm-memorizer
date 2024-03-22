@@ -8,8 +8,14 @@ from textwrap import indent
 from typing import Generator, Self, Sequence
 
 from langchain.schema import SystemMessage
-from swarm_memorizer.blueprint import Blueprint, OrchestratorBlueprint, Reasoning, is_bot, load_blueprints
 
+from swarm_memorizer.blueprint import (
+    Blueprint,
+    OrchestratorBlueprint,
+    Reasoning,
+    is_bot,
+    load_blueprints,
+)
 from swarm_memorizer.config import SWARM_COLOR, VERBOSE
 from swarm_memorizer.id_generation import generate_id
 from swarm_memorizer.query import query_and_extract_reasoning
@@ -27,7 +33,11 @@ from swarm_memorizer.schema import (
 from swarm_memorizer.task import Executor, Task
 from swarm_memorizer.task_data import TaskData, search_task_records
 from swarm_memorizer.toolkit.models import PRECISE_MODEL, format_messages, query_model
-from swarm_memorizer.toolkit.text import ExtractionError, dedent_and_strip, extract_blocks
+from swarm_memorizer.toolkit.text import (
+    ExtractionError,
+    dedent_and_strip,
+    extract_blocks,
+)
 from swarm_memorizer.toolkit.yaml_tools import DEFAULT_YAML
 
 
@@ -127,17 +137,6 @@ def generate_executor_selection_reasoning() -> str:
         f"{format_messages(messages)}",
         printout=VERBOSE,
     )
-
-
-def redelegate_task_executor(executor: Executor) -> Executor:
-    """Redelegate a task's executor."""
-
-    raise NotImplementedError("TODO")
-    # > lazy regeneration: set flag on specific parts of reasoning that need to be regenerated, and only regenerate those parts when needed # avoids removing parts of reasoning that aren't related to the task
-    # > when regenerating reasoning, subtask identification needs to have its own more granular signal
-    # > when updating reasoning, must make sure to include knowledge
-    # > TODO: agent regeneration: if agent fails task, first time is just a message; new version of agent probably should only have its knowledge updated on second fail; on third fail, whole agent is regenerated; on next fail, the next best agent is chosen, and the process repeats again; if the next best agent still can't solve the task, the task is auto-cancelled since it's likely too difficult (manual cancellation by orchestrator is still possible) > when regenerating agent components, include specific information from old agent > if agent is bot, skip update and regeneration and just message/choose next best agent
-    # > mutation > update: unify mutation with generation: mutation is same as re-generating each component of agent, including knowledge > blueprint: model parameter # explain that cheaper model costs less but may reduce accuracy > blueprint: novelty parameter: likelihood of choosing unproven subagent > blueprint: temperature parameter > when mutating agent, either update knowledge, or tweak a single parameter > when mutating agent, use component optimization of other best agents (that have actual trajectories) > new mutation has a provisional rating based on the rating of the agent it was mutated from; but doesn't appear in optimization list until it has a trajectory > only mutate when agent fails at some task > add success record to reasoning processes > retrieve previous reasoning for tasks similar to current task
 
 
 @dataclass

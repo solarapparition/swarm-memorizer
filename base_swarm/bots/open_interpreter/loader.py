@@ -58,19 +58,6 @@ class OpenInterpreterProxy:
         assert self.runner, "Runner not set."
         return self.runner(message)
 
-# def create_interpreter_proxy(wd: Path | None = None) -> OpenInterpreterProxy:
-    # """Create a message sender for the Open Interpreter."""
-    # python_interpreter = Path(sys.executable)
-    # script_path = Path(__file__).resolve().parent / "run_interpreter.py"
-    # input_pattern = "Send message: "
-    # # very hacky, but Open Interpreter has a habit of taking over the rest of the stack that I don't understand very well so it must be isolated
-    # return create_script_runner(
-    #     script_path,
-    #     input_pattern=input_pattern,
-    #     output_pattern=None,
-    #     interpreter=python_interpreter,
-    # )
-
 
 def load_bot(*_) -> BotCore:
     """Load the bot core."""
@@ -88,7 +75,7 @@ def load_bot(*_) -> BotCore:
             interpreter_proxy.runner = create_script_runner(
                 script=Path(__file__).resolve().parent / "run_interpreter.py",
                 input_pattern="Send message: ",
-                output_pattern="Open Interpreter Reply:\r\n", # yes this is correct on UNIX, see  https://pexpect.readthedocs.io/en/stable/overview.html#find-the-end-of-line-cr-lf-conventions
+                output_pattern="Open Interpreter Reply:\r\n",  # yes this is correct on UNIX, see  https://pexpect.readthedocs.io/en/stable/overview.html#find-the-end-of-line-cr-lf-conventions
                 interpreter=Path(sys.executable),
                 cwd=output_dir,
             )
