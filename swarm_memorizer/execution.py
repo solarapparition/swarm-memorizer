@@ -31,6 +31,8 @@ def upgrade_executor(
     executor_memory: str | None,
 ) -> None:
     """Upgrade the executor of a task."""
+    raise NotImplementedError("TODO")
+    # > when changing executors, need to add event to parent that describes the fact that executor has changed > move to upgrade_executor
     assert task.executor, "Task must have an executor for it to be upgraded."
     if isinstance(task.executor, Bot):
         # bots can't be upgraded, so we just assign to the next best agent

@@ -232,19 +232,15 @@ class Swarm:
 
 
 # ....
-# > add save() ability to bots # saves copy of bot specialized for task
-# > update orchestrator learning to be more specific to task
-# > last read main task owner message (when making task updates) needs to have its ids replaced
-# > when changing executors, need to add event to parent that describes the fact that executor has changed
-# > reasoning generation: consider adding in section for task to increase variety in reasoning generated
-# case: initial assignment fails, need to reassign to new executor # curriculum task 5
+# > ---0.2.1---
 # integrate function writer into base swarm # make clear this is repeatable
 # bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
+# > add save() ability to bots # saves copy of bot specialized for task
 # bot: function writer: update function writer to create wrapper bot around output script on save()
 # ---0.3.0---
+# > reasoning generation: consider adding in section for task to increase variety in reasoning generated
 # > refactor: delegator's `assign_executor` args should be saved as 2 objects within delegator, one for delegation and one for orchestrator creation
 # > factor out tests
-# > add printout for full open interpreter output
 # > add placeholder system for a different mode for each orchestrator action, to allow for reasoning within that mode
 # > (next_curriculum_task:integration)
 # > (next_curriculum_task:basic) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
@@ -256,6 +252,13 @@ class Swarm:
 # bot: web browser > autogen web surfer agent
 # > (next_not_implemented)
 # write readme > artifact system > demo > maybe video
+# ---MVP---
+# > bot: transformers agents # https://huggingface.co/docs/transformers/transformers_agents
+# > bot: arc browser agent
+# > bot: self-operating computer
+# > bot: zapier
+# > bot: gpt-pilot
+# > bot: document editor # using git diff
 # > investigate having blueprints for swarm
 # > bot: gpt-researcher
 # > bot: openai assistant

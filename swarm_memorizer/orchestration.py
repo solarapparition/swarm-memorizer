@@ -964,6 +964,9 @@ class Orchestrator:
 
     def generate_knowledge(self) -> Knowledge:
         """Generate knowledge for the orchestrator."""
+
+        raise NotImplementedError("TODO")
+        # > update orchestrator learning to be more technical information specific to task
         context = self.knowledge_generation_context
         brainstorming = """
         ## BRAINSTORMING:
@@ -1807,6 +1810,8 @@ class Orchestrator:
         self,
     ) -> tuple[TaskDescription, str | None] | None:
         """Generate an update to the main task description."""
+        raise NotImplementedError("TODO")
+        # > last read main task owner message (when making task updates) needs to have its ids replaced in the message > move
         reasoning = f"""
         1. Review the {Concept.MAIN_TASK_INFORMATION.value} and the {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} to recall the current status and objectives of the {Concept.MAIN_TASK.value}. Note any specific requirements or key details that may be affected by new information.
         2. Check the {Concept.LAST_READ_MAIN_TASK_OWNER_MESSAGE.value} to identify where in the {Concept.TASK_MESSAGES.value} section you will begin integrating new information. The messages that come after this will hold the updates you need to consider.
