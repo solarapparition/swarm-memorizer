@@ -231,13 +231,17 @@ class Swarm:
         return await self.execute()
 
 
+# > function writer function needs to always output its results to a file
+# >
 # ....
 # > ---0.2.1---
-# integrate function writer into base swarm # make clear this is repeatable
+# integrate function writer into base swarm
 # bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
 # > add save() ability to bots # saves copy of bot specialized for task
 # bot: function writer: update function writer to create wrapper bot around output script on save()
 # ---0.3.0---
+# > agent summary creation: don't add limitations; these will emerge as the agent fails tasks
+# > bot: function writer: upgrade so that it can run script as well
 # > reasoning generation: consider adding in section for task to increase variety in reasoning generated
 # > refactor: delegator's `assign_executor` args should be saved as 2 objects within delegator, one for delegation and one for orchestrator creation
 # > factor out tests
@@ -252,7 +256,7 @@ class Swarm:
 # bot: web browser > autogen web surfer agent
 # > (next_not_implemented)
 # write readme > artifact system > demo > maybe video
-# ---MVP---
+# ---1.0.0---
 # > bot: transformers agents # https://huggingface.co/docs/transformers/transformers_agents
 # > bot: arc browser agent
 # > bot: self-operating computer

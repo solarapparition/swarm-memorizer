@@ -6,11 +6,8 @@ from typing import Sequence
 from colorama import Fore
 from langchain.schema import SystemMessage, AIMessage, HumanMessage
 
-from swarm_memorizer.swarm import (
-    dedent_and_strip,
-)
 from swarm_memorizer.toolkit.models import query_model, PRECISE_MODEL, format_messages
-from swarm_memorizer.toolkit.text import extract_and_unpack
+from swarm_memorizer.toolkit.text import extract_and_unpack, dedent_and_strip
 from swarm_memorizer.schema import ArtifactType
 from swarm_memorizer.artifact import Artifact
 from swarm_memorizer.task import ExecutionReport
