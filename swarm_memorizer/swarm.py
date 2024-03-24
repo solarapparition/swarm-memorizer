@@ -34,7 +34,7 @@ from .toolkit.text import dedent_and_strip
 class Director(Protocol):
     """Core of a swarm."""
 
-    def direct(self, task: Task, report: ExecutionReport) -> str:
+    async def direct(self, task: Task, report: ExecutionReport) -> str:
         """Direct the task."""
         raise NotImplementedError
 
@@ -45,7 +45,7 @@ class DummyDirector:
 
     human: Human
 
-    def direct(self, task: Task, report: ExecutionReport) -> str:
+    async def direct(self, task: Task, report: ExecutionReport) -> str:
         """Sends back the validation error for the task."""
         if report.validation and not report.validation.valid:
             return (
@@ -214,7 +214,7 @@ class Swarm:
         while True:
             if report.task_completed:
                 return report
-            directive = self.core.direct(self.task, report)
+            directive = await self.core.direct(self.task, report)
             self.receive(directive)
             report = await execute_and_validate(
                 self.task,
