@@ -47,6 +47,14 @@ class Concept(Enum):
     CONTEXT = "CONTEXT"
     DELEGATOR = "DELEGATOR"
     DELEGATOR_INFORMATION_SECTIONS = "DELEGATOR INFORMATION SECTIONS"
+    RECIPE = "SUBTASK_RECIPE"
+
+
+CONCEPT_DEFINITIONS = {
+    Concept.RECIPE: "a sequential set of {SUBTASK}s for completing a particular {MAIN_TASK}. Each {SUBTASK} in the recipe contains both a high-level description of what must be done, as well as things to consider when executing the {SUBTASK}.".format(
+        **{key.name: key.value for key in Concept}
+    )
+}
 
 
 @dataclass

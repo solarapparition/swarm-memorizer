@@ -232,9 +232,9 @@ class Swarm:
 
 
 # >
-# (commit)
+# update "learnings" prompt to be procedural rather than general
 # ....
-# > update "learnings" prompt to be procedural rather than general
+# (commit)
 # ---0.2.1---
 # function writer function needs to always output its results to a file
 # integrate function writer into base swarm
@@ -420,7 +420,7 @@ MINOR_CASES = [
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(run_test_task(MAIN_CURRICULUM[5]))
+    asyncio.run(run_test_task(MAIN_CURRICULUM[1]))
 
 
 if __name__ == "__main__":

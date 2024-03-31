@@ -33,6 +33,7 @@ from swarm_memorizer.execution import execute_and_validate
 from swarm_memorizer.id_generation import generate_id
 from swarm_memorizer.query import query_and_extract_reasoning
 from swarm_memorizer.schema import (
+    CONCEPT_DEFINITIONS,
     REASONING_OUTPUT_INSTRUCTIONS,
     REASONING_PROCESS_OUTPUT_INSTRUCTIONS,
     Concept,
@@ -501,6 +502,7 @@ class ReasoningGenerator:
 
         ## CONCEPTS:
         {orchestrator_concepts}
+        - {recipe}
 
         ## {ORCHESTRATOR_INFORMATION_SECTIONS}:
         By default, the orchestrator has access to the following information. Note that all information here is read-only; the orchestrator cannot directly modify any of the information here as part of its reasoning progress.
@@ -516,6 +518,7 @@ class ReasoningGenerator:
         """
         context = dedent_and_strip(context).format(
             orchestrator_concepts=ORCHESTRATOR_CONCEPTS,
+            recipe=f"{Concept.RECIPE.value}: {CONCEPT_DEFINITIONS[Concept.RECIPE]}",
             ORCHESTRATOR_INFORMATION_SECTIONS=Concept.ORCHESTRATOR_INFORMATION_SECTIONS.value,
             MAIN_TASK_DESCRIPTION=OrchestratorInformationSection.MAIN_TASK_DESCRIPTION.value,
             MAIN_TASK=Concept.MAIN_TASK.value,
@@ -529,31 +532,33 @@ class ReasoningGenerator:
         )
         request = """
         ## REQUEST FOR YOU:
-        Provide a nested, robust reasoning structure in YAML format for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for figuring out what it has learned. This provides the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
+        Provide a nested, robust reasoning structure in YAML format for the orchestrator to sequentially think through the information it has access to so that it has the appropriate mental context for writing a {RECIPE} for performing a similar task in the future. This provides the internal thinking that an intelligent agent must go through so that they have all the relevant information on top of mind. Some things to note:
         - {INFORMATION_RESTRICTIONS}
         - {TERM_REFERENCES}
-        - The overarching goal is to convey the learnings from the completion of the {MAIN_TASK} to another agent to maximize the chances of the other agent successfully completing other tasks like {MAIN_TASK}.
-        - _Any_ information from the {ORCHESTRATOR_INFORMATION_SECTIONS} can be learned from, but the learnings must be general enough to be applicable to tasks that aren't identical to {MAIN_TASK}, but share similarities with it.
-        - There should be three main types of lessons recorded (though they may or may not exist for any specific {MAIN_TASK}):
-          - learnings about the {MAIN_TASK} itself
-          - learnings about the individual {SUBTASK}s, including effective identification strategies for new subtasks
-          - learnings about the {EXECUTOR}s—what they were good at, what they struggled with, and how to communicate with them
-        - {EXECUTOR}s will persist in the system and may show up again in future subtasks; their IDs will remain the same across tasks.
+        - The overarching goal is for the orchestrator to convey the essential {RECIPE} for completing the {MAIN_TASK} to another agent so that the other agent has a {RECIPE} for completing other tasks like {MAIN_TASK}.
         - {STEPS_RESTRICTIONS}
         - The intended audience for the reasoning process is the orchestrator, so it should be written in second person, directed at the orchestrator.
+        - The {RECIPE} that the orchestrator outputs should be specific to tasks similar to {MAIN_TASK}, but have enough forgiveness to account for small variations in tasks.
+        - Each step in the {RECIPE} should correspond to a specific {SUBTASK} that was done for the {MAIN_TASK}. Avoid broad advice for completing tasks in general.
         - {PROCEDURAL_SCRIPTING}
 
         {output_instructions}
         """
+        # - There should be three main types of lessons recorded (though they may or may not exist for any specific {MAIN_TASK}):
+        #   - learnings about the {MAIN_TASK} itself
+        #   - learnings about the individual {SUBTASK}s, including effective identification strategies for new subtasks
+        #   - learnings about the {EXECUTOR}s—what they were good at, what they struggled with, and how to communicate with them
+        # - {EXECUTOR}s will persist in the system and may show up again in future subtasks; their IDs will remain the same across tasks.
         request = (
             dedent_and_strip(request)
             .replace("{output_instructions}", REASONING_PROCESS_OUTPUT_INSTRUCTIONS)
             .format(
+                RECIPE=Concept.RECIPE.value,
                 INFORMATION_RESTRICTIONS=OrchestratorReasoningGenerationNotes.INFORMATION_RESTRICTIONS.value,
                 TERM_REFERENCES=OrchestratorReasoningGenerationNotes.TERM_REFERENCES.value,
                 MAIN_TASK=Concept.MAIN_TASK.value,
                 ORCHESTRATOR_INFORMATION_SECTIONS=Concept.ORCHESTRATOR_INFORMATION_SECTIONS.value,
-                EXECUTOR=Concept.EXECUTOR.value,
+                # EXECUTOR=Concept.EXECUTOR.value,
                 STEPS_RESTRICTIONS=OrchestratorReasoningGenerationNotes.STEPS_RESTRICTIONS.value,
                 PROCEDURAL_SCRIPTING=OrchestratorReasoningGenerationNotes.PROCEDURAL_SCRIPTING.value,
                 SUBTASK=Concept.SUBTASK.value,
@@ -847,7 +852,7 @@ class Orchestrator:
         You are an advanced task orchestrator that specializes in managing the status of a {MAIN_TASK} and coordinating the execution of its {SUBTASK}s.
 
         ## MODE:
-        Currently, the {MAIN_TASK} has been completed, and you are in the process of learning from its completion process.
+        Currently, the {MAIN_TASK} has been completed, and you are in the process of writing a recipe for completing a similar task in the future.
 
         ## {MAIN_TASK_DESCRIPTION}:
         Here is information about the {MAIN_TASK} that has been completed:
@@ -928,19 +933,24 @@ class Orchestrator:
         context = self.knowledge_generation_context
         request = """
         ## REQUEST FOR YOU:
-        Use the following reasoning process to learn from the completion of the {MAIN_TASK}:
+        Use the following reasoning process to write a {RECIPE} for completing tasks similar to the {MAIN_TASK}:
         ```start_of_reasoning_process
         {reasoning_process}
-
-        Remember to be specific and use exact IDs when referencing {SUBTASK}s and {EXECUTOR}s.
+        Remember to refer to specific {EXECUTOR} IDs when discussing them, as they may show up again in future tasks.
         ```end_of_reasoning_process
 
         {reasoning_output_instructions}
+
+        After this process, output the final {RECIPE} in the following YAML block:
+        ```start_of_final_output_yaml
+        {{final_output}}
+        ```end_of_final_output_yaml
         """
         request = (
             dedent_and_strip(request)
             .replace("{reasoning_output_instructions}", REASONING_OUTPUT_INSTRUCTIONS)
             .format(
+                RECIPE=Concept.RECIPE.value,
                 MAIN_TASK=Concept.MAIN_TASK.value,
                 reasoning_process=self.learning_reasoning,
                 SUBTASK=Concept.SUBTASK.value,
@@ -965,12 +975,10 @@ class Orchestrator:
     def generate_knowledge(self) -> Knowledge:
         """Generate knowledge for the orchestrator."""
 
-        raise NotImplementedError("TODO")
-        # > update orchestrator learning to be more technical information specific to task
         context = self.knowledge_generation_context
         brainstorming = """
         ## BRAINSTORMING:
-        Here is some brainstorming for what I have learned:
+        Here is some brainstorming for what you have learned:
         ```start_of_brainstorming
         {brainstorming}
         ```end_of_brainstorming
@@ -978,6 +986,9 @@ class Orchestrator:
         brainstorming = dedent_and_strip(brainstorming).format(
             brainstorming=self.brainstorm_knowledge()
         )
+        breakpoint()
+        # > we still need to have 2 separate types of learnings: executors vs. main task process
+        # > in orchestrator, remember to add caveat for knowledge that it's for a previous task
         request = """
         ## REQUEST FOR YOU:
         Using the brainstorming as a starting point, figure out the lessons you have learned from the completion of the {MAIN_TASK}, using the following guidelines:
@@ -1025,9 +1036,6 @@ class Orchestrator:
             printout=VERBOSE,
             color=SWARM_COLOR,
         )
-        # output = extract_blocks(output, "start_of_learnings_output")
-        # assert output and len(output) == 1, "Exactly one learning output is expected."
-        # return output[0]
         executor_output = extract_blocks(output, "start_of_executor_learnings_output")
         assert (
             executor_output and len(executor_output) == 1
