@@ -16,15 +16,15 @@ def generate_agent_description(task_information: str) -> str:
         "objective": "To transform a given task description into a detailed and actionable description of an agent's capabilities and limitations.",
         "steps": [
             "Analyze the provided task description.",
-            "Identify and list potential capabilities and limitations relevant to the task.",
-            "Create a comprehensive description that outlines these capabilities and limitations, focusing on clarity and actionability."
+            "Identify and list potential capabilities relevant to the task.",
+            "Create a comprehensive description that outlines these capabilities, focusing on clarity and actionability."
         ],
         "parameters": {
             "input": "Task description",
-            "output": "Agent capability and limitation description",
+            "output": "Agent capability description",
             "constraints": ["Do not create the actual agent", "Ensure the description is specific and actionable"]
         },
-        "output": "A clear, concise, and actionable description of what an agent can and cannot do, based on the provided task description. The output should be wrapped in specific blocks indicated by ```start_of_agent_description_output and ```end_of_agent_description_output.",
+        "output": "A clear, concise, and actionable description of what an agent can, based on the provided task description. The output should be wrapped in specific blocks indicated by ```start_of_agent_description_output and ```end_of_agent_description_output.",
         "feedback": "Descriptions should avoid generalities and be directly relevant to the task, providing clear guidance on the agent's capabilities."
     }
     """
