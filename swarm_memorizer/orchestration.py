@@ -928,8 +928,10 @@ class Orchestrator:
             subtask_list=subtask_review_printouts,
         )
 
-    def brainstorm_knowledge(self) -> str:
-        """Brainstorm knowledge for the orchestrator."""
+    @cached_property
+    def task_recipe(self) -> str:
+        """Create task recipe for self."""
+        assert self.task.work_status == TaskWorkStatus.COMPLETED, "Task must be completed before learning from it."
         context = self.knowledge_generation_context
         request = """
         ## REQUEST FOR YOU:
@@ -972,22 +974,85 @@ class Orchestrator:
         assert output and len(output) == 1, "Exactly one reasoning output is expected."
         return output[0]
 
+    @cached_property
+    def executor_learning(self) -> str:
+        """Brainstorm knowledge for the orchestrator."""
+        assert self.task.work_status == TaskWorkStatus.COMPLETED, "Task must be completed before learning from it."
+
+        context = self.knowledge_generation_context
+
+
+
+
+
+
+        request = """
+        ## REQUEST FOR YOU:
+        Use the following reasoning process to write {EXECUTOR_PROFILES} for {EXECUTOR}s that were involved in the completion of the {MAIN_TASK}:
+        ```start_of_reasoning_process
+        {reasoning_process}
+        Remember to refer to specific {EXECUTOR} IDs when discussing them, as they may show up again in future tasks.
+        ```end_of_reasoning_process
+
+
+
+
+        # ....
+
+        {reasoning_output_instructions}
+
+        After this process, output the final {RECIPE} in the following YAML block:
+        ```start_of_final_output_yaml
+        {{final_output}}
+        ```end_of_final_output_yaml
+        """
+        breakpoint()
+        request = (
+            dedent_and_strip(request)
+            .replace("{reasoning_output_instructions}", REASONING_OUTPUT_INSTRUCTIONS)
+            .format(
+                RECIPE=Concept.RECIPE.value,
+                MAIN_TASK=Concept.MAIN_TASK.value,
+                reasoning_process=self.learning_reasoning,
+                SUBTASK=Concept.SUBTASK.value,
+                EXECUTOR=Concept.EXECUTOR.value,
+            )
+        )
+        messages = [
+            SystemMessage(content=context),
+            SystemMessage(content=request),
+        ]
+        output = query_model(
+            model=SUPER_CREATIVE_MODEL,
+            messages=messages,
+            preamble=f"Brainstorming knowledge from completion of {self.name}...\n{format_messages(messages)}",
+            color=SWARM_COLOR,
+            printout=VERBOSE,
+        )
+        output = extract_blocks(output, "start_of_reasoning_output")
+        assert output and len(output) == 1, "Exactly one reasoning output is expected."
+        return output[0]
+
     def generate_knowledge(self) -> Knowledge:
         """Generate knowledge for the orchestrator."""
 
         context = self.knowledge_generation_context
-        brainstorming = """
-        ## BRAINSTORMING:
-        Here is some brainstorming for what you have learned:
-        ```start_of_brainstorming
-        {brainstorming}
-        ```end_of_brainstorming
-        """
-        brainstorming = dedent_and_strip(brainstorming).format(
-            brainstorming=self.brainstorm_knowledge()
-        )
+        # brainstorming = """
+        # ## BRAINSTORMING:
+        # Here is some brainstorming for what you have learned:
+        # ```start_of_brainstorming
+        # {brainstorming}
+        # ```end_of_brainstorming
+        # """
+        # brainstorming = dedent_and_strip(brainstorming).format(
+        #     brainstorming=self.brainstorm_knowledge()
+        # )
+        self.task_recipe
+
+        self.executor_learning
+
+        # we still need to have 2 separate types of learnings: executors vs. main task process
         breakpoint()
-        # > we still need to have 2 separate types of learnings: executors vs. main task process
         # > in orchestrator, remember to add caveat for knowledge that it's for a previous task
         request = """
         ## REQUEST FOR YOU:
@@ -1026,7 +1091,7 @@ class Orchestrator:
         )
         messages = [
             SystemMessage(content=context),
-            AIMessage(content=brainstorming),
+            AIMessage(content=task_learning),
             SystemMessage(content=request),
         ]
         output = query_model(
@@ -1818,7 +1883,6 @@ class Orchestrator:
         self,
     ) -> tuple[TaskDescription, str | None] | None:
         """Generate an update to the main task description."""
-        raise NotImplementedError("TODO")
         # > last read main task owner message (when making task updates) needs to have its ids replaced in the message > move
         reasoning = f"""
         1. Review the {Concept.MAIN_TASK_INFORMATION.value} and the {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} to recall the current status and objectives of the {Concept.MAIN_TASK.value}. Note any specific requirements or key details that may be affected by new information.
@@ -1902,6 +1966,7 @@ class Orchestrator:
             SystemMessage(content=context),
             SystemMessage(content=task),
         ]
+        breakpoint()
         result = query_model(
             model=PRECISE_MODEL,
             messages=messages,

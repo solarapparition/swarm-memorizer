@@ -231,7 +231,8 @@ class Swarm:
         return await self.execute()
 
 
-# >
+# > change core executor agent to be based on autogen instead of open interpreter
+# > 
 # update "learnings" prompt to be procedural rather than general
 # ....
 # (commit)
@@ -248,7 +249,6 @@ class Swarm:
 # > add placeholder system for a different mode for each orchestrator action, to allow for reasoning within that mode
 # > (next_curriculum_task:integration)
 # > (next_curriculum_task:basic) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
-# add ability for bots to (optionally) save, which creates a specialized version of them
 # bot: document chat > embedchain # has save() which creates embedchain wrapper around document
 # > use an actual framework for tests; # pytest # agenteval
 # > decouple __repr__ artifact from __str__ artifact > bypass step of having to have llm pass around artifact info # may require creation of artifact_id, to allow for orchestrator to reference artifact without seeing its data structure # would also be helpful for REPORT_TASK_AS_COMPLETE
@@ -411,10 +411,6 @@ MINOR_CASES = [
         purpose="This tests what happens when a bot fails a task but might not trigger validation flow.",
     ),
 ]
-
-# MINOR_TASKS = [
-#     "Write 'Hello, World!' to a file.",
-# ]
 
 
 def test() -> None:
