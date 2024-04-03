@@ -1877,13 +1877,16 @@ class Orchestrator:
         old_messages = (
             event for event in old_events if isinstance(event.data, Message)
         )
-        return next(old_messages, None)
+        last_read_message =  next(old_messages, None)
+        if last_read_message:
+            print("TODO: fix issue where last_read_message's id is not being replaced")
+            breakpoint()
+        return last_read_message
 
     def generate_main_task_description_update(
         self,
     ) -> tuple[TaskDescription, str | None] | None:
         """Generate an update to the main task description."""
-        # > last read main task owner message (when making task updates) needs to have its ids replaced in the message > move
         reasoning = f"""
         1. Review the {Concept.MAIN_TASK_INFORMATION.value} and the {Concept.MAIN_TASK_DEFINITION_OF_DONE.value} to recall the current status and objectives of the {Concept.MAIN_TASK.value}. Note any specific requirements or key details that may be affected by new information.
         2. Check the {Concept.LAST_READ_MAIN_TASK_OWNER_MESSAGE.value} to identify where in the {Concept.TASK_MESSAGES.value} section you will begin integrating new information. The messages that come after this will hold the updates you need to consider.
@@ -1966,7 +1969,6 @@ class Orchestrator:
             SystemMessage(content=context),
             SystemMessage(content=task),
         ]
-        breakpoint()
         result = query_model(
             model=PRECISE_MODEL,
             messages=messages,

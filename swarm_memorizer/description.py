@@ -51,5 +51,3 @@ def generate_agent_description(task_information: str) -> str:
         output and len(output) == 1
     ), "Exactly one agent description output is expected."
     return output[0]
-
-

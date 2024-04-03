@@ -45,16 +45,6 @@ class Artifact:
     @classmethod
     def from_serialized_data(cls, data: dict[str, Any]) -> Self:
         """Deserialize the artifact from a JSON-compatible dictionary."""
-        # try:
-        #     return cls(
-        #         type=ArtifactType(data["type"]),
-        #         description=data["description"],
-        #         location=data["location"],
-        #         must_be_created=data["must_be_created"],
-        #         content=data["content"],
-        #     )
-        # except:
-        #     breakpoint()
         if "location" not in data:
             data["type"] = ArtifactType.INLINE.value
         return cls(

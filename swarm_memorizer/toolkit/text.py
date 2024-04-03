@@ -1,11 +1,8 @@
 """Extract blocks from text."""
 
-from typing import Sequence
 from dataclasses import dataclass
 import re
 from textwrap import dedent, indent
-
-from langchain.schema import BaseMessage
 
 
 def dedent_and_strip(text: str) -> str:
