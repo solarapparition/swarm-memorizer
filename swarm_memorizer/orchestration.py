@@ -13,7 +13,7 @@ from langchain.schema import SystemMessage, AIMessage
 from ruamel.yaml import YAMLError, YAML
 
 from swarm_memorizer.artifact import Artifact
-from swarm_memorizer.blueprint import Knowledge, OrchestratorBlueprint, Reasoning
+from swarm_memorizer.blueprint import Knowledge, OrchestratorBlueprint, Reasoning, TaskRecipe
 from swarm_memorizer.config import SWARM_COLOR, VERBOSE
 from swarm_memorizer.acceptance import decide_acceptance
 from swarm_memorizer.delegation import Delegator, generate_executor_selection_reasoning
@@ -929,9 +929,8 @@ class Orchestrator:
         )
 
     @cached_property
-    def task_recipe(self) -> str:
+    def task_recipe(self) -> TaskRecipe:
         """Create task recipe for self."""
-        assert self.task.work_status == TaskWorkStatus.COMPLETED, "Task must be completed before learning from it."
         context = self.knowledge_generation_context
         request = """
         ## REQUEST FOR YOU:
@@ -943,9 +942,14 @@ class Orchestrator:
 
         {reasoning_output_instructions}
 
-        After this process, output the final {RECIPE} in the following YAML block:
+        After this process, output the final {RECIPE} in the following YAML format:
         ```start_of_final_output_yaml
-        {{final_output}}
+        - |-
+            {{subtask_1}}
+        - |-
+            {{subtask_2}}
+        - |-
+            [... etc.]
         ```end_of_final_output_yaml
         """
         request = (
@@ -970,148 +974,102 @@ class Orchestrator:
             color=SWARM_COLOR,
             printout=VERBOSE,
         )
-        output = extract_blocks(output, "start_of_reasoning_output")
+        output = extract_blocks(output, "start_of_final_output_yaml")
         assert output and len(output) == 1, "Exactly one reasoning output is expected."
-        return output[0]
-
-    @cached_property
-    def executor_learning(self) -> str:
-        """Brainstorm knowledge for the orchestrator."""
-        assert self.task.work_status == TaskWorkStatus.COMPLETED, "Task must be completed before learning from it."
-
-        context = self.knowledge_generation_context
-
-
-
-
-
-
-        request = """
-        ## REQUEST FOR YOU:
-        Use the following reasoning process to write {EXECUTOR_PROFILES} for {EXECUTOR}s that were involved in the completion of the {MAIN_TASK}:
-        ```start_of_reasoning_process
-        {reasoning_process}
-        Remember to refer to specific {EXECUTOR} IDs when discussing them, as they may show up again in future tasks.
-        ```end_of_reasoning_process
-
-
-
-
-        # ....
-
-        {reasoning_output_instructions}
-
-        After this process, output the final {RECIPE} in the following YAML block:
-        ```start_of_final_output_yaml
-        {{final_output}}
-        ```end_of_final_output_yaml
-        """
-        breakpoint()
-        request = (
-            dedent_and_strip(request)
-            .replace("{reasoning_output_instructions}", REASONING_OUTPUT_INSTRUCTIONS)
-            .format(
-                RECIPE=Concept.RECIPE.value,
-                MAIN_TASK=Concept.MAIN_TASK.value,
-                reasoning_process=self.learning_reasoning,
-                SUBTASK=Concept.SUBTASK.value,
-                EXECUTOR=Concept.EXECUTOR.value,
-            )
+        subtasks: Sequence[str] = DEFAULT_YAML.load(output[0])
+        return TaskRecipe(
+            task=self.task.initial_information,
+            subtask_sequence=subtasks,
         )
-        messages = [
-            SystemMessage(content=context),
-            SystemMessage(content=request),
-        ]
-        output = query_model(
-            model=SUPER_CREATIVE_MODEL,
-            messages=messages,
-            preamble=f"Brainstorming knowledge from completion of {self.name}...\n{format_messages(messages)}",
-            color=SWARM_COLOR,
-            printout=VERBOSE,
-        )
-        output = extract_blocks(output, "start_of_reasoning_output")
-        assert output and len(output) == 1, "Exactly one reasoning output is expected."
-        return output[0]
 
+
+# DEFAULT_YAML.load(output[0])
     def generate_knowledge(self) -> Knowledge:
         """Generate knowledge for the orchestrator."""
 
-        context = self.knowledge_generation_context
-        # brainstorming = """
-        # ## BRAINSTORMING:
-        # Here is some brainstorming for what you have learned:
-        # ```start_of_brainstorming
-        # {brainstorming}
-        # ```end_of_brainstorming
-        # """
-        # brainstorming = dedent_and_strip(brainstorming).format(
-        #     brainstorming=self.brainstorm_knowledge()
-        # )
-        self.task_recipe
 
-        self.executor_learning
-
-        # we still need to have 2 separate types of learnings: executors vs. main task process
+        # > commit
+        # > can extract this programmatically
+        # add executor memory generation
         breakpoint()
-        # > in orchestrator, remember to add caveat for knowledge that it's for a previous task
-        request = """
-        ## REQUEST FOR YOU:
-        Using the brainstorming as a starting point, figure out the lessons you have learned from the completion of the {MAIN_TASK}, using the following guidelines:
-        - There should be three main types of lessons recorded (though they may or may not exist for any specific {MAIN_TASK}):
-          - learnings about the {EXECUTOR}s—what they were good at, what they struggled with, and how to communicate with them
-          - learnings about the {MAIN_TASK} itself
-          - learnings about the individual {SUBTASK}s, including effective identification strategies for new subtasks
-        - Be empirical and objective, not aspirational; be specific and precise in lessons learned—avoid vague general principles.
-        - Avoid referring to specific {ARTIFACT}s generated, as future orchestrators will not have access to those artifacts.
-        - When referring to {EXECUTOR}s, use their exact IDs. Future orchestrators may encounter the same {EXECUTOR}s.
-        - The output should be in second person, as if you are speaking directly to a future orchestrator.
-        - Avoid using {SUBTASK} IDs, as information about {SUBTASK}s are discarded after this exercise. Instead, refer to {SUBTASK}s by what they involved.
-        - Avoiding referring to the {MAIN_TASK} as "{MAIN_TASK}", because future orchestrators may have a different {MAIN_TASK}; instead, refer to what the task involves.
+        return Knowledge(task_recipe=self.task_recipe)
+        # > try using typer for wrapping around scripts
 
-        Output the knowledge you have learned from the completion of the {MAIN_TASK} in _two_ blocks.
-        The first block contains learnings about specific, individual {EXECUTOR}s.
-        ```start_of_executor_learnings_output
-        - {{executor_learning_1}}
-        - {{executor_learning_2}}
-        - [... etc.]
-        ```end_of_executor_learnings_output
-        The second block contains other learnings that aren't specific to an individual {EXECUTOR}.
-        ```start_of_other_learnings_output
-        - {{other_learning_1}}
-        - {{other_learning_2}}
-        - [... etc.]
-        ```end_of_other_learnings_output
-        Any other comments or thoughts can be added before or after the output blocks.
-        """
-        request = dedent_and_strip(request).format(
-            MAIN_TASK=Concept.MAIN_TASK.value,
-            EXECUTOR=Concept.EXECUTOR.value,
-            SUBTASK=Concept.SUBTASK.value,
-            ARTIFACT=Concept.ARTIFACT.value,
-        )
-        messages = [
-            SystemMessage(content=context),
-            AIMessage(content=task_learning),
-            SystemMessage(content=request),
-        ]
-        output = query_model(
-            model=SUPER_CREATIVE_MODEL,
-            messages=messages,
-            preamble=f"Generating knowledge from completion of {self.name}...\n{format_messages(messages)}",
-            printout=VERBOSE,
-            color=SWARM_COLOR,
-        )
-        executor_output = extract_blocks(output, "start_of_executor_learnings_output")
-        assert (
-            executor_output and len(executor_output) == 1
-        ), "Exactly one executor output is expected."
-        other_output = extract_blocks(output, "start_of_other_learnings_output")
-        assert (
-            other_output and len(other_output) == 1
-        ), "Exactly one other output is expected."
-        return Knowledge(
-            executor_learnings=executor_output[0], other_learnings=other_output[0]
-        )
+        # context = self.knowledge_generation_context
+        # # brainstorming = """
+        # # ## BRAINSTORMING:
+        # # Here is some brainstorming for what you have learned:
+        # # ```start_of_brainstorming
+        # # {brainstorming}
+        # # ```end_of_brainstorming
+        # # """
+        # # brainstorming = dedent_and_strip(brainstorming).format(
+        # #     brainstorming=self.brainstorm_knowledge()
+        # # )
+        # self.task_recipe
+
+
+        # # we still need to have 2 separate types of learnings: executors vs. main task process
+        # breakpoint()
+        # # > in orchestrator, remember to add caveat for knowledge that it's for a previous task
+        # request = """
+        # ## REQUEST FOR YOU:
+        # Using the brainstorming as a starting point, figure out the lessons you have learned from the completion of the {MAIN_TASK}, using the following guidelines:
+        # - There should be three main types of lessons recorded (though they may or may not exist for any specific {MAIN_TASK}):
+        #   - learnings about the {EXECUTOR}s—what they were good at, what they struggled with, and how to communicate with them
+        #   - learnings about the {MAIN_TASK} itself
+        #   - learnings about the individual {SUBTASK}s, including effective identification strategies for new subtasks
+        # - Be empirical and objective, not aspirational; be specific and precise in lessons learned—avoid vague general principles.
+        # - Avoid referring to specific {ARTIFACT}s generated, as future orchestrators will not have access to those artifacts.
+        # - When referring to {EXECUTOR}s, use their exact IDs. Future orchestrators may encounter the same {EXECUTOR}s.
+        # - The output should be in second person, as if you are speaking directly to a future orchestrator.
+        # - Avoid using {SUBTASK} IDs, as information about {SUBTASK}s are discarded after this exercise. Instead, refer to {SUBTASK}s by what they involved.
+        # - Avoiding referring to the {MAIN_TASK} as "{MAIN_TASK}", because future orchestrators may have a different {MAIN_TASK}; instead, refer to what the task involves.
+
+        # Output the knowledge you have learned from the completion of the {MAIN_TASK} in _two_ blocks.
+        # The first block contains learnings about specific, individual {EXECUTOR}s.
+        # ```start_of_executor_learnings_output
+        # - {{executor_learning_1}}
+        # - {{executor_learning_2}}
+        # - [... etc.]
+        # ```end_of_executor_learnings_output
+        # The second block contains other learnings that aren't specific to an individual {EXECUTOR}.
+        # ```start_of_other_learnings_output
+        # - {{other_learning_1}}
+        # - {{other_learning_2}}
+        # - [... etc.]
+        # ```end_of_other_learnings_output
+        # Any other comments or thoughts can be added before or after the output blocks.
+        # """
+        # request = dedent_and_strip(request).format(
+        #     MAIN_TASK=Concept.MAIN_TASK.value,
+        #     EXECUTOR=Concept.EXECUTOR.value,
+        #     SUBTASK=Concept.SUBTASK.value,
+        #     ARTIFACT=Concept.ARTIFACT.value,
+        # )
+        # messages = [
+        #     SystemMessage(content=context),
+        #     AIMessage(content=task_learning),
+        #     SystemMessage(content=request),
+        # ]
+        # output = query_model(
+        #     model=SUPER_CREATIVE_MODEL,
+        #     messages=messages,
+        #     preamble=f"Generating knowledge from completion of {self.name}...\n{format_messages(messages)}",
+        #     printout=VERBOSE,
+        #     color=SWARM_COLOR,
+        # )
+        # executor_output = extract_blocks(output, "start_of_executor_learnings_output")
+        # assert (
+        #     executor_output and len(executor_output) == 1
+        # ), "Exactly one executor output is expected."
+        # other_output = extract_blocks(output, "start_of_other_learnings_output")
+        # assert (
+        #     other_output and len(other_output) == 1
+        # ), "Exactly one other output is expected."
+        # return Knowledge(
+        #     executor_learnings=executor_output[0], other_learnings=other_output[0]
+        # )
 
     def save_blueprint(self, update_blueprint: bool = True) -> None:
         """Serialize the orchestrator to YAML."""

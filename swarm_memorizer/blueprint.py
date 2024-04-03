@@ -2,9 +2,9 @@
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Iterable, Self
+from typing import Any, Iterable, Self, Sequence
 from swarm_memorizer.schema import BlueprintId, Role
-from swarm_memorizer.toolkit.yaml_tools import DEFAULT_YAML
+from swarm_memorizer.toolkit.yaml_tools import DEFAULT_YAML, format_as_yaml_str
 
 
 @dataclass
@@ -52,15 +52,29 @@ class Reasoning:
 
 
 @dataclass
+class TaskRecipe:
+    """Recipe for a task."""
+
+    task: str
+    subtask_sequence: Sequence[str]
+
+    def __str__(self) -> str:
+        """String representation of the task recipe."""
+        return format_as_yaml_str(asdict(self))
+
+
+@dataclass
 class Knowledge:
     """Knowledge for the orchestrator."""
 
-    executor_learnings: str
-    other_learnings: str
+    # executor_learnings: str
+    # other_learnings: str
+    task_recipe: TaskRecipe
 
     def __str__(self) -> str:
         """String representation of the orchestrator's knowledge."""
-        return f"{self.executor_learnings}\n{self.other_learnings}"
+        return str(self.task_recipe)
+        # return f"{self.executor_learnings}\n{self.other_learnings}"
 
 
 @dataclass
