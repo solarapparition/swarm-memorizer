@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Mapping, Any
+from typing import Mapping, Any, Sequence
 from ruamel.yaml import YAML
 from ruamel.yaml.compat import StringIO
 
@@ -25,7 +25,7 @@ def save_yaml(data: Mapping[str, Any], location: Path) -> None:
 
 
 def format_as_yaml_str(
-    data: Mapping[str, Any] | list[Any], yaml: YAML = DEFAULT_YAML
+    data: Mapping[str, Any] | Sequence[Any], yaml: YAML = DEFAULT_YAML
 ) -> str:
     """Dump yaml as a string."""
     yaml.dump(data, stream := StringIO())

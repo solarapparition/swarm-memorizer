@@ -231,15 +231,14 @@ class Swarm:
         return await self.execute()
 
 
-# > change core executor agent to be based on autogen instead of open interpreter
-# > 
-# update "learnings" prompt to be procedural rather than general
-# ....
 # (commit)
+# ....
 # ---0.2.1---
+# > try swe-agent
 # function writer function needs to always output its results to a file
 # integrate function writer into base swarm
-# bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them
+# > change core executor agent to be based on autogen instead of open interpreter
+# bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them > try using typer for wrapping around scripts
 # > add save() ability to bots # saves copy of bot specialized for task
 # bot: function writer: update function writer to create wrapper bot around output script on save()
 # ---0.3.0---

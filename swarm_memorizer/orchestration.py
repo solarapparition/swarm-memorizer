@@ -4,16 +4,23 @@ import asyncio
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
-from itertools import chain
+from itertools import chain, groupby
 from pathlib import Path
 from textwrap import indent
 from typing import Any, Iterable, Self, Sequence
 
-from langchain.schema import SystemMessage, AIMessage
+from langchain.schema import SystemMessage
 from ruamel.yaml import YAMLError, YAML
 
 from swarm_memorizer.artifact import Artifact
-from swarm_memorizer.blueprint import Knowledge, OrchestratorBlueprint, Reasoning, TaskRecipe
+from swarm_memorizer.blueprint import (
+    ExecutionMemory,
+    ExecutorMemory,
+    Knowledge,
+    OrchestratorBlueprint,
+    Reasoning,
+    TaskRecipe,
+)
 from swarm_memorizer.config import SWARM_COLOR, VERBOSE
 from swarm_memorizer.acceptance import decide_acceptance
 from swarm_memorizer.delegation import Delegator, generate_executor_selection_reasoning
@@ -38,6 +45,7 @@ from swarm_memorizer.schema import (
     REASONING_PROCESS_OUTPUT_INSTRUCTIONS,
     Concept,
     EventId,
+    ExecutionOutcome,
     IdGenerator,
     PauseExecution,
     ReasoningGenerationNotes,
@@ -1036,7 +1044,6 @@ class Orchestrator:
         # # )
         # self.task_recipe
 
-
         # # we still need to have 2 separate types of learnings: executors vs. main task process
         # breakpoint()
         # # > in orchestrator, remember to add caveat for knowledge that it's for a previous task
@@ -1867,7 +1874,7 @@ class Orchestrator:
         old_messages = (
             event for event in old_events if isinstance(event.data, Message)
         )
-        last_read_message =  next(old_messages, None)
+        last_read_message = next(old_messages, None)
         if last_read_message:
             print("TODO: fix issue where last_read_message's id is not being replaced")
             breakpoint()

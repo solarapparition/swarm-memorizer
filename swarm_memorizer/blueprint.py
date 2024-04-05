@@ -108,8 +108,6 @@ class ExecutorMemory:
 class Knowledge:
     """Knowledge for the orchestrator."""
 
-    # executor_learnings: str
-    # other_learnings: str
     task_recipe: TaskRecipe
     executor_memories: list[ExecutorMemory]
 
