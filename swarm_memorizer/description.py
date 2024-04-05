@@ -10,23 +10,21 @@ from swarm_memorizer.toolkit.text import dedent_and_strip, extract_blocks
 def generate_agent_description(task_information: str) -> str:
     """Generate a description for an agent based on a task it has done."""
     context = """
-    {
-        "system_instruction": "Develop Agent Capability Descriptions",
-        "task": "Refine task descriptions into agent capability descriptions.",
-        "objective": "To transform a given task description into a detailed and actionable description of an agent's capabilities and limitations.",
-        "steps": [
-            "Analyze the provided task description.",
-            "Identify and list potential capabilities relevant to the task.",
-            "Create a comprehensive description that outlines these capabilities, focusing on clarity and actionability."
-        ],
-        "parameters": {
-            "input": "Task description",
-            "output": "Agent capability description",
-            "constraints": ["Do not create the actual agent", "Ensure the description is specific and actionable"]
-        },
-        "output": "A clear, concise, and actionable description of what an agent can, based on the provided task description. The output should be wrapped in specific blocks indicated by ```start_of_agent_description_output and ```end_of_agent_description_output.",
-        "feedback": "Descriptions should avoid generalities and be directly relevant to the task, providing clear guidance on the agent's capabilities."
-    }
+    system_instruction: Develop Agent Capability Descriptions,
+    task: Infer agent capabilities descriptions based on example task that agent has performed.
+    objective: To transform a given example task description into a detailed and actionable description of an agent's full capabilities.
+    steps:
+    - Given a task description, infer potential capabilities the agent would be expected to have in order to solve the task.
+    - Create a comprehensive description that outlines these capabilities, focusing on clarity and actionability.
+    parameters:
+      input: Task description,
+      output: Agent capability description
+    constraints:
+    - Do not create the actual agent
+    - Ensure the description is specific and actionable
+    final_output:
+      content: A clear, concise, and actionable description of what the agent can do, based on the provided task description.
+      delimiters: The output should be wrapped in specific blocks indicated by "```start_of_agent_description_output" and "```end_of_agent_description_output" blocks.
     """
     context = dedent_and_strip(context)
     request = """
