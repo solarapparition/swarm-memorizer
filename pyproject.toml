@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "swarm-memorizer"
-version = "0.2.0"
+version = "0.2.1"
 description = ""
 authors = ["Mengyang (John) Cha <15233508+solarapparition@users.noreply.github.com>"]
 license = "MIT"

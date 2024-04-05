@@ -231,10 +231,10 @@ class Swarm:
         return await self.execute()
 
 
-# (commit)
 # ....
-# ---0.2.1---
+# > ---0.2.2---
 # > try swe-agent
+# > (commit)
 # function writer function needs to always output its results to a file
 # integrate function writer into base swarm
 # > change core executor agent to be based on autogen instead of open interpreter
