@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable, Self, Sequence
 from swarm_memorizer.schema import BlueprintId, Role
+from swarm_memorizer.toolkit.text import dedent_and_strip
 from swarm_memorizer.toolkit.yaml_tools import DEFAULT_YAML, format_as_yaml_str
 
 
@@ -64,17 +65,60 @@ class TaskRecipe:
 
 
 @dataclass
+class ExecutionMemory:
+    """Execution attempt of a subtask."""
+
+    subtask_info: str
+    successful: bool
+
+    def __str__(self) -> str:
+        """String representation of the execution memory."""
+        template = """
+        Subtask: {subtask_info}
+        Successful: {successful}
+        """
+        return dedent_and_strip(template).format(
+            subtask_info=self.subtask_info, successful=self.successful
+        )
+
+
+@dataclass
+class ExecutorMemory:
+    """Memory of an executor."""
+
+    blueprint_id: BlueprintId
+    task_execution_attempts: list[ExecutionMemory]
+
+    def __str__(self) -> str:
+        """String representation of the executor memory."""
+        execution_attempts = format_as_yaml_str(
+            [str(attempt) for attempt in self.task_execution_attempts]
+        )
+        template = """
+        Executor ID: {blueprint_id}
+        Task execution attempts:
+        {execution_attempts}
+        """
+        return dedent_and_strip(template).format(
+            blueprint_id=self.blueprint_id, execution_attempts=execution_attempts
+        )
+
+
+@dataclass
 class Knowledge:
     """Knowledge for the orchestrator."""
 
     # executor_learnings: str
     # other_learnings: str
     task_recipe: TaskRecipe
+    executor_memories: list[ExecutorMemory]
 
-    def __str__(self) -> str:
-        """String representation of the orchestrator's knowledge."""
-        return str(self.task_recipe)
-        # return f"{self.executor_learnings}\n{self.other_learnings}"
+    @property
+    def executor_memories_text(self) -> str:
+        """String representation of the executor memories."""
+        return format_as_yaml_str(
+            [str(executor_memory) for executor_memory in self.executor_memories]
+        )
 
 
 @dataclass

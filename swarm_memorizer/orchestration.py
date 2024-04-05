@@ -634,6 +634,38 @@ class OrchestratorState:
     new_event_count: int = 0
 
 
+def create_executor_memories(subtasks: Sequence[TaskData]) -> list[ExecutorMemory]:
+    """Create executor memories."""
+
+    def get_blueprint_id(outcome: tuple[str, ExecutionOutcome]):
+        return outcome[1].blueprint_id
+
+    execution_outcomes = chain(
+        *[
+            [
+                (subtask.initial_information, outcome)
+                for outcome in subtask.execution_history.history
+            ]
+            for subtask in subtasks
+        ]
+    )
+    execution_outcomes = sorted(execution_outcomes, key=get_blueprint_id)
+    outcomes_by_executor = [
+        (blueprint_id, list(outcomes))
+        for blueprint_id, outcomes in groupby(execution_outcomes, get_blueprint_id)
+    ]
+    return [
+        ExecutorMemory(
+            blueprint_id=blueprint_id,
+            task_execution_attempts=[
+                ExecutionMemory(subtask_info, outcome.success)
+                for subtask_info, outcome in outcomes
+            ],
+        )
+        for blueprint_id, outcomes in outcomes_by_executor
+    ]
+
+
 @dataclass(frozen=True)
 class Orchestrator:
     """A recursively auto-specializing swarm agent."""
@@ -784,9 +816,12 @@ class Orchestrator:
     @property
     def core_state(self) -> CoreState:
         """Overall state of the orchestrator."""
+        knowledge = str(
+            self.knowledge.task_recipe if self.knowledge else self.knowledge
+        )
         return CoreState(
             id=self.id,
-            knowledge=str(self.knowledge),
+            knowledge=knowledge,
             main_task=self.task,
             subtasks=self.task.subtasks,
             template=self.core_template,
@@ -982,18 +1017,11 @@ class Orchestrator:
             subtask_sequence=subtasks,
         )
 
-
-# DEFAULT_YAML.load(output[0])
     def generate_knowledge(self) -> Knowledge:
         """Generate knowledge for the orchestrator."""
-
-
-        # > commit
-        # > can extract this programmatically
-        # add executor memory generation
-        breakpoint()
-        return Knowledge(task_recipe=self.task_recipe)
-        # > try using typer for wrapping around scripts
+        subtask_data = [subtask.data for subtask in self.task.subtasks]
+        executor_memories = create_executor_memories(subtask_data)
+        return Knowledge(self.task_recipe, executor_memories)
 
         # context = self.knowledge_generation_context
         # # brainstorming = """
@@ -1619,9 +1647,9 @@ class Orchestrator:
 
     @property
     def executor_memory(self) -> str | None:
-        """Memory for the executor."""
+        """Memory for executors that the orchestrator has used."""
         return (
-            self.blueprint.knowledge.executor_learnings
+            self.blueprint.knowledge.executor_memories_text
             if self.blueprint.knowledge
             else None
         )
@@ -1685,6 +1713,10 @@ class Orchestrator:
                 new_events=[subtask_identification_event],
                 task_completed=False,
             )
+
+        if self.executor_memory:
+            print("TODO: check that `self.executor_memory` has correct printout")
+            breakpoint()
 
         self.delegator.assign_executor(
             subtask,
