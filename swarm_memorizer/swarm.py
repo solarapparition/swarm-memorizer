@@ -231,17 +231,18 @@ class Swarm:
         return await self.execute()
 
 
+# {component_crafter}
 # ....
-# > ---0.2.2---
-# > try swe-agent
 # > (commit)
-# function writer function needs to always output its results to a file
-# integrate function writer into base swarm
+# ---0.3.0---
+# > ---0.3.x---
+# component crafter: update to rank 1 bot > for creating bot blueprints, give default of rank 0 > bots should return rank of blueprints directly
+# add component crafter into base swarm
+# > double check that executor rating is restricted to task pool
 # > change core executor agent to be based on autogen instead of open interpreter
 # bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them > try using typer for wrapping around scripts
 # > add save() ability to bots # saves copy of bot specialized for task
 # bot: function writer: update function writer to create wrapper bot around output script on save()
-# ---0.3.0---
 # > bot: function writer: upgrade so that it can run script as well
 # > refactor: delegator's `assign_executor` args should be saved as 2 objects within delegator, one for delegation and one for orchestrator creation
 # > factor out tests
@@ -256,6 +257,8 @@ class Swarm:
 # > (next_not_implemented)
 # write readme > artifact system > demo > maybe video
 # ---1.0.0---
+# > bot: ai researcher: https://t.co/kU0T74UYMO
+# > bot: try swe-agent
 # > bot: transformers agents # https://huggingface.co/docs/transformers/transformers_agents
 # > bot: arc browser agent
 # > bot: self-operating computer
