@@ -47,6 +47,8 @@ def mutate_executor(
         return
 
     raise NotImplementedError("TODO")
+    # > perhaps offload to mutate() method of executor
+    # > for orchestrator, mutation should have reference to old orchestrator
     # > lazy regeneration: set flag on specific parts of reasoning that need to be regenerated, and only regenerate those parts when needed # avoids removing parts of reasoning that aren't related to the task
     # > when regenerating reasoning, subtask identification needs to have its own more granular signal
     # > when updating reasoning, must make sure to include knowledge

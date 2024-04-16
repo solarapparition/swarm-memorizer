@@ -231,32 +231,29 @@ class Swarm:
         return await self.execute()
 
 
-# {component_crafter}
+# (commit)
 # ....
-# > (commit)
-# ---0.3.0---
-# > ---0.3.x---
-# component crafter: update to rank 1 bot > for creating bot blueprints, give default of rank 0 > bots should return rank of blueprints directly
-# add component crafter into base swarm
-# > double check that executor rating is restricted to task pool
+# double check that executor rating is restricted to task pool
+# add save() ability to bots # saves copy of bot specialized for task
 # > change core executor agent to be based on autogen instead of open interpreter
-# bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them > try using typer for wrapping around scripts
-# > add save() ability to bots # saves copy of bot specialized for task
-# bot: function writer: update function writer to create wrapper bot around output script on save()
-# > bot: function writer: upgrade so that it can run script as well
-# > refactor: delegator's `assign_executor` args should be saved as 2 objects within delegator, one for delegation and one for orchestrator creation
-# > factor out tests
+# ---0.2.2---
+# > get ready for usage
+# > offline claude
+# bot: document chat > embedchain # has save() which creates embedchain wrapper around document
+# ---0.3.0--- # mvp
 # > add placeholder system for a different mode for each orchestrator action, to allow for reasoning within that mode
+# > refactor: delegator's `assign_executor` args should be saved as 2 objects within delegator, one for delegation and one for orchestrator creation
+# > {component_crafter} > update to rank 1 bot > for creating bot blueprints, give default of rank 0 > bots should return rank of blueprints directly > add component crafter into base swarm > upgrade so that it can run script as well
+# > bot: script runner: wrapper around a script that can run it # maybe open interpreter or autogen # has access to interactive python environment # need to be able to adapt it > possible: convert function to script using python fire lib > possible: use fire lib help function > when calling, try to determine missing arguments first; if any are missing, ask for them > try using typer for wrapping around scripts
+# > ---1.0.0---
+# > factor out tests
 # > (next_curriculum_task:integration)
 # > (next_curriculum_task:basic) # reminder: system only meant to handle static, repeatable tasks; okay for it to not be able to do dynamic, state-based tasks
-# bot: document chat > embedchain # has save() which creates embedchain wrapper around document
 # > use an actual framework for tests; # pytest # agenteval
 # > decouple __repr__ artifact from __str__ artifact > bypass step of having to have llm pass around artifact info # may require creation of artifact_id, to allow for orchestrator to reference artifact without seeing its data structure # would also be helpful for REPORT_TASK_AS_COMPLETE
 # > bot: image interpreter model > can this be done with open interpreter?
-# bot: web browser > autogen web surfer agent
-# > (next_not_implemented)
-# write readme > artifact system > demo > maybe video
-# ---1.0.0---
+# > bot: web browser > autogen web surfer agent
+# > write readme > artifact system > demo > maybe video
 # > bot: ai researcher: https://t.co/kU0T74UYMO
 # > bot: try swe-agent
 # > bot: transformers agents # https://huggingface.co/docs/transformers/transformers_agents
