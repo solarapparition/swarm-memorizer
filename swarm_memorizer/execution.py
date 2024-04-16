@@ -22,7 +22,7 @@ def translate_artifact_validation_error(error: ArtifactValidationError) -> str:
     raise NotImplementedError("TODO") from error
 
 
-def upgrade_executor(
+def mutate_executor(
     task: Task,
     delegator: Delegator,
     recent_events_size: int,
@@ -66,7 +66,7 @@ async def execute_and_validate(
     task.start_timer()
     if task.validation_fail_count >= 2:
         task.reset_rank_limit()  # MUTATION
-        upgrade_executor(
+        mutate_executor(
             task,
             delegator=delegator,
             recent_events_size=recent_events_size,
