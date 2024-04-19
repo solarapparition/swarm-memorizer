@@ -25,4 +25,5 @@ def load_bot(*_) -> BotCore:
             task_completed=True,
         )
 
-    return run, None
+    return BotCore(run, None)
+    # return run, None

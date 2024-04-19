@@ -46,4 +46,4 @@ def load_bot(*_) -> BotCore:
         )
         return ExecutionReport(reply=result)
 
-    return run, None
+    return BotCore(run, None)

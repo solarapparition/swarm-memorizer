@@ -6,4 +6,5 @@ from base_swarm.bots.function_writer import run_function_writer
 
 def load_bot(*_) -> BotCore:
     """Load the bot core."""
-    return run_function_writer, None
+    return BotCore(run_function_writer, None)
+    # return run_function_writer, None

@@ -85,4 +85,4 @@ def load_bot(*_) -> BotCore:
             interpreter_proxy=interpreter_proxy,
         )
 
-    return run, None
+    return BotCore(run, None)

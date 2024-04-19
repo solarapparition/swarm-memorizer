@@ -26,4 +26,5 @@ def load_bot(*_) -> BotCore:
             'The code executed successfully, and "Hello, World!" has been written to a file named `hello.txt`.'
         )
 
-    return run, None
+    return BotCore(run, None)
+    # return run, None

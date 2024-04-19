@@ -21,7 +21,7 @@ def load_executor(
         bot_core_or_executor = load_bot_core(blueprint, task, files_dir)
         if isinstance(bot_core_or_executor, Executor):
             return bot_core_or_executor
-        return Bot.from_core(
+        return Bot(
             blueprint=blueprint,
             task=task,
             files_parent_dir=files_dir.parent,

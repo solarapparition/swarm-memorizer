@@ -22,7 +22,7 @@ from swarm_memorizer.toolkit.text import dedent_and_strip, extract_and_unpack
 from swarm_memorizer.toolkit.yaml_tools import DEFAULT_YAML
 
 
-class BotRunner(Protocol):
+class Runner(Protocol):
     """Core of a bot."""
 
     def __call__(
@@ -35,7 +35,20 @@ class BotRunner(Protocol):
         raise NotImplementedError
 
 
-BotCore = tuple[BotRunner, Acceptor | None]
+class Serializer(Protocol):
+    """Saving protocol for a bot."""
+
+    def __call__(self, bot: "Bot") -> dict[str, Any]:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class BotCore:
+    """Core of a bot."""
+
+    runner: Runner
+    acceptor: Acceptor | None = None
+    serializer: Serializer | None = None
 
 
 class BotCoreLoader(Protocol):
@@ -68,23 +81,23 @@ class Bot:
     blueprint: BotBlueprint
     task: Task
     files_parent_dir: Path
-    runner: BotRunner
-    acceptor: Acceptor = decide_acceptance
+    core: BotCore
+    # runner: BotRunner
+    # acceptor: Acceptor = decide_acceptance
 
-    @classmethod
-    def from_core(
-        cls,
-        blueprint: BotBlueprint,
-        task: Task,
-        files_parent_dir: Path,
-        core: BotCore,
-    ) -> Self:
-        """Create a bot from a core."""
-        assert not isinstance(core, Executor)
-        runner, acceptor = core
-        if not acceptor:
-            return cls(blueprint, task, files_parent_dir, runner)
-        return cls(blueprint, task, files_parent_dir, runner, acceptor)
+    # @classmethod
+    # def from_core(
+    #     cls,
+    #     blueprint: BotBlueprint,
+    #     task: Task,
+    #     files_parent_dir: Path,
+    #     core: BotCore,
+    # ) -> Self:
+    #     """Create a bot from a core."""
+    #     assert not isinstance(core, Executor)
+    #     if not core.acceptor:
+    #         return cls(blueprint, task, files_parent_dir, core.runner)
+    #     return cls(blueprint, task, files_parent_dir, core.runner, core.acceptor)
 
     @property
     def id(self) -> RuntimeId:
@@ -98,11 +111,22 @@ class Bot:
 
     def accepts(self, task: Task) -> bool:
         """Decides whether the bot accepts a task."""
-        return self.acceptor(task, self)
+        return (
+            self.core.acceptor(task, self)
+            if self.core.acceptor
+            else decide_acceptance(task, self)
+        )
+        # return self.acceptor(task, self)
+
+    def serialize(self) -> dict[str, Any] | None:
+        """Serialize the bot."""
+        return self.core.serializer(self) if self.core.serializer else None
 
     def save_blueprint(self) -> None:
-        """Bots have pre-configured blueprints so this does nothing."""
-        return
+        """Save the blueprint of the bot."""
+        if not (blueprint := self.serialize()):
+            return
+        DEFAULT_YAML.dump(blueprint, self.serialization_location)
 
     @property
     def message_history(self) -> ConversationHistory:
@@ -152,6 +176,11 @@ class Bot:
     def output_dir(self) -> Path:
         """Output directory for the bot."""
         return make_if_not_exist(self.files_dir / "output")
+
+    @property
+    def serialization_location(self) -> Path:
+        """Location where the bot should be serialized."""
+        return self.files_dir / "blueprint.yaml"
 
     @staticmethod
     def format_reply_message(report: ExecutionReport) -> str:
@@ -236,9 +265,18 @@ class Bot:
         ), f"Expected bool for `completed`, got: {in_progress}"
         return not in_progress
 
+    def run(
+        self,
+        task_description: TaskDescription,
+        message_history: ConversationHistory,
+        output_dir: Path,
+    ) -> ExecutionReport:
+        """Run the bot."""
+        return self.core.runner(task_description, message_history, output_dir)
+
     async def execute(self) -> ExecutionReport:
         """Execute the task. Adds own message to the event log at the end of execution."""
-        report = self.runner(
+        report = self.run(
             self.task.description, self.message_history, output_dir=self.output_dir
         )
         report.task_completed = (
