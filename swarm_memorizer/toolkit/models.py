@@ -1,7 +1,6 @@
 """Model utilities."""
 
 from typing import Sequence
-from colorama import Fore
 
 from colorama import Fore
 from dotenv import load_dotenv

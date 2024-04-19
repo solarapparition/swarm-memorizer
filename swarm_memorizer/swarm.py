@@ -233,11 +233,8 @@ class Swarm:
 
 # (commit)
 # ....
-# double check that executor rating is restricted to task pool
-# add save() ability to bots # saves copy of bot specialized for task
-# > change core executor agent to be based on autogen instead of open interpreter
 # ---0.2.2---
-# > get ready for usage
+# > change core executor agent to be based on autogen instead of open interpreter
 # > offline claude
 # bot: document chat > embedchain # has save() which creates embedchain wrapper around document
 # ---0.3.0--- # mvp

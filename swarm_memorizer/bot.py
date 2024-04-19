@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import importlib.util
 from pathlib import Path
 import sys
-from typing import Protocol, Self
+from typing import Any, Protocol
 
 from langchain.schema import AIMessage, HumanMessage, SystemMessage
 
