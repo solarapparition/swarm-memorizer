@@ -16,11 +16,14 @@ PRECISE_MODEL = ChatOpenAI(
 )
 # creative_model = ChatOpenAI(temperature=0.7, model_name="gpt-4", verbose=False)  # type: ignore
 # super_creative_model = ChatOpenAI(temperature=1.0, model_name="gpt-4", verbose=False)  # type: ignore
-SUPER_CREATIVE_MODEL = ChatOpenAI(temperature=1.0, model_name="gpt-4-turbo-preview", verbose=False)
+SUPER_CREATIVE_MODEL = ChatOpenAI(
+    temperature=1.0, model_name="gpt-4-turbo-2024-04-09", verbose=False
+)
 fast_model = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo", verbose=False)
 broad_model = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-16k", verbose=False)
 # anthropic models: https://docs.anthropic.com/claude/reference/selecting-a-model
 PERPLEXITY = ChatPerplexity(temperature=0, model="sonar-medium-online", verbose=False)
+
 
 def query_model(
     model: BaseChatModel,
