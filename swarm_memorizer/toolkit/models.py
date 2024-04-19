@@ -3,12 +3,18 @@
 from typing import Sequence
 from colorama import Fore
 
+from colorama import Fore
+from dotenv import load_dotenv
 from langchain.schema import BaseMessage
 from langchain.chat_models.base import BaseChatModel
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_community.chat_models.perplexity import ChatPerplexity
 
-PRECISE_MODEL = ChatOpenAI(temperature=0, model_name="gpt-4-turbo-preview", verbose=False)
+load_dotenv(override=True)
+
+PRECISE_MODEL = ChatOpenAI(
+    temperature=0, model_name="gpt-4-turbo-2024-04-09", verbose=False
+)
 # creative_model = ChatOpenAI(temperature=0.7, model_name="gpt-4", verbose=False)  # type: ignore
 # super_creative_model = ChatOpenAI(temperature=1.0, model_name="gpt-4", verbose=False)  # type: ignore
 SUPER_CREATIVE_MODEL = ChatOpenAI(temperature=1.0, model_name="gpt-4-turbo-preview", verbose=False)
