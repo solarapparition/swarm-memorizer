@@ -9,7 +9,7 @@ from langchain.schema import AIMessage, HumanMessage
 from core.bot import BotCore
 from core.task import ExecutionReport
 from core.task_data import TaskDescription
-from core.toolkit.models import PERPLEXITY, format_messages, query_model
+from core.toolkit.models import SEARCH_MODEL, format_messages, query_model
 
 
 AGENT_COLOR = Fore.GREEN
@@ -38,7 +38,7 @@ def load_bot(*_) -> BotCore:
                 *message_history,
             ]
         result = query_model(
-            model=PERPLEXITY,
+            model=SEARCH_MODEL,
             messages=messages,
             preamble=format_messages(messages),
             color=AGENT_COLOR,

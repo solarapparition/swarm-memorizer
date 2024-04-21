@@ -231,9 +231,8 @@ class Swarm:
         return await self.execute()
 
 
-# rerun all tests
+# add fast groq model (llama-70b)
 # ....
-# > add fast groq model (llama-70b)
 # (commit)
 # ---0.2.3---
 # > when saving orchestrators, also add things to watch out for within each subtask

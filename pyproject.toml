@@ -21,6 +21,7 @@ pyautogen = {version = "^0.2.19", optional = true}
 open-interpreter = {version = "^0.2.0", optional = true}
 pexpect = {version = "^4.9.0", optional = true}
 python-dotenv = "^1.0.1"
+langchain-groq = "^0.1.2"
 
 [tool.poetry.group.dev.dependencies]
 pylint = "^3.0.3"

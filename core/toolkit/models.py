@@ -8,6 +8,7 @@ from langchain.schema import BaseMessage
 from langchain.chat_models.base import BaseChatModel
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_community.chat_models.perplexity import ChatPerplexity
+from langchain_groq import ChatGroq
 
 load_dotenv(override=True)
 
@@ -19,10 +20,10 @@ PRECISE_MODEL = ChatOpenAI(
 SUPER_CREATIVE_MODEL = ChatOpenAI(
     temperature=1.0, model_name="gpt-4-turbo-2024-04-09", verbose=False
 )
-fast_model = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo", verbose=False)
-broad_model = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-16k", verbose=False)
+FAST_MODEL = ChatGroq(temperature=0, model_name="llama3-70b-8192", verbose=False)
+SEARCH_MODEL = ChatPerplexity(temperature=0, model="sonar-medium-online", verbose=False)
+# broad_model = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-16k", verbose=False)
 # anthropic models: https://docs.anthropic.com/claude/reference/selecting-a-model
-PERPLEXITY = ChatPerplexity(temperature=0, model="sonar-medium-online", verbose=False)
 
 
 def query_model(
