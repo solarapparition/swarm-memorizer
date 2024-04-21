@@ -360,7 +360,7 @@ CURRICULUM = [
         purpose="Tests a simple task that requires orchestration.",
     ),
     TestTask(
-        task="Tell me about Inflection 2.5.",
+        task="Perform a quick search of the internet to figure out who 'Vivy' is, in an anime context.",
         id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df9",
         purpose="Tests perplexity base swarm bot.",
     ),
