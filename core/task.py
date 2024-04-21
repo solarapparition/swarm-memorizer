@@ -648,7 +648,8 @@ def generate_artifact(task: Task) -> Artifact:
     Format (YAML):
     ```start_of_inline_artifact_spec_format
     type: inline
-    description: {{inline_artifact_description_str}}
+    description: |-
+      {{inline_artifact_description_str}}
     must_be_created: true
     content: |-
       {{full_artifact_content_str}}
@@ -661,11 +662,12 @@ def generate_artifact(task: Task) -> Artifact:
     Format (YAML):
     ```start_of_file_artifact_spec_format
     type: file
-    description: {{file_description_str}}
-    # `location` of `null` means we don't know the location yet
+    description: |-
+      {{file_description_str}}
     must_be_created: {{true_or_false}}
     content: |-
       {{full_artifact_content_str_or_empty}}
+    # `location` of `null` means we don't know the location yet
     location: {{file_path_or_null}}
     ```end_of_file_artifact_spec_format
 
@@ -675,12 +677,13 @@ def generate_artifact(task: Task) -> Artifact:
     Format (YAML):
     ```start_of_remote_resource_artifact_spec_format
     type: remote_resource
-    description: {{resource_description}}
-    # `location` of `null` means we don't know the location yet
+    description: |-
+      {{resource_description}}
     # We always assume that remote resource artifacts have already been created.
     must_be_created: false
     # Since the resource has already been created, the `content` field is `null`.
     content: null
+    # `location` of `null` means we don't know the location yet
     location: {{resource_uri_or_null}}
     ```end_of_remote_resource_artifact_spec_format
     """
