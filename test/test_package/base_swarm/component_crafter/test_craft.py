@@ -1,6 +1,6 @@
 """Test the `craft` module."""
 
-from base_swarm.bots.component_crafter.craft import generate_test_writing_reasoning
+from swarms.core_bots.component_crafter.craft import generate_test_writing_reasoning
 
 
 def test_specify_function():

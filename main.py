@@ -6,8 +6,8 @@ from pathlib import Path
 
 from colorama import Fore
 
-from swarm_memorizer.config import SWARM_COLOR
-from swarm_memorizer.swarm import Swarm
+from core.config import SWARM_COLOR
+from core.swarm import Swarm
 
 
 def get_args() -> Namespace:
@@ -20,7 +20,7 @@ def get_args() -> Namespace:
     )
     parser.add_argument(
         "--data-dir",
-        default="base_swarm/data",
+        default="swarms/data",
         type=str,
         help="Path to the directory containing data files needed for the swarm.",
     )

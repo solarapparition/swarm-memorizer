@@ -6,13 +6,13 @@ from typing import Sequence
 from colorama import Fore
 from langchain.schema import AIMessage, HumanMessage
 
-from swarm_memorizer.task import ExecutionReport
-from swarm_memorizer.task_data import TaskDescription
-from swarm_memorizer.bot import BotCore
+from core.task import ExecutionReport
+from core.task_data import TaskDescription
+from core.bot import BotCore
 
 AGENT_COLOR = Fore.GREEN
 
-from base_swarm.bots.open_interpreter.loader import load_bot
+from swarms.expanded_bots.open_interpreter.loader import load_bot
 
 # def load_bot(*_) -> BotCore:
 #     """Load the bot core."""
