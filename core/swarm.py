@@ -231,7 +231,6 @@ class Swarm:
         return await self.execute()
 
 
-# add fast groq model (llama-70b)
 # ....
 # (commit)
 # ---0.2.3---

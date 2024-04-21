@@ -1,11 +1,11 @@
 [tool.poetry]
 name = "swarm-memorizer"
-version = "0.2.1"
+version = "0.2.3"
 description = ""
 authors = ["Mengyang (John) Cha <15233508+solarapparition@users.noreply.github.com>"]
 license = "MIT"
 readme = "README.md"
-packages = [{include = "swarm_memorizer"}]
+packages = [{include = "core"}]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.12"
@@ -16,12 +16,12 @@ llama-index = "^0.9.32"
 langchain = "^0.1.12"
 langchain-openai = "^0.0.8"
 python-slugify = "^8.0.4"
+python-dotenv = "^1.0.1"
+langchain-groq = "^0.1.2"
 
 pyautogen = {version = "^0.2.19", optional = true}
 open-interpreter = {version = "^0.2.0", optional = true}
 pexpect = {version = "^4.9.0", optional = true}
-python-dotenv = "^1.0.1"
-langchain-groq = "^0.1.2"
 
 [tool.poetry.group.dev.dependencies]
 pylint = "^3.0.3"
@@ -29,7 +29,8 @@ black = "^23.12.1"
 pytest = "^8.1.1"
 
 [tool.poetry.extras]
-base-swarm = ["pyautogen", "open-interpreter", "pexpect"]
+base-swarm = ["pyautogen"]
+expanded-swarm = ["pyautogen", "open-interpreter", "pexpect"]
 
 [build-system]
 requires = ["poetry-core"]

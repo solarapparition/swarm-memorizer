@@ -5846,9 +5846,10 @@ docs = ["furo", "jaraco.packaging (>=9.3)", "jaraco.tidelift (>=1.4)", "rst.link
 testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-ignore-flaky", "pytest-mypy (>=0.9.1)", "pytest-ruff"]
 
 [extras]
-base-swarm = ["open-interpreter", "pexpect", "pyautogen"]
+base-swarm = ["pyautogen"]
+expanded-swarm = ["open-interpreter", "pexpect", "pyautogen"]
 
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.12"
-content-hash = "312eebf89f621fee5f9ca98b443eb3cd51108c180f8d061ead2e262a242236d9"
+content-hash = "00d11e3d6868dcb272a4b344757b2400dbf6b51304d8b1050e9ea4cc2e4f1202"
