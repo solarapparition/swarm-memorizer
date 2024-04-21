@@ -231,11 +231,12 @@ class Swarm:
         return await self.execute()
 
 
-# > when saving orchestrators, also add things to watch out for within each subtask
-# (commit)
-# ....
 # rerun all tests
+# ....
+# > add fast groq model (llama-70b)
+# (commit)
 # ---0.2.3---
+# > when saving orchestrators, also add things to watch out for within each subtask
 # {} <-
 # ....
 # change core executor agent to be based on autogen instead of open interpreter
@@ -412,7 +413,7 @@ MINOR_CASES = [
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(run_test_task(CURRICULUM[0]))
+    asyncio.run(run_test_task(CURRICULUM[2]))
 
 
 if __name__ == "__main__":
