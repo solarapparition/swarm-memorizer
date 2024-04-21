@@ -231,14 +231,14 @@ class Swarm:
         return await self.execute()
 
 
+# > (commit)
+# > add test for core executor
+# bot: change core executor agent to be based on autogen instead of open interpreter
 # ....
-# (commit)
-# ---0.2.3---
+# ---0.2.4---
+# > {} <-
+# ....
 # > when saving orchestrators, also add things to watch out for within each subtask
-# {} <-
-# ....
-# change core executor agent to be based on autogen instead of open interpreter
-# ....
 # bot: offline claude
 # > bot: document oracle # gemini pro 1.5
 # ---0.3.0--- # mvp
