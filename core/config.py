@@ -14,7 +14,9 @@ SWARM_COLOR = Fore.MAGENTA
 PROMPT_COLOR = Fore.BLUE
 VERBOSE = True
 
-AUTOGEN_CONFIG_LIST = [{'model': 'gpt-4-1106-preview'}]
+GPT_4_TURBO = "gpt-4-turbo-2024-04-09"
+AUTOGEN_CONFIG_LIST = [{"model": GPT_4_TURBO}]
+
 
 def configure_langchain_cache() -> None:
     """Configure the LLM cache."""

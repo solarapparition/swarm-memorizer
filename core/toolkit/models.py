@@ -10,15 +10,17 @@ from langchain_openai.chat_models import ChatOpenAI
 from langchain_community.chat_models.perplexity import ChatPerplexity
 from langchain_groq import ChatGroq
 
+from core.config import GPT_4_TURBO
+
 load_dotenv(override=True)
 
 PRECISE_MODEL = ChatOpenAI(
-    temperature=0, model_name="gpt-4-turbo-2024-04-09", verbose=False
+    temperature=0, model_name=GPT_4_TURBO, verbose=False
 )
 # creative_model = ChatOpenAI(temperature=0.7, model_name="gpt-4", verbose=False)  # type: ignore
 # super_creative_model = ChatOpenAI(temperature=1.0, model_name="gpt-4", verbose=False)  # type: ignore
 SUPER_CREATIVE_MODEL = ChatOpenAI(
-    temperature=1.0, model_name="gpt-4-turbo-2024-04-09", verbose=False
+    temperature=1.0, model_name=GPT_4_TURBO, verbose=False
 )
 FAST_MODEL = ChatGroq(temperature=0, model_name="llama3-70b-8192", verbose=False)
 SEARCH_MODEL = ChatPerplexity(temperature=0, model="sonar-medium-online", verbose=False)
