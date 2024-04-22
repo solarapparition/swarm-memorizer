@@ -61,7 +61,6 @@ class OpenInterpreterProxy:
 
 def load_bot(*_) -> BotCore:
     """Load the bot core."""
-    # send_to_open_interpreter = create_message_sender()
     interpreter_proxy = OpenInterpreterProxy()
 
     def run(
@@ -71,7 +70,7 @@ def load_bot(*_) -> BotCore:
     ) -> ExecutionReport:
         """Run the bot."""
         if not interpreter_proxy.runner:
-            # # very hacky, but Open Interpreter has a habit of taking over the rest of the stack that I don't understand very well so it must be isolated
+            # very hacky, but Open Interpreter has a habit of taking over the rest of the stack that I don't understand very well so it must be isolated
             interpreter_proxy.runner = create_script_runner(
                 script=Path(__file__).resolve().parent / "run_interpreter.py",
                 input_pattern="Send message: ",

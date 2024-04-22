@@ -1,8 +1,9 @@
 """Interface with Perplexity's online model."""
 
+from dataclasses import dataclass
 import json
 from pathlib import Path
-from typing import Sequence, Annotated
+from typing import Callable, Sequence, Annotated
 
 from autogen import AssistantAgent, UserProxyAgent  # type: ignore
 from colorama import Fore
@@ -15,6 +16,7 @@ from core.task_data import TaskDescription
 
 AGENT_COLOR = Fore.GREEN
 OaiMessage = Annotated[dict[str, str], "OpenAI message"]
+Conversation = Sequence[HumanMessage | AIMessage]
 
 
 def run(
@@ -24,28 +26,9 @@ def run(
 ) -> ExecutionReport:
     """Run the bot."""
 
-    def assistant_termination(message: OaiMessage) -> bool:
-        """Condition for assistant to terminate the conversation."""
-        try:
-            json.loads(message["content"].strip())
-        except json.JSONDecodeError:
-            return False
-        return message["role"] == "tool"
-
-    assistant = AssistantAgent(
-        "assistant",
-        llm_config={"config_list": AUTOGEN_CONFIG_LIST},
-        is_termination_msg=assistant_termination,
-    )
-    user_proxy = UserProxyAgent(
-        "user_proxy",
-        code_execution_config={"work_dir": "coding"},
-        llm_config={"config_list": AUTOGEN_CONFIG_LIST},
-        human_input_mode="NEVER",
-    )
-
     # synchronize message history with autogen message history # shouldn't include all details
     breakpoint()
+
     user_proxy.send(  # type: ignore
         self.task.information, assistant, request_reply=False, silent=True
     )

@@ -231,8 +231,9 @@ class Swarm:
         return await self.execute()
 
 
+# add test for core executor
+# ....
 # > (commit)
-# > add test for core executor
 # bot: change core executor agent to be based on autogen instead of open interpreter
 # ....
 # ---0.2.4---
