@@ -59,7 +59,73 @@ def run(
     return ExecutionReport(reply=reply, task_completed=successful)
 
 
+@dataclass
+class AutoGenRunner:
+    """Proxy for AutoGen system."""
+
+    assistant: AssistantAgent | None = None
+    user_proxy: UserProxyAgent | None = None
+
+    def __call__(
+        self,
+        user_message: str,
+    ) -> ExecutionReport:
+        assert self.assistant, "Cannot run AutoGen Runner: assistant not set."
+        assert self.user_proxy, "Cannot run AutoGen Runner: user proxy not set."
+        raise NotImplementedError
+
+    def set_agents(self, output_dir: Path) -> None:
+        """Set agents for the system."""
+        if self.assistant:
+            assert self.user_proxy, "If assistant is set, user proxy must be set."
+            return
+        assert not self.user_proxy
+
+        def assistant_termination(message: OaiMessage) -> bool:
+            """Condition for assistant to terminate the conversation."""
+            try:
+                json.loads(message["content"].strip())
+            except json.JSONDecodeError:
+                return False
+            return message["role"] == "tool"
+
+        self.assistant = AssistantAgent(
+            "assistant",
+            llm_config={"config_list": AUTOGEN_CONFIG_LIST},
+            is_termination_msg=assistant_termination,
+        )
+        self.user_proxy = UserProxyAgent(
+            "user_proxy",
+            code_execution_config={"work_dir": str(output_dir)},
+            llm_config={"config_list": AUTOGEN_CONFIG_LIST},
+            human_input_mode="NEVER",
+        )
+
 def load_bot(*_) -> BotCore:
     """Load the bot core."""
+    runner = AutoGenRunner()
+
+    def run(
+        task_description: TaskDescription,
+        message_history: Sequence[HumanMessage | AIMessage],
+        output_dir: Path,
+    ) -> ExecutionReport:
+        """Run the bot."""
+        runner.set_agents(output_dir)
+        
+
+        # figure out how to integrate task description
+        breakpoint()
 
     return BotCore(run, None)
+
+
+# def test_run():
+#     """Test run function."""
+#     run(
+#         task_description=TaskDescription("Tell me the first 20 prime numbers."),
+#         message_history=[],
+#         output_dir=Path("test/output"),
+#     )
+
+# test_run()
