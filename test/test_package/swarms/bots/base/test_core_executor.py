@@ -1,10 +1,14 @@
 """Test AutoGen core executor."""
 
+# pylint:disable=redefined-outer-name
+
 from pathlib import Path
 from typing import Any
 
 from langchain.schema import SystemMessage
+import pytest
 
+from core.bot import BotCore
 from core.task_data import TaskDescription
 from core.toolkit.models import query_model, FAST_MODEL
 from core.toolkit.text import dedent_and_strip, extract_and_unpack
@@ -68,10 +72,20 @@ def llm_evaluate(
     return output["condition_met"]
 
 
-def test_bot_no_initial_message():
+@pytest.fixture
+def task_description() -> TaskDescription:
+    """Return a task description."""
+    return TaskDescription("Tell me the first 20 prime numbers.")
+
+
+@pytest.fixture
+def bot_core() -> BotCore:
+    """Return a bot core."""
+    return load_bot()
+
+
+def test_bot_no_initial_message(task_description: TaskDescription, bot_core: BotCore):
     """Test bot function when there's no initial message."""
-    task_description = TaskDescription("Tell me the first 20 prime numbers.")
-    bot_core = load_bot()
     result = bot_core.runner(
         task_description=task_description,
         message_history=[],
@@ -81,3 +95,23 @@ def test_bot_no_initial_message():
         result.reply,
         condition="The reply states that the following are the first 20 primes: 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71",
     )
+
+
+def test_bot_with_initial_message(task_description: TaskDescription, bot_core: BotCore):
+    """Test bot function when there's an initial message."""
+    result = bot_core.runner(
+        task_description=task_description,
+        message_history=[
+            SystemMessage(
+                content="Please ask me any questions about the task if you have any."
+            )
+        ],
+        output_dir=Path("test/output"),
+    )
+    assert llm_evaluate(
+        result.reply,
+        condition="The reply states that the following are the first 20 primes: 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71",
+    )
+
+
+# case: multiple messages

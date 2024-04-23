@@ -132,7 +132,6 @@ def load_bot(*_) -> BotCore:
             assert (
                 len(message_history) == 1
             ), "Expected only one initial message from the user"
-            breakpoint()
             return f"{task_description.information}\n\n{message_history[0].content}"  # type: ignore
 
         initial_run = not bool(runner.assistant)
