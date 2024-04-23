@@ -1,5 +1,6 @@
 """Configuration process for Hivemind."""
 
+import os
 from pathlib import Path
 from os import makedirs
 
@@ -15,7 +16,7 @@ PROMPT_COLOR = Fore.BLUE
 VERBOSE = True
 
 GPT_4_TURBO = "gpt-4-turbo-2024-04-09"
-AUTOGEN_CONFIG_LIST = [{"model": GPT_4_TURBO}]
+AUTOGEN_CONFIG_LIST = [{"model": GPT_4_TURBO, "api_key": os.getenv("OPENAI_API_KEY")}]
 
 
 def configure_langchain_cache() -> None:
