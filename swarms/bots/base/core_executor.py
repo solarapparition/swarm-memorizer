@@ -141,28 +141,3 @@ def load_bot(*_) -> BotCore:
         return ExecutionReport(runner(user_message))
 
     return BotCore(run, None)
-
-
-def test_bot_no_initial_message():
-    """Test bot function."""
-    task_description = TaskDescription("Tell me the first 20 prime numbers.")
-    bot_core = load_bot()
-    result = bot_core.runner(
-        task_description=task_description,
-        message_history=[],
-        output_dir=Path("test/output"),
-    )
-
-    # commit
-    breakpoint()
-    # > move to test file
-    # > create llm test in pytest
-    assert result.reply
-
-
-test_bot_no_initial_message()
-
-# finish test
-breakpoint()
-# run new tests
-breakpoint()
