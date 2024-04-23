@@ -1,7 +1,6 @@
-"""Interface with Perplexity's online model."""
+"""Interface with core AutoGen executor."""
 
 from dataclasses import dataclass
-import json
 from pathlib import Path
 from typing import Sequence, Annotated
 
@@ -39,41 +38,14 @@ class AutoGenRunner:
             message=user_message,
             # silent=True,
         )
+        if not self.user_proxy.last_message()["content"]:
+            # this means that the assistant has terminated the conversation due to user sending an empty message
+            self.user_proxy.chat_messages[self.assistant].pop()
         return (
             str(self.assistant.last_message()["content"])
             .removesuffix("TERMINATE")
             .strip()
         )
-
-        # self.user_proxy.send(  # type: ignore
-        #     user_message, self.assistant, request_reply=False, silent=True
-        # )
-        # for _ in self.discussion_messages:
-        #     raise NotImplementedError
-        #     # TODO: depending on originating party of message, send to assistant or user_proxy
-        # assistant.chat_messages[user_proxy].append(  # type: ignore
-        #     {"role": "system", "content": self.task_prompt}
-        # )
-
-        # # autogen needs a message to be sent to run, so we remove the last message and send it
-        # assert (
-        #     last_conversation_message := assistant.chat_messages[user_proxy].pop(-2)  # type: ignore
-        # )["role"] == "user"
-        # last_conversation_message_2 = user_proxy.chat_messages[assistant].pop(-1)  # type: ignore
-        # assert (
-        #     last_conversation_message_2["content"]
-        #     == last_conversation_message["content"]
-        # )
-        # user_proxy.initiate_chat(  # type: ignore
-        #     assistant,
-        #     clear_history=False,
-        #     message=last_conversation_message["content"],  # type: ignore
-        #     silent=True,
-        # )
-        # reply = str(user_proxy.last_message()["content"])
-        # successful = json.loads(reply)["successful"]
-        # self.task.event_log.add(self.task.execution_reply_message(reply=reply))
-        # return ExecutionReport(reply=reply, task_completed=successful)
 
     def set_agents(self, output_dir: Path) -> None:
         """Set agents for the system."""
@@ -90,20 +62,25 @@ class AutoGenRunner:
         #         return False
         #     return message["role"] == "tool"
 
-        def is_termination_msg(message: OaiMessage) -> bool:
-            return message["content"][-9:].strip().upper() == "TERMINATE"
+        def assistant_termination(message: OaiMessage) -> bool:
+            return not message["content"]
 
         self.assistant = AssistantAgent(
             "assistant",
             llm_config={"config_list": AUTOGEN_CONFIG_LIST},
+            is_termination_msg=assistant_termination,
             # is_termination_msg=assistant_termination,
         )
+
+        def user_termination(message: OaiMessage) -> bool:
+            return message["content"][-9:].strip().upper() == "TERMINATE"
+
         self.user_proxy = UserProxyAgent(
             "user_proxy",
             code_execution_config={"work_dir": str(output_dir)},
             # llm_config={"config_list": AUTOGEN_CONFIG_LIST},
             human_input_mode="NEVER",
-            is_termination_msg=is_termination_msg,
+            is_termination_msg=user_termination,
         )
 
 
@@ -121,7 +98,6 @@ def load_bot(*_) -> BotCore:
         def create_user_message(initial_run: bool) -> str:
             if not initial_run:
                 assert isinstance(last_message := message_history[-1], HumanMessage)
-                breakpoint()
                 return str(last_message.content)  # type: ignore
 
             # now we know we're running for the first time

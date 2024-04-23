@@ -5,7 +5,7 @@
 from pathlib import Path
 from typing import Any
 
-from langchain.schema import SystemMessage
+from langchain.schema import SystemMessage, HumanMessage, AIMessage
 import pytest
 
 from core.bot import BotCore
@@ -53,7 +53,7 @@ def llm_evaluate(
     condition_met: !!bool {{condition_met}}
     ```end_of_output_yaml
 
-    Make sure to output the ``` delimiters.
+    Make sure to output the ```start_of_output_yaml and ```end_of_output_yaml delimiters.
     """
     instructions = dedent_and_strip(instructions).format(
         condition=condition, value=value
@@ -73,9 +73,9 @@ def llm_evaluate(
 
 
 @pytest.fixture
-def task_description() -> TaskDescription:
+def prime_task() -> str:
     """Return a task description."""
-    return TaskDescription("Tell me the first 20 prime numbers.")
+    return "Tell me the first 20 prime numbers."
 
 
 @pytest.fixture
@@ -84,10 +84,10 @@ def bot_core() -> BotCore:
     return load_bot()
 
 
-def test_bot_no_initial_message(task_description: TaskDescription, bot_core: BotCore):
+def test_bot_no_initial_message(prime_task: str, bot_core: BotCore):
     """Test bot function when there's no initial message."""
     result = bot_core.runner(
-        task_description=task_description,
+        task_description=TaskDescription(prime_task),
         message_history=[],
         output_dir=Path("test/output"),
     )
@@ -97,12 +97,12 @@ def test_bot_no_initial_message(task_description: TaskDescription, bot_core: Bot
     )
 
 
-def test_bot_with_initial_message(task_description: TaskDescription, bot_core: BotCore):
+def test_bot_with_initial_message(prime_task: str, bot_core: BotCore):
     """Test bot function when there's an initial message."""
     result = bot_core.runner(
-        task_description=task_description,
+        task_description=TaskDescription(prime_task),
         message_history=[
-            SystemMessage(
+            HumanMessage(
                 content="Please ask me any questions about the task if you have any."
             )
         ],
@@ -110,7 +110,28 @@ def test_bot_with_initial_message(task_description: TaskDescription, bot_core: B
     )
     assert llm_evaluate(
         result.reply,
-        condition="The reply states that the following are the first 20 primes: 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71",
+        condition="The VALUE states that the following are the first 20 primes: 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71",
+    )
+
+
+def test_bot_with_multiple_messages(prime_task: str, bot_core: BotCore):
+    """Test bot function when there are multiple messages."""
+    result_1 = bot_core.runner(
+        task_description=TaskDescription("What are prime numbers?"),
+        message_history=[],
+        output_dir=Path("test/output"),
+    )
+    result = bot_core.runner(
+        task_description=TaskDescription("What are prime numbers?"),
+        message_history=[
+            AIMessage(content=result_1.reply),
+            HumanMessage(content=prime_task),
+        ],
+        output_dir=Path("test/output"),
+    )
+    assert llm_evaluate(
+        result.reply,
+        condition="The VALUE states that the following are the first 20 primes: 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71",
     )
 
 
