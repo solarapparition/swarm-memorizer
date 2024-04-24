@@ -231,15 +231,10 @@ class Swarm:
         return await self.execute()
 
 
-# add integration of core executor into base swarm
-# ....
-# bot: change core executor agent to be based on autogen instead of open interpreter
-# ....
-# > (commit)
-# ....
 # ---0.2.4---
-# > {} <-
 # ....
+# > {} <-
+# > (commit)
 # > when saving orchestrators, also add things to watch out for within each subtask
 # bot: offline claude
 # > bot: document oracle # gemini pro 1.5
