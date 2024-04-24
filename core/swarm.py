@@ -231,10 +231,11 @@ class Swarm:
         return await self.execute()
 
 
-# add test for core executor
+# add integration of core executor into base swarm
+# ....
+# bot: change core executor agent to be based on autogen instead of open interpreter
 # ....
 # > (commit)
-# bot: change core executor agent to be based on autogen instead of open interpreter
 # ....
 # ---0.2.4---
 # > {} <-
@@ -348,11 +349,18 @@ async def run_test_task(test_task: TestTask) -> None:
             message = human_tester.advise(report.reply)
             report = await swarm.receive_and_execute(message)
 
+    for file in Path(f"test/swarms/{test_task.id_namespace}/task_records").iterdir():
+        if file.is_file():
+            file.unlink()
 
 CURRICULUM = [
+    # TestTask(
+    #     task="Write 'Hello, World!' to a file.",
+    #     id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df4",
+    # ),
     TestTask(
         task="Write 'Hello, World!' to a file.",
-        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df4",
+        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e03",
     ),
     TestTask(
         task="Calculate 3 + 4 * 5.",
@@ -412,7 +420,7 @@ MINOR_CASES = [
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(run_test_task(CURRICULUM[2]))
+    asyncio.run(run_test_task(CURRICULUM[0]))
 
 
 if __name__ == "__main__":

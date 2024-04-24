@@ -1,0 +1,13 @@
+"id": |-
+  a09d26a3-8d24-49fa-a0fe-36717bed5a77
+"name": |-
+  core-executor
+"description": |-
+  An agent that can execute simple tasks by writing and executing code.
+
+  Limitations:
+  - Can only perform tasks that are possible with coding.
+  - Can only code in Python or shell script.
+  - Can only code with built-in Python and cannot use external libraries.
+"role": |-
+  bot
