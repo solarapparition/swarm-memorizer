@@ -20,7 +20,7 @@ langchain-openai = "^0.0.5"
 langchain-groq = "^0.1.2"
 langchain-anthropic = "^0.1.11"
 
-embedchain = {version = "^0.1.102", optional = true}
+embedchain = {extras = ["google"], version = "^0.1.102", optional = true}
 pyautogen = {version = "^0.2.19", optional = true}
 open-interpreter = {version = "^0.2.0", optional = true}
 pexpect = {version = "^4.9.0", optional = true}
