@@ -36,7 +36,6 @@ class AutoGenRunner:
             self.assistant,
             clear_history=False,
             message=user_message,
-            # silent=True,
         )
         if not self.user_proxy.last_message()["content"]:
             # this means that the assistant has terminated the conversation due to user sending an empty message
@@ -54,14 +53,6 @@ class AutoGenRunner:
             return
         assert not self.user_proxy
 
-        # def assistant_termination(message: OaiMessage) -> bool:
-        #     """Condition for assistant to terminate the conversation."""
-        #     try:
-        #         json.loads(message["content"].strip())
-        #     except json.JSONDecodeError:
-        #         return False
-        #     return message["role"] == "tool"
-
         def assistant_termination(message: OaiMessage) -> bool:
             return not message["content"]
 
@@ -69,7 +60,6 @@ class AutoGenRunner:
             "assistant",
             llm_config={"config_list": AUTOGEN_CONFIG_LIST},
             is_termination_msg=assistant_termination,
-            # is_termination_msg=assistant_termination,
         )
 
         def user_termination(message: OaiMessage) -> bool:
@@ -84,35 +74,36 @@ class AutoGenRunner:
         )
 
 
+def create_user_message(
+    task_description: TaskDescription, message_history: Conversation, initial_run: bool
+) -> str:
+    """Create a user message for the bot."""
+    if not initial_run:
+        assert isinstance(last_message := message_history[-1], HumanMessage)
+        return str(last_message.content)  # type: ignore
+
+    # now we know we're running for the first time
+    if not message_history:
+        return str(task_description)
+
+    # now we know there's an additional message to add to the initial message
+    assert len(message_history) == 1, "Expected only one initial message from the user"
+    return f"{task_description}\n\n{message_history[0].content}"  # type: ignore
+
+
 def load_bot(*_) -> BotCore:
     """Load the bot core."""
     runner = AutoGenRunner()
 
     def run(
         task_description: TaskDescription,
-        message_history: Sequence[HumanMessage | AIMessage],
+        message_history: Conversation,
         output_dir: Path,
     ) -> ExecutionReport:
         """Run the bot."""
-
-        def create_user_message(initial_run: bool) -> str:
-            if not initial_run:
-                assert isinstance(last_message := message_history[-1], HumanMessage)
-                return str(last_message.content)  # type: ignore
-
-            # now we know we're running for the first time
-            if not message_history:
-                return task_description.information
-
-            # now we know there's an additional message to add to the initial message
-            assert (
-                len(message_history) == 1
-            ), "Expected only one initial message from the user"
-            return f"{task_description.information}\n\n{message_history[0].content}"  # type: ignore
-
         initial_run = not bool(runner.assistant)
         runner.set_agents(output_dir)
-        user_message = create_user_message(initial_run)
+        user_message = create_user_message(task_description, message_history, initial_run)
         return ExecutionReport(runner(user_message))
 
     return BotCore(run, None)

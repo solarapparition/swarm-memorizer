@@ -231,14 +231,13 @@ class Swarm:
         return await self.execute()
 
 
-# ---0.2.4---
+# (commit)
 # ....
+# ---0.2.5---
 # > {} <-
-# > (commit)
-# > when saving orchestrators, also add things to watch out for within each subtask
-# bot: offline claude
-# > bot: document oracle # gemini pro 1.5
+# bot: document oracle # gemini pro 1.5
 # ---0.3.0--- # mvp
+# > when saving orchestrators, also add things to watch out for within each subtask
 # > bot: document chat > embedchain # has save() which creates embedchain wrapper around document
 # > add placeholder system for a different mode for each orchestrator action, to allow for reasoning within that mode
 # > refactor: delegator's `assign_executor` args should be saved as 2 objects within delegator, one for delegation and one for orchestrator creation
