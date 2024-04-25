@@ -367,6 +367,11 @@ CURRICULUM = [
         purpose="Tests perplexity base swarm bot.",
     ),
     TestTask(
+        task="What are the colors of the rainbow?",
+        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e04",
+        purpose="Tests LLM assistant bot.",
+    ),
+    TestTask(
         task="Write 'Hello, World!' to a file.",
         id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e00",
         purpose="Tests what happens when a bot fails a task.",
@@ -414,7 +419,7 @@ MINOR_CASES = [
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(run_test_task(CURRICULUM[0]))
+    asyncio.run(run_test_task(CURRICULUM[3]))
 
 
 if __name__ == "__main__":
