@@ -4,28 +4,29 @@ from typing import Sequence
 
 from colorama import Fore
 from dotenv import load_dotenv
-from langchain.schema import BaseMessage
 from langchain.chat_models.base import BaseChatModel
-from langchain_openai.chat_models import ChatOpenAI
+from langchain.schema import BaseMessage
 from langchain_community.chat_models.perplexity import ChatPerplexity
+from langchain_openai.chat_models import ChatOpenAI
 from langchain_groq import ChatGroq
+from langchain_anthropic import ChatAnthropic
 
 from core.config import GPT_4_TURBO
 
 load_dotenv(override=True)
 
+# broad_model = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-16k", verbose=False)
+# anthropic models: https://docs.anthropic.com/claude/reference/selecting-a-model
+
 PRECISE_MODEL = ChatOpenAI(
     temperature=0, model_name=GPT_4_TURBO, verbose=False
 )
-# creative_model = ChatOpenAI(temperature=0.7, model_name="gpt-4", verbose=False)  # type: ignore
-# super_creative_model = ChatOpenAI(temperature=1.0, model_name="gpt-4", verbose=False)  # type: ignore
-SUPER_CREATIVE_MODEL = ChatOpenAI(
+VARIANT_MODEL = ChatOpenAI(
     temperature=1.0, model_name=GPT_4_TURBO, verbose=False
 )
 FAST_MODEL = ChatGroq(temperature=0, model_name="llama3-70b-8192", verbose=False)
 SEARCH_MODEL = ChatPerplexity(temperature=0, model="sonar-medium-online", verbose=False)
-# broad_model = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-16k", verbose=False)
-# anthropic models: https://docs.anthropic.com/claude/reference/selecting-a-model
+CREATIVE_MODEL = ChatAnthropic(temperature=1.0, model="claude-3-opus-20240229", verbose=False)
 
 
 def query_model(

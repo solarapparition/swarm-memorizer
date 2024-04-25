@@ -5,7 +5,7 @@ from typing import Sequence
 from langchain.schema import SystemMessage
 from core.config import SWARM_COLOR
 
-from core.toolkit.models import query_model, SUPER_CREATIVE_MODEL
+from core.toolkit.models import query_model, VARIANT_MODEL
 from core.toolkit.text import ExtractionError, extract_blocks
 
 
@@ -15,7 +15,7 @@ def query_and_extract_reasoning(
     """Query the model and extract the reasoning process."""
     if printout:
         result = query_model(
-            model=SUPER_CREATIVE_MODEL,
+            model=VARIANT_MODEL,
             messages=messages,
             preamble=preamble,
             color=SWARM_COLOR,
@@ -23,7 +23,7 @@ def query_and_extract_reasoning(
         )
     else:
         result = query_model(
-            model=SUPER_CREATIVE_MODEL,
+            model=VARIANT_MODEL,
             messages=messages,
             printout=printout,
         )

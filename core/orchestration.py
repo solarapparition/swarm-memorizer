@@ -68,7 +68,7 @@ from core.toolkit.models import (
     PRECISE_MODEL,
     format_messages,
     query_model,
-    SUPER_CREATIVE_MODEL,
+    VARIANT_MODEL,
 )
 from core.toolkit.text import (
     ExtractionError,
@@ -1011,7 +1011,7 @@ class Orchestrator:
             SystemMessage(content=request),
         ]
         output = query_model(
-            model=SUPER_CREATIVE_MODEL,
+            model=VARIANT_MODEL,
             messages=messages,
             preamble=f"Brainstorming knowledge from completion of {self.name}...\n{format_messages(messages)}",
             color=SWARM_COLOR,
