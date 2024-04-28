@@ -1,11 +1,12 @@
 """Model utilities."""
 
-from typing import Sequence
+from typing import Any, Callable, Sequence
 
 from colorama import Fore
 from dotenv import load_dotenv
 from langchain.chat_models.base import BaseChatModel
-from langchain.schema import BaseMessage
+from langchain_core.messages import BaseMessage, AIMessage, ToolCall
+from langchain_core.tools import tool
 from langchain_community.chat_models.perplexity import ChatPerplexity
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_groq import ChatGroq
@@ -44,6 +45,35 @@ def query_model(
     if printout:
         print(f"{color}{result}{Fore.RESET}")
     return result
+
+
+def query_model_tool_call(
+    model: BaseChatModel,
+    messages: Sequence[BaseMessage],
+    tools: Sequence[Callable[..., Any]],
+    color: str = Fore.RESET,
+    preamble: str | None = None,
+    printout: bool = True,
+) -> list[ToolCall]:
+    """Query an LLM chat model, returning the result of a tool call."""
+    model = model.bind_tools([tool(t) for t in tools])
+    if preamble is not None and printout:
+        print(f"\033[1;34m{preamble}\033[0m")
+    result: AIMessage = model.invoke(messages)
+    call_results = result.tool_calls
+    if printout:
+        print(f"{color}{call_results}{Fore.RESET}")
+    return call_results
+
+
+def call_tools(
+    tools: Sequence[Callable[..., Any]], call_results: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Run the tools on the call args."""
+    for call_result in call_results:
+        next_tool = next(t for t in tools if t.__name__ == call_result["name"])
+        call_result["output"] = next_tool(**call_result["args"])
+    return call_results
 
 
 def format_messages(messages: Sequence[BaseMessage]) -> str:
