@@ -1,0 +1,13 @@
+"id": |-
+  98a2d8f1-9617-49a8-8d99-39fd3cd256c1
+"name": |-
+  document-query
+"description": |-
+  An agent that can answer basic questions about a markdown document.
+
+  Limitations:
+  - The document must be in markdown (.md) format.
+  - The document must be a local file.
+
+"role": |-
+  bot
