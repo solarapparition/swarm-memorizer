@@ -1,10 +1,10 @@
 """Interface with Perplexity's online model."""
 
+from colorama import Fore
 from pathlib import Path
 from typing import Sequence
-from colorama import Fore
 
-from langchain.schema import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from core.bot import BotCore
 from core.task import ExecutionReport
@@ -22,6 +22,7 @@ def load_bot(*_) -> BotCore:
         output_dir: Path,
     ) -> ExecutionReport:
         """Run the bot."""
+        raise NotImplementedError
         return ExecutionReport(
             'The code executed successfully, and "Hello, World!" has been written to a file named `hello.txt`.'
         )
