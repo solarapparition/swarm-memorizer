@@ -1,0 +1,12 @@
+"id": |-
+  bb3623a4-b419-4e46-998c-52cab0f7feb5
+"name": |-
+  llm-assistant
+"description": |-
+  An offline language model assistant that can generate text based on a given prompt.
+
+  Limitations:
+  - It can not access the internet.
+  - It cannot access any files on the local machine.
+"role": |-
+  bot
