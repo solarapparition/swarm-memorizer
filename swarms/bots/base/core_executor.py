@@ -1,19 +1,19 @@
 """Interface with core AutoGen executor."""
 
 from pathlib import Path
-from typing import Sequence, Annotated
 
-from langchain.schema import AIMessage, HumanMessage
 from autogen import AssistantAgent, ConversableAgent, UserProxyAgent  # type: ignore
 
 from core.bot import BotCore
 from core.config import AUTOGEN_CONFIG_LIST
 from core.task import ExecutionReport
 from core.task_data import TaskDescription
-from swarms.bots.toolkit.autogen_runner import AutoGenRunner, create_user_message
-
-OaiMessage = Annotated[dict[str, str], "OpenAI message"]
-Conversation = Sequence[HumanMessage | AIMessage]
+from swarms.bots.toolkit.autogen_runner import AutoGenRunner
+from swarms.bots.toolkit.messages import (
+    Conversation,
+    OaiMessage,
+    create_next_user_message,
+)
 
 
 def assistant_termination(message: OaiMessage) -> bool:
@@ -64,7 +64,7 @@ def load_bot(*_) -> BotCore:
         )
         initial_run = not bool(runner.assistant)
         runner.set_agents(assistant, user_proxy)
-        user_message = create_user_message(
+        user_message = create_next_user_message(
             task_description, message_history, initial_run
         )
         return ExecutionReport(runner(user_message))

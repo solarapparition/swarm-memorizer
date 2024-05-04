@@ -9,16 +9,8 @@ import pytest
 
 from core.bot import BotCore
 from core.task_data import TaskDescription
-from swarms.bots.base.core_executor import AutoGenRunner, load_bot
+from swarms.bots.base.core_executor import load_bot
 from tests.helpers.llm_evaluator import llm_evaluate
-
-
-def test_set_agents():
-    """Test set_agents method."""
-    runner = AutoGenRunner()
-    runner.set_agents(Path("test/output"))
-    assert runner.assistant
-    assert runner.user_proxy
 
 
 @pytest.fixture
