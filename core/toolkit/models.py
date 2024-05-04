@@ -11,23 +11,26 @@ from langchain_community.chat_models.perplexity import ChatPerplexity
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_groq import ChatGroq
 from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from core.config import GPT_4_TURBO
 
 load_dotenv(override=True)
 
-# broad_model = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-16k", verbose=False)
 # anthropic models: https://docs.anthropic.com/claude/reference/selecting-a-model
 
-PRECISE_MODEL = ChatOpenAI(
-    temperature=0, model_name=GPT_4_TURBO, verbose=False
-)
-VARIANT_MODEL = ChatOpenAI(
-    temperature=1.0, model_name=GPT_4_TURBO, verbose=False
-)
+PRECISE_MODEL = ChatOpenAI(temperature=0, model_name=GPT_4_TURBO, verbose=False)
+VARIANT_MODEL = ChatOpenAI(temperature=1.0, model_name=GPT_4_TURBO, verbose=False)
 FAST_MODEL = ChatGroq(temperature=0, model_name="llama3-70b-8192", verbose=False)
 SEARCH_MODEL = ChatPerplexity(temperature=0, model="sonar-medium-online", verbose=False)
-CREATIVE_MODEL = ChatAnthropic(temperature=1.0, model="claude-3-opus-20240229", verbose=False)
+CREATIVE_MODEL = ChatAnthropic(
+    temperature=1.0, model="claude-3-opus-20240229", verbose=False
+)
+BROAD_MODEL = ChatGoogleGenerativeAI(
+    temperature=0,
+    model="gemini-1.5-pro-latest",
+    verbose=False,
+)
 
 
 def query_model(
