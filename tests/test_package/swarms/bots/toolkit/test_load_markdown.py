@@ -3,7 +3,7 @@
 from pathlib import Path
 import pytest
 
-from swarms.bots.toolkit.load_markdown import load_markdown
+from swarms.bots.toolkit.load_markdown import MarkdownLoadError, load_markdown
 
 
 def test_valid_file(tmp_path: Path) -> None:
@@ -17,14 +17,14 @@ def test_invalid_extension(tmp_path: Path) -> None:
     """Test loading a file with an invalid extension."""
     test_file = tmp_path / "invalid.txt"
     test_file.write_text("# Invalid Extension")
-    with pytest.raises(ValueError):
+    with pytest.raises(MarkdownLoadError):
         load_markdown(test_file)
 
 
 def test_non_existent_file(tmp_path: Path) -> None:
     """Test loading a non-existent file."""
     test_file = tmp_path / "nonexistent.md"
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(MarkdownLoadError):
         load_markdown(test_file)
 
 
@@ -32,7 +32,7 @@ def test_non_text_file(tmp_path: Path) -> None:
     """Test loading a non-text file."""
     test_file = tmp_path / "image.md"
     test_file.write_bytes(b"\x00\xFF\xFF\x00")
-    with pytest.raises(TypeError):
+    with pytest.raises(MarkdownLoadError):
         load_markdown(test_file)
 
 
@@ -40,5 +40,5 @@ def test_empty_file(tmp_path: Path) -> None:
     """Test loading an empty file."""
     test_file = tmp_path / "empty.md"
     test_file.write_text("")
-    with pytest.raises(ValueError):
+    with pytest.raises(MarkdownLoadError):
         load_markdown(test_file)
