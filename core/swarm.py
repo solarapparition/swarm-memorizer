@@ -377,8 +377,14 @@ CURRICULUM = [
     TestTask(
         task="Write 'Hello, World!' to a file.",
         id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e00",
-        purpose="Tests what happens when a bot fails a task.",
+        purpose="Tests core executor bot.",
     ),
+    TestTask(
+        task="Learn what the contents of the file at `tests/data/example_report.md` are.",
+        id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e05",
+        purpose="Test document reader bot.",
+    ),
+
     # > basic coding task case: 20 lines or less of base python > coding bot will be equipped with function it wrote
     # > basic search task case: search for basic info about a concept
     # > basic file reading/writing task case
@@ -422,7 +428,7 @@ MINOR_CASES = [
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(run_test_task(CURRICULUM[3]))
+    asyncio.run(run_test_task(CURRICULUM[-1]))
 
 
 if __name__ == "__main__":
