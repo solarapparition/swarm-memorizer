@@ -331,10 +331,11 @@ async def run_test_task(test_task: TestTask) -> None:
     """Run a test task."""
     with shelve.open(".data/cache/human_reply", writeback=True) as cache:
         human_tester = Human(reply_cache=cache)
+        files_dir = Path(f"tests/swarms/{test_task.id_namespace}")
         swarm = Swarm(
             core=DummyDirector(human=human_tester),
             task_description=test_task.task,
-            files_dir=Path(f"test/swarms/{test_task.id_namespace}"),
+            files_dir=files_dir,
             validator=human_tester,
             id_generator=DefaultIdGenerator(
                 namespace=UUID(test_task.id_namespace), seed="test"
@@ -345,7 +346,7 @@ async def run_test_task(test_task: TestTask) -> None:
             message = human_tester.advise(report.reply)
             report = await swarm.receive_and_execute(message)
 
-    for file in Path(f"test/swarms/{test_task.id_namespace}/task_records").iterdir():
+    for file in (files_dir / "task_records").iterdir():
         if file.is_file():
             file.unlink()
 
