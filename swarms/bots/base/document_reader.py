@@ -198,7 +198,7 @@ def answer_query(
     <reasoning-process-yaml>
     - query_determination:
         action: determine the query the USER is asking about.
-        notes: usually first message contains main overall question. Subsequent messages may contain follow-ups or refinements.
+        notes: usually the first message contains the main overall question. Subsequent messages may contain follow-ups or refinements.
     - relevant_information_retrieval:
         action: retrieve parts of the document that are relevant to the query.
         notes: information doesn't need to directly answer the query—this is just brainstorming.
@@ -208,10 +208,11 @@ def answer_query(
     - response_formulation:
         action: formulate a response to the query based on the relevant information.
         notes: |-
-            this should be one of 3 options:
-            - a direct answer (if there is sufficient information)
-            - a request for more information or clarification from the USER (if more information is needed and can be provided by the USER)
-            - admission that the query cannot be answered (if there is insufficient information and the USER couldn't reasonably be expected to provide it)
+          this should be one of 3 options:
+          - a direct answer (if there is sufficient information)
+          - a request for more information or clarification from the USER (if more information is needed and can be provided by the USER)
+          - admission that the query cannot be answered (if there is insufficient information and the USER couldn't reasonably be expected to provide it)
+          - ending the conversation (if the user indicates they are done asking questions)
     </reasoning-process-yaml>
     """
     context = dedent_and_strip(context).format(
@@ -237,9 +238,10 @@ def answer_query(
     </final-response-text>
     """
     request = dedent_and_strip(request)
+    request = context + "\n\n" + request
     messages = [
-        HumanMessage(content=context),
         HumanMessage(content=request),
+        # HumanMessage(content=request),
     ]
     output = query_model(
         model=BROAD_MODEL,
