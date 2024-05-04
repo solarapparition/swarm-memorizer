@@ -52,12 +52,13 @@ def extract_block(text: str, block_type: str) -> str | None:
 
 
 def extract_blocks(
-    text: str, start_block_type: str, end_block_type: str = ""
+    text: str, start_block_type: str, end_block_type: str = "", prefix: str = "```"
 ) -> list[str] | None:
     """Extracts specially formatted blocks of text from the LLM's output. `block_type` corresponds to a label for a markdown code block such as `yaml` or `python`."""
-    pattern = r"```{start_block_type}\n(.*?)```{end_block_type}".format(  # pylint:disable=consider-using-f-string
+    pattern = r"{prefix}{start_block_type}\n(.*?){prefix}{end_block_type}".format(  # pylint:disable=consider-using-f-string
         start_block_type=start_block_type,
         end_block_type=end_block_type,
+        prefix=prefix,
     )
     matches = re.findall(pattern, text, re.DOTALL)
     return [match.strip() for match in matches] if matches else None
@@ -81,8 +82,10 @@ def unpack_block(
 
 
 def extract_and_unpack(
-    text: str, start_block_type: str, end_block_type: str = ""
+    text: str, start_block_type: str, end_block_type: str = "", prefix: str = "```"
 ) -> str:
     """Extract and unpack a block."""
-    extracted_result = extract_blocks(text, start_block_type, end_block_type)
+    extracted_result = extract_blocks(
+        text, start_block_type, end_block_type, prefix=prefix
+    )
     return unpack_block(text, extracted_result, start_block_type, end_block_type)
