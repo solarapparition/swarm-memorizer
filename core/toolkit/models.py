@@ -40,7 +40,6 @@ def query_model(
     """Query an LLM chat model. `preamble` is printed before the result."""
     if preamble is not None and printout:
         print(f"\033[1;34m{preamble}\033[0m")
-    # result = model(list(messages)).content
     result = str(model.invoke(messages).content)
     if printout:
         print(f"{color}{result}{Fore.RESET}")

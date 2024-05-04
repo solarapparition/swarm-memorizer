@@ -233,9 +233,11 @@ class Swarm:
 
 # (commit)
 # ....
-# ---0.2.5---
-# > {} <-
-# bot: document oracle # gemini pro 1.5
+# > update output dir to be in task records
+# > regression test
+# > move to src
+# ---0.2.6---
+# {} <-
 # ---0.3.0--- # mvp
 # > when saving orchestrators, also add things to watch out for within each subtask
 # > bot: document chat > embedchain # has save() which creates embedchain wrapper around document

@@ -8,7 +8,7 @@ from typing import Any, Self, Sequence
 from llama_index.schema import TextNode
 from llama_index import VectorStoreIndex
 
-from core.artifact import Artifact, artifacts_printout, abbreviated_artifacts_printout
+from core.artifact import Artifact, abbreviated_artifacts_printout
 from core.schema import BlueprintId, ExecutionOutcome, RuntimeId, TaskId
 from core.toolkit.text import dedent_and_strip
 from core.toolkit.yaml_tools import DEFAULT_YAML
