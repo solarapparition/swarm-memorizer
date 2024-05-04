@@ -1661,7 +1661,7 @@ class Orchestrator:
         assert subtask.executor is not None, "Task executor assignment failed."
         self.add_subtask(subtask)
         subtask_focus_event = self.focus_subtask(subtask)
-        initial_message = "Hi, please feel free to ask me any questions about the context of this task—I've only given you a brief description to start with, but I can provide more information if you need it."
+        initial_message = "Please feel free to ask me any questions about the context of this task—I've only given you a brief description to start with, but I can provide more information if you need it."
         addendum = (
             f"\nHere are some existing artifacts that may be relevant for the task:\n{subtask.input_artifacts_printout}"
             if subtask.input_artifacts
