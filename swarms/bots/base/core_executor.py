@@ -4,10 +4,10 @@ from pathlib import Path
 
 from autogen import AssistantAgent, ConversableAgent, UserProxyAgent  # type: ignore
 
-from core.bot import BotCore
-from core.config import AUTOGEN_CONFIG_LIST
-from core.task import ExecutionReport
-from core.task_data import TaskDescription
+from swarm_memorizer.bot import BotCore
+from swarm_memorizer.config import AUTOGEN_CONFIG_LIST
+from swarm_memorizer.task import ExecutionReport
+from swarm_memorizer.task_data import TaskDescription
 from swarms.bots.toolkit.autogen_runner import AutoGenRunner
 from swarms.bots.toolkit.messages import (
     Conversation,

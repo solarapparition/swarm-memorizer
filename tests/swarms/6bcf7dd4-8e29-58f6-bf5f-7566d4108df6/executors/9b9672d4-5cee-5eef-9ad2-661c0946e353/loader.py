@@ -9,14 +9,14 @@ from colorama import Fore
 from langchain.schema import SystemMessage, AIMessage
 from autogen import AssistantAgent, UserProxyAgent  # type: ignore
 
-from core.event import EventLog
-from core.schema import RuntimeId
-from core.toolkit.models import query_model, PRECISE_MODEL, format_messages
-from core.config import AUTOGEN_CONFIG_LIST
-from core.task import ExecutionReport, Executor, Task
-from core.toolkit.advisor import get_choice
-from core.toolkit.text import dedent_and_strip
-from core.blueprint import BotBlueprint as Blueprint
+from swarm_memorizer.event import EventLog
+from swarm_memorizer.schema import RuntimeId
+from swarm_memorizer.toolkit.models import query_model, PRECISE_MODEL, format_messages
+from swarm_memorizer.config import AUTOGEN_CONFIG_LIST
+from swarm_memorizer.task import ExecutionReport, Executor, Task
+from swarm_memorizer.toolkit.advisor import get_choice
+from swarm_memorizer.toolkit.text import dedent_and_strip
+from swarm_memorizer.blueprint import BotBlueprint as Blueprint
 
 AGENT_COLOR = Fore.GREEN
 OaiMessage = Annotated[dict[str, str], "OpenAI message"]

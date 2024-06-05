@@ -283,10 +283,6 @@ async def run_test_task(test_task: TestTask) -> None:
             file.unlink()
 
 CURRICULUM = [
-    # TestTask(
-    #     task="Write 'Hello, World!' to a file.",
-    #     id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df4",
-    # ),
     TestTask(
         task="Write 'Hello, World!' to a file.",
         id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e03",
@@ -360,7 +356,7 @@ MINOR_CASES = [
 def test() -> None:
     """Run tests."""
     configure_langchain_cache()
-    asyncio.run(run_test_task(CURRICULUM[-1]))
+    asyncio.run(run_test_task(CURRICULUM[0]))
 
 
 if __name__ == "__main__":

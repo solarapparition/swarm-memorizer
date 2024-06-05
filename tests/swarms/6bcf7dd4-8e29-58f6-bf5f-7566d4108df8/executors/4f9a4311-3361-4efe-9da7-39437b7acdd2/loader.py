@@ -6,9 +6,9 @@ from typing import Sequence
 from colorama import Fore
 from langchain.schema import AIMessage, HumanMessage
 
-from core.task import ExecutionReport
-from core.task_data import TaskDescription
-from core.bot import BotCore
+from swarm_memorizer.task import ExecutionReport
+from swarm_memorizer.task_data import TaskDescription
+from swarm_memorizer.bot import BotCore
 
 AGENT_COLOR = Fore.GREEN
 

@@ -8,12 +8,12 @@ from typing import Sequence
 import pytest
 from langchain_core.messages import HumanMessage
 
-from core.artifact import Artifact, abbreviated_artifacts_printout
-from core.bot import BotCore
-from core.config import configure_langchain_cache
-from core.task_data import TaskDescription
-from core.toolkit.text import dedent_and_strip
-from core.schema import ArtifactType
+from swarm_memorizer.artifact import Artifact, abbreviated_artifacts_printout
+from swarm_memorizer.bot import BotCore
+from swarm_memorizer.config import configure_langchain_cache
+from swarm_memorizer.task_data import TaskDescription
+from swarm_memorizer.toolkit.text import dedent_and_strip
+from swarm_memorizer.schema import ArtifactType
 from swarms.bots.base.document_reader import load_bot
 from tests.helpers.llm_evaluator import llm_evaluate
 

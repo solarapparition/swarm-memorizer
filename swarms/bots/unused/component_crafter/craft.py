@@ -3,8 +3,8 @@
 from dataclasses import dataclass
 from typing import Sequence
 
-from core.schema import ReasoningGenerationNotes
-from core.toolkit.text import dedent_and_strip
+from swarm_memorizer.schema import ReasoningGenerationNotes
+from swarm_memorizer.toolkit.text import dedent_and_strip
 
 
 @dataclass

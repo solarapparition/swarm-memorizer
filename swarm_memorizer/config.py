@@ -16,7 +16,8 @@ PROMPT_COLOR = Fore.BLUE
 VERBOSE = True
 
 GPT_4_TURBO = "gpt-4-turbo-2024-04-09"
-AUTOGEN_CONFIG_LIST = [{"model": GPT_4_TURBO, "api_key": os.getenv("OPENAI_API_KEY")}]
+GPT_4O = "gpt-4o-2024-05-13"
+AUTOGEN_CONFIG_LIST = [{"model": GPT_4O, "api_key": os.getenv("OPENAI_API_KEY")}]
 
 
 def configure_langchain_cache(

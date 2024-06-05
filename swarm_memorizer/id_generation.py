@@ -5,7 +5,7 @@ from typing import Callable
 import uuid
 from dataclasses import dataclass, field
 
-from core.schema import IdTypeT
+from swarm_memorizer.schema import IdTypeT
 
 
 def utc_timestamp() -> str:

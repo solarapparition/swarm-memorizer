@@ -4,12 +4,12 @@ from typing import Protocol
 
 from langchain.schema import SystemMessage
 
-from core.config import SWARM_COLOR, VERBOSE
-from core.task_data import find_failed_tasks, find_successful_tasks
-from core.task import Executor, Task
-from core.toolkit.models import PRECISE_MODEL, format_messages, query_model
-from core.toolkit.text import dedent_and_strip, extract_blocks
-from core.toolkit.yaml_tools import DEFAULT_YAML, format_as_yaml_str
+from swarm_memorizer.config import SWARM_COLOR, VERBOSE
+from swarm_memorizer.task_data import find_failed_tasks, find_successful_tasks
+from swarm_memorizer.task import Executor, Task
+from swarm_memorizer.toolkit.models import PRECISE_MODEL, format_messages, query_model
+from swarm_memorizer.toolkit.text import dedent_and_strip, extract_blocks
+from swarm_memorizer.toolkit.yaml_tools import DEFAULT_YAML, format_as_yaml_str
 
 
 class Acceptor(Protocol):

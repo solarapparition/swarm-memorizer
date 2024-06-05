@@ -3,9 +3,9 @@
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable, Self, Sequence
-from core.schema import BlueprintId, Role
-from core.toolkit.text import dedent_and_strip
-from core.toolkit.yaml_tools import DEFAULT_YAML, format_as_yaml_str
+from swarm_memorizer.schema import BlueprintId, Role
+from swarm_memorizer.toolkit.text import dedent_and_strip
+from swarm_memorizer.toolkit.yaml_tools import DEFAULT_YAML, format_as_yaml_str
 
 
 @dataclass

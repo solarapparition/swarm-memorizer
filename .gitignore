@@ -165,4 +165,4 @@ cython_debug/
 .drivers
 
 output
-swarms/data
+# swarms/data

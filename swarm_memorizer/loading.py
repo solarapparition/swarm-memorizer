@@ -2,12 +2,12 @@
 
 from pathlib import Path
 
-from core.blueprint import Blueprint, BotBlueprint, OrchestratorBlueprint
-from core.bot import Bot, extract_bot_core_loader
-from core.orchestration import Orchestrator
-from core.schema import Role
-from core.delegation import Delegator
-from core.task import Executor, Task
+from swarm_memorizer.blueprint import Blueprint, BotBlueprint, OrchestratorBlueprint
+from swarm_memorizer.bot import Bot, extract_bot_core_loader
+from swarm_memorizer.orchestration import Orchestrator
+from swarm_memorizer.schema import Role
+from swarm_memorizer.delegation import Delegator
+from swarm_memorizer.task import Executor, Task
 
 
 def load_executor(

@@ -3,10 +3,10 @@
 from typing import Sequence
 
 from langchain.schema import SystemMessage
-from core.config import SWARM_COLOR
+from swarm_memorizer.config import SWARM_COLOR
 
-from core.toolkit.models import query_model, VARIANT_MODEL
-from core.toolkit.text import ExtractionError, extract_blocks
+from swarm_memorizer.toolkit.models import query_model, VARIANT_MODEL
+from swarm_memorizer.toolkit.text import ExtractionError, extract_blocks
 
 
 def query_and_extract_reasoning(

@@ -4,7 +4,7 @@ from typing import Annotated, Sequence
 
 from langchain.schema import AIMessage, HumanMessage
 
-from core.task_data import TaskDescription
+from swarm_memorizer.task_data import TaskDescription
 
 OaiMessage = Annotated[dict[str, str], "OpenAI message"]
 Conversation = Sequence[HumanMessage | AIMessage]

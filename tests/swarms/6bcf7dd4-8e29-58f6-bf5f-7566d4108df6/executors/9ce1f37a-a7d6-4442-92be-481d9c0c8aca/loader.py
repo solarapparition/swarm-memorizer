@@ -1,6 +1,6 @@
 """Loader for simple script writer executor."""
 
-from core.bot import BotCore
+from swarm_memorizer.bot import BotCore
 from swarms.expanded_bots.component_crafter.function_writer import run_function_writer
 
 

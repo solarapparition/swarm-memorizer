@@ -1,12 +1,12 @@
 """Execution of tasks and validation of their completion."""
 
-from core.artifact import ArtifactValidationError, ArtifactValidationMessage
-from core.bot import Bot
-from core.delegation import Delegator
-from core.event import Event, TaskValidation
-from core.id_generation import generate_id
-from core.schema import EventId, TaskWorkStatus, WorkValidationResult
-from core.task import (
+from swarm_memorizer.artifact import ArtifactValidationError, ArtifactValidationMessage
+from swarm_memorizer.bot import Bot
+from swarm_memorizer.delegation import Delegator
+from swarm_memorizer.event import Event, TaskValidation
+from swarm_memorizer.id_generation import generate_id
+from swarm_memorizer.schema import EventId, TaskWorkStatus, WorkValidationResult
+from swarm_memorizer.task import (
     ExecutionReport,
     Task,
     change_status,

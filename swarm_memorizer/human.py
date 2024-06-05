@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import MutableMapping
 
-from core.schema import RuntimeId, WorkValidationResult
+from swarm_memorizer.schema import RuntimeId, WorkValidationResult
 
 
 @dataclass

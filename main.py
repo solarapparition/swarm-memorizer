@@ -6,8 +6,8 @@ from pathlib import Path
 
 from colorama import Fore
 
-from core.config import SWARM_COLOR
-from core.swarm import Swarm
+from swarm_memorizer.config import SWARM_COLOR
+from swarm_memorizer.swarm import Swarm
 
 
 def get_args() -> Namespace:

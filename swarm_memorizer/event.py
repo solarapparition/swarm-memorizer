@@ -3,7 +3,7 @@
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterator, TypeVar, Generic
 
-from core.schema import (
+from swarm_memorizer.schema import (
     NONE,
     Concept,
     EventId,
@@ -12,7 +12,7 @@ from core.schema import (
     TaskWorkStatus,
     WorkValidationResult,
 )
-from core.id_generation import utc_timestamp
+from swarm_memorizer.id_generation import utc_timestamp
 
 
 @dataclass(frozen=True)

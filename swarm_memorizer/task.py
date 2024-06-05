@@ -9,21 +9,21 @@ from typing import Any, Iterator, Literal, Protocol, Self, runtime_checkable
 
 from langchain.schema import SystemMessage
 
-from core.artifact import (
+from swarm_memorizer.artifact import (
     Artifact,
     artifacts_printout,
     write_file_artifact,
 )
-from core.blueprint import Blueprint
-from core.config import SWARM_COLOR, VERBOSE
-from core.event import (
+from swarm_memorizer.blueprint import Blueprint
+from swarm_memorizer.config import SWARM_COLOR, VERBOSE
+from swarm_memorizer.event import (
     Event,
     EventLog,
     Message,
     TaskStatusChange,
 )
-from core.id_generation import generate_id
-from core.schema import (
+from swarm_memorizer.id_generation import generate_id
+from swarm_memorizer.schema import (
     NONE,
     REASONING_OUTPUT_INSTRUCTIONS,
     ArtifactType,
@@ -38,10 +38,10 @@ from core.schema import (
     WorkValidationResult,
     WorkValidator,
 )
-from core.task_data import ExecutionHistory, TaskData, TaskDescription
-from core.toolkit.models import format_messages, query_model, PRECISE_MODEL
-from core.toolkit.text import dedent_and_strip, extract_and_unpack
-from core.toolkit.yaml_tools import format_as_yaml_str, DEFAULT_YAML
+from swarm_memorizer.task_data import ExecutionHistory, TaskData, TaskDescription
+from swarm_memorizer.toolkit.models import format_messages, query_model, PRECISE_MODEL
+from swarm_memorizer.toolkit.text import dedent_and_strip, extract_and_unpack
+from swarm_memorizer.toolkit.yaml_tools import format_as_yaml_str, DEFAULT_YAML
 
 
 @dataclass

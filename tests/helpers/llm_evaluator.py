@@ -4,9 +4,9 @@ from typing import Any
 
 from langchain.schema import SystemMessage
 
-from core.toolkit.models import query_model, FAST_MODEL
-from core.toolkit.text import dedent_and_strip, extract_and_unpack
-from core.toolkit.yaml_tools import DEFAULT_YAML
+from swarm_memorizer.toolkit.models import query_model, FAST_MODEL
+from swarm_memorizer.toolkit.text import dedent_and_strip, extract_and_unpack
+from swarm_memorizer.toolkit.yaml_tools import DEFAULT_YAML
 
 
 

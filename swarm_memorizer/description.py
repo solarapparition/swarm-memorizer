@@ -1,10 +1,10 @@
 """Toolkit for generating various descriptions."""
 
 from langchain.schema import SystemMessage
-from core.config import SWARM_COLOR, VERBOSE
+from swarm_memorizer.config import SWARM_COLOR, VERBOSE
 
-from core.toolkit.models import query_model, PRECISE_MODEL, format_messages
-from core.toolkit.text import dedent_and_strip, extract_blocks
+from swarm_memorizer.toolkit.models import query_model, PRECISE_MODEL, format_messages
+from swarm_memorizer.toolkit.text import dedent_and_strip, extract_blocks
 
 
 def generate_agent_description(task_information: str) -> str:

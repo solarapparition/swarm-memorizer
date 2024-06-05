@@ -8,18 +8,18 @@ from typing import Any, Protocol
 
 from langchain.schema import AIMessage, HumanMessage, SystemMessage
 
-from core.artifact import artifacts_printout
-from core.blueprint import BotBlueprint
-from core.config import SWARM_COLOR
-from core.acceptance import Acceptor, decide_acceptance
-from core.event import Event, Message
-from core.task import ExecutionReport, Executor, Task
-from core.schema import ConversationHistory, RuntimeId
-from core.task_data import TaskDescription
-from core.toolkit.files import make_if_not_exist
-from core.toolkit.models import PRECISE_MODEL, format_messages, query_model
-from core.toolkit.text import dedent_and_strip, extract_and_unpack
-from core.toolkit.yaml_tools import DEFAULT_YAML
+from swarm_memorizer.artifact import artifacts_printout
+from swarm_memorizer.blueprint import BotBlueprint
+from swarm_memorizer.config import SWARM_COLOR
+from swarm_memorizer.acceptance import Acceptor, decide_acceptance
+from swarm_memorizer.event import Event, Message
+from swarm_memorizer.task import ExecutionReport, Executor, Task
+from swarm_memorizer.schema import ConversationHistory, RuntimeId
+from swarm_memorizer.task_data import TaskDescription
+from swarm_memorizer.toolkit.files import make_if_not_exist
+from swarm_memorizer.toolkit.models import PRECISE_MODEL, format_messages, query_model
+from swarm_memorizer.toolkit.text import dedent_and_strip, extract_and_unpack
+from swarm_memorizer.toolkit.yaml_tools import DEFAULT_YAML
 
 
 class Runner(Protocol):

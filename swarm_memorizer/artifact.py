@@ -5,9 +5,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, Self, Sequence
 
-from core.schema import NONE, ArtifactType
-from core.toolkit.files import sanitize_filename
-from core.toolkit.text import dedent_and_strip
+from swarm_memorizer.schema import NONE, ArtifactType
+from swarm_memorizer.toolkit.files import sanitize_filename
+from swarm_memorizer.toolkit.text import dedent_and_strip
 
 
 class ArtifactValidationMessage(Enum):

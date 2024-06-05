@@ -8,7 +8,7 @@ import pickle
 from pathlib import Path
 from typing import Any, Callable, Hashable, Iterable, Sequence, TypeVarTuple, TypeVar
 
-from core.toolkit.hashing import stable_hash
+from swarm_memorizer.toolkit.hashing import stable_hash
 
 
 T = TypeVarTuple("T")

@@ -8,17 +8,17 @@ from typing import Any
 from colorama import Fore
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-from core.bot import BotCore
-from core.task import ExecutionReport
-from core.task_data import TaskDescription
-from core.toolkit.models import (
+from swarm_memorizer.bot import BotCore
+from swarm_memorizer.task import ExecutionReport
+from swarm_memorizer.task_data import TaskDescription
+from swarm_memorizer.toolkit.models import (
     BROAD_MODEL,
     FAST_MODEL,
     format_messages,
     query_model,
 )
-from core.toolkit.text import dedent_and_strip, extract_and_unpack
-from core.toolkit.yaml_tools import DEFAULT_YAML as YAML
+from swarm_memorizer.toolkit.text import dedent_and_strip, extract_and_unpack
+from swarm_memorizer.toolkit.yaml_tools import DEFAULT_YAML as YAML
 from swarms.bots.base.core_executor import Conversation
 from swarms.bots.toolkit.load_markdown import MarkdownLoadError, load_markdown
 

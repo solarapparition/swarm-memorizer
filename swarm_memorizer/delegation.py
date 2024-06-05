@@ -9,17 +9,17 @@ from typing import Generator, Self, Sequence
 
 from langchain.schema import SystemMessage
 
-from core.blueprint import (
+from swarm_memorizer.blueprint import (
     Blueprint,
     OrchestratorBlueprint,
     Reasoning,
     is_bot,
     load_blueprints,
 )
-from core.config import SWARM_COLOR, VERBOSE
-from core.id_generation import generate_id
-from core.query import query_and_extract_reasoning
-from core.schema import (
+from swarm_memorizer.config import SWARM_COLOR, VERBOSE
+from swarm_memorizer.id_generation import generate_id
+from swarm_memorizer.query import query_and_extract_reasoning
+from swarm_memorizer.schema import (
     NONE,
     REASONING_OUTPUT_INSTRUCTIONS,
     REASONING_PROCESS_OUTPUT_INSTRUCTIONS,
@@ -30,15 +30,15 @@ from core.schema import (
     IdGenerator,
     ReasoningGenerationNotes,
 )
-from core.task import Executor, Task
-from core.task_data import TaskData, search_task_records
-from core.toolkit.models import PRECISE_MODEL, format_messages, query_model
-from core.toolkit.text import (
+from swarm_memorizer.task import Executor, Task
+from swarm_memorizer.task_data import TaskData, search_task_records
+from swarm_memorizer.toolkit.models import PRECISE_MODEL, format_messages, query_model
+from swarm_memorizer.toolkit.text import (
     ExtractionError,
     dedent_and_strip,
     extract_blocks,
 )
-from core.toolkit.yaml_tools import DEFAULT_YAML
+from swarm_memorizer.toolkit.yaml_tools import DEFAULT_YAML
 
 
 class DelegatorReasoningGenerationNotes(Enum):
@@ -438,7 +438,7 @@ class Delegator:
     ) -> Executor:
         """Factory for creating a new executor for a task."""
         # pylint: disable=import-outside-toplevel
-        from core.orchestration import Orchestrator
+        from swarm_memorizer.orchestration import Orchestrator
 
         assert task.rank_limit is None or task.rank_limit > 0
         blueprint = OrchestratorBlueprint(
@@ -515,7 +515,7 @@ class Delegator:
     ) -> DelegationSuccessful:
         """Find an executor to delegate the task to."""
         # pylint: disable=import-outside-toplevel
-        from core.loading import load_executor
+        from swarm_memorizer.loading import load_executor
 
         candidates = self.search_blueprints(
             task.data.initial_information, task.rank_limit

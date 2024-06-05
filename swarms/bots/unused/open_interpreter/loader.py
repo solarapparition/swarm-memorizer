@@ -8,11 +8,11 @@ import sys
 from colorama import Fore
 from langchain.schema import AIMessage, HumanMessage
 
-from core.config import PROMPT_COLOR
-from core.toolkit.script_runner import create_script_runner
-from core.task import ExecutionReport
-from core.task_data import TaskDescription
-from core.bot import BotCore
+from swarm_memorizer.config import PROMPT_COLOR
+from swarm_memorizer.toolkit.script_runner import create_script_runner
+from swarm_memorizer.task import ExecutionReport
+from swarm_memorizer.task_data import TaskDescription
+from swarm_memorizer.bot import BotCore
 
 AGENT_COLOR = Fore.GREEN
 

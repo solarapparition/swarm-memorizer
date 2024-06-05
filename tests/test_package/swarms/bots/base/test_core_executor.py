@@ -7,8 +7,8 @@ from pathlib import Path
 from langchain.schema import HumanMessage, AIMessage
 import pytest
 
-from core.bot import BotCore
-from core.task_data import TaskDescription
+from swarm_memorizer.bot import BotCore
+from swarm_memorizer.task_data import TaskDescription
 from swarms.bots.base.core_executor import load_bot
 from tests.helpers.llm_evaluator import llm_evaluate
 
@@ -30,7 +30,7 @@ def test_bot_no_initial_message(prime_task: str, bot_core: BotCore):
     result = bot_core.runner(
         task_description=TaskDescription(prime_task),
         message_history=[],
-        output_dir=Path("test/output"),
+        output_dir=Path("tests/output"),
     )
     assert llm_evaluate(
         result.reply,
@@ -47,7 +47,7 @@ def test_bot_with_initial_message(prime_task: str, bot_core: BotCore):
                 content="Please ask me any questions about the task if you have any."
             )
         ],
-        output_dir=Path("test/output"),
+        output_dir=Path("tests/output"),
     )
     assert llm_evaluate(
         result.reply,
@@ -60,7 +60,7 @@ def test_bot_with_multiple_messages(prime_task: str, bot_core: BotCore):
     result_1 = bot_core.runner(
         task_description=TaskDescription("What are prime numbers?"),
         message_history=[],
-        output_dir=Path("test/output"),
+        output_dir=Path("tests/output"),
     )
     result = bot_core.runner(
         task_description=TaskDescription("What are prime numbers?"),
@@ -68,7 +68,7 @@ def test_bot_with_multiple_messages(prime_task: str, bot_core: BotCore):
             AIMessage(content=result_1.reply),
             HumanMessage(content=prime_task),
         ],
-        output_dir=Path("test/output"),
+        output_dir=Path("tests/output"),
     )
     assert llm_evaluate(
         result.reply,

@@ -13,16 +13,18 @@ from langchain_groq import ChatGroq
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-from core.config import GPT_4_TURBO
+from swarm_memorizer.config import GPT_4O
 
 load_dotenv(override=True)
 
 # anthropic models: https://docs.anthropic.com/claude/reference/selecting-a-model
 
-PRECISE_MODEL = ChatOpenAI(temperature=0, model_name=GPT_4_TURBO, verbose=False)
-VARIANT_MODEL = ChatOpenAI(temperature=1.0, model_name=GPT_4_TURBO, verbose=False)
+PRECISE_MODEL = ChatOpenAI(temperature=0, model_name=GPT_4O, verbose=False)
+VARIANT_MODEL = ChatOpenAI(temperature=1.0, model_name=GPT_4O, verbose=False)
 FAST_MODEL = ChatGroq(temperature=0, model_name="llama3-70b-8192", verbose=False)
-SEARCH_MODEL = ChatPerplexity(temperature=0, model="sonar-medium-online", verbose=False)
+SEARCH_MODEL = ChatPerplexity(
+    temperature=0, model="llama-3-sonar-large-32k-online", verbose=False
+)
 CREATIVE_MODEL = ChatAnthropic(
     temperature=1.0, model="claude-3-opus-20240229", verbose=False
 )

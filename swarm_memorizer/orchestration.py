@@ -12,8 +12,8 @@ from typing import Any, Iterable, Self, Sequence
 from langchain.schema import SystemMessage
 from ruamel.yaml import YAMLError, YAML
 
-from core.artifact import Artifact
-from core.blueprint import (
+from swarm_memorizer.artifact import Artifact
+from swarm_memorizer.blueprint import (
     ExecutionMemory,
     ExecutorMemory,
     Knowledge,
@@ -21,11 +21,11 @@ from core.blueprint import (
     Reasoning,
     TaskRecipe,
 )
-from core.config import SWARM_COLOR, VERBOSE
-from core.acceptance import decide_acceptance
-from core.delegation import Delegator, generate_executor_selection_reasoning
-from core.description import generate_agent_description
-from core.event import (
+from swarm_memorizer.config import SWARM_COLOR, VERBOSE
+from swarm_memorizer.acceptance import decide_acceptance
+from swarm_memorizer.delegation import Delegator, generate_executor_selection_reasoning
+from swarm_memorizer.description import generate_agent_description
+from swarm_memorizer.event import (
     Event,
     EventLog,
     Message,
@@ -36,10 +36,10 @@ from core.event import (
     TaskStatusChange,
     Thought,
 )
-from core.execution import execute_and_validate
-from core.id_generation import generate_id
-from core.query import query_and_extract_reasoning
-from core.schema import (
+from swarm_memorizer.execution import execute_and_validate
+from swarm_memorizer.id_generation import generate_id
+from swarm_memorizer.query import query_and_extract_reasoning
+from swarm_memorizer.schema import (
     CONCEPT_DEFINITIONS,
     REASONING_OUTPUT_INSTRUCTIONS,
     REASONING_PROCESS_OUTPUT_INSTRUCTIONS,
@@ -55,27 +55,27 @@ from core.schema import (
     ActionName,
     WorkValidationResult,
 )
-from core.task import (
+from swarm_memorizer.task import (
     ExecutionReport,
     Task,
     TaskList,
     create_task_message,
     send_subtask_message,
 )
-from core.task_data import TaskData, TaskDescription
-from core.toolkit.files import make_if_not_exist
-from core.toolkit.models import (
+from swarm_memorizer.task_data import TaskData, TaskDescription
+from swarm_memorizer.toolkit.files import make_if_not_exist
+from swarm_memorizer.toolkit.models import (
     PRECISE_MODEL,
     format_messages,
     query_model,
     VARIANT_MODEL,
 )
-from core.toolkit.text import (
+from swarm_memorizer.toolkit.text import (
     ExtractionError,
     dedent_and_strip,
     extract_blocks,
 )
-from core.toolkit.yaml_tools import DEFAULT_YAML, format_as_yaml_str
+from swarm_memorizer.toolkit.yaml_tools import DEFAULT_YAML, format_as_yaml_str
 
 
 ORCHESTRATOR_STATE_CONCEPTS = f"""
