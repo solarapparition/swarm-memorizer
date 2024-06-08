@@ -23,7 +23,7 @@ def assistant_termination(message: OaiMessage) -> bool:
 
 def user_termination(message: OaiMessage) -> bool:
     """Check if the user needs to terminate the conversation."""
-    return message["content"][-9:].strip().upper() == "TERMINATE"
+    return message["content"].strip()[-9:].upper() == "TERMINATE"
 
 
 def run_autogen_pair(
@@ -55,6 +55,9 @@ def load_bot(*_) -> BotCore:
             "assistant",
             llm_config={"config_list": AUTOGEN_CONFIG_LIST},
             is_termination_msg=assistant_termination,
+        )
+        assistant.update_system_message(
+            f"{assistant.system_message}\n\nAfter a task is complete, always tell the user what files were created or modified, and always use the full path to the file. If you are not sure about the full path of a file, simply prefix {output_dir} to the filename when reporting to the user."
         )
         user_proxy = UserProxyAgent(
             "user_proxy",

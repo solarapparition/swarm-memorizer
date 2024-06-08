@@ -18,7 +18,7 @@ from swarm_memorizer.task import (
 def translate_artifact_validation_error(error: ArtifactValidationError) -> str:
     """Translate an artifact validation error to a failure reason."""
     if error.message == ArtifactValidationMessage.MISSING_LOCATION:
-        return "Executor did not provide a location for the output of the task, or the provided location was not precise."
+        return "There must be a precise location for the output of the task."
     raise NotImplementedError("TODO") from error
 
 
