@@ -5,7 +5,7 @@ description = ""
 authors = ["Mengyang (John) Cha <15233508+solarapparition@users.noreply.github.com>"]
 license = "MIT"
 readme = "README.md"
-packages = [{include = "core"}]
+packages = [{include = "swarm_memorizer"}]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.13"
