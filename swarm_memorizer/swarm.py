@@ -282,6 +282,7 @@ async def run_test_task(test_task: TestTask) -> None:
         if file.is_file():
             file.unlink()
 
+
 CURRICULUM = [
     TestTask(
         task="Write 'Hello, World!' to a file.",
@@ -312,7 +313,6 @@ CURRICULUM = [
         id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108e05",
         purpose="Test document reader bot.",
     ),
-
     # > basic coding task case: 20 lines or less of base python > coding bot will be equipped with function it wrote
     # > basic search task case: search for basic info about a concept
     # > basic file reading/writing task case
@@ -321,7 +321,6 @@ CURRICULUM = [
     # > full flow of learning how to perform some skill from a tutorial
     # > create an oai assistant agent using only documentation # need to set up virtual environment for it
     # > buy something from amazon
-
     # TestTask(
     #     task="Create a mock timestamp generator that advances by 1 second each time it is called.",
     #     id_namespace="6bcf7dd4-8e29-58f6-bf5f-7566d4108df6",
