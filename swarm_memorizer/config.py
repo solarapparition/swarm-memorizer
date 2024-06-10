@@ -6,7 +6,7 @@ from os import makedirs
 
 from colorama import Fore
 import langchain.globals
-from langchain.cache import SQLiteCache
+from langchain_community.cache import SQLiteCache
 
 DATA_DIR = Path(".data")
 CACHE_DIR = DATA_DIR / "cache"
