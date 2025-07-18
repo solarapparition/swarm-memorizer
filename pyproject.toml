@@ -21,7 +21,7 @@ langchain-groq = "^0.1.2"
 langchain-anthropic = "^0.1.11"
 langchain-google-genai = "^1.0.3"
 
-pyautogen = {version = "^0.2.19", optional = true}
+ag2 = {version = "^0.2.19", optional = true}
 
 [tool.poetry.group.dev.dependencies]
 pylint = "^3.0.3"
@@ -29,7 +29,7 @@ black = "^23.12.1"
 pytest = "^8.1.1"
 
 [tool.poetry.extras]
-base-swarm = ["pyautogen"]
+base-swarm = ["ag2"]
 
 [build-system]
 requires = ["poetry-core"]
